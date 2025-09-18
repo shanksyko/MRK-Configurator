@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34112.191
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Core", "src\\Mieruka.Core\\Mieruka.Core.csproj", "{A275B17E-739A-47CB-9CF8-660DEC761F7F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Automation", "src\\Mieruka.Automation\\Mieruka.Automation.csproj", "{A2CDF852-5345-4BC1-A16B-7949B545363D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Preview", "src\\Mieruka.Preview\\Mieruka.Preview.csproj", "{77922604-06EC-493B-AD68-9DEEDB289075}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.App", "src\\Mieruka.App\\Mieruka.App.csproj", "{D0A2056A-082A-480E-B133-2108814352E2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Tests", "src\\Mieruka.Tests\\Mieruka.Tests.csproj", "{EB7C6B74-2957-4E21-9D62-764F2890B007}"
+EndProject
+Global
+    GlobalSection(SolutionConfigurationPlatforms) = preSolution
+        Debug|Any CPU = Debug|Any CPU
+        Release|Any CPU = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(ProjectConfigurationPlatforms) = postSolution
+        {A275B17E-739A-47CB-9CF8-660DEC761F7F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {A275B17E-739A-47CB-9CF8-660DEC761F7F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {A275B17E-739A-47CB-9CF8-660DEC761F7F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {A275B17E-739A-47CB-9CF8-660DEC761F7F}.Release|Any CPU.Build.0 = Release|Any CPU
+        {A2CDF852-5345-4BC1-A16B-7949B545363D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {A2CDF852-5345-4BC1-A16B-7949B545363D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {A2CDF852-5345-4BC1-A16B-7949B545363D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {A2CDF852-5345-4BC1-A16B-7949B545363D}.Release|Any CPU.Build.0 = Release|Any CPU
+        {77922604-06EC-493B-AD68-9DEEDB289075}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {77922604-06EC-493B-AD68-9DEEDB289075}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {77922604-06EC-493B-AD68-9DEEDB289075}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {77922604-06EC-493B-AD68-9DEEDB289075}.Release|Any CPU.Build.0 = Release|Any CPU
+        {D0A2056A-082A-480E-B133-2108814352E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {D0A2056A-082A-480E-B133-2108814352E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {D0A2056A-082A-480E-B133-2108814352E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {D0A2056A-082A-480E-B133-2108814352E2}.Release|Any CPU.Build.0 = Release|Any CPU
+        {EB7C6B74-2957-4E21-9D62-764F2890B007}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {EB7C6B74-2957-4E21-9D62-764F2890B007}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {EB7C6B74-2957-4E21-9D62-764F2890B007}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {EB7C6B74-2957-4E21-9D62-764F2890B007}.Release|Any CPU.Build.0 = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(SolutionProperties) = preSolution
+        HideSolutionNode = FALSE
+    EndGlobalSection
+    GlobalSection(ExtensibilityGlobals) = postSolution
+        SolutionGuid = {12B19486-DEE1-4D69-B97B-E28E9E837C91}
+    EndGlobalSection
+EndGlobal
