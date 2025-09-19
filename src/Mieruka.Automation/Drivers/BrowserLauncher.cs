@@ -64,10 +64,8 @@ public sealed class BrowserLauncher
 
     private IWebDriver CreateEdgeDriver(SiteConfig site, BrowserArgumentsSettings? globalArguments)
     {
-        var options = new EdgeOptions
-        {
-            UseChromium = true,
-        };
+        var options = new EdgeOptions();
+        options.AddAdditionalOption("useChromium", true);
         ConfigureChromiumOptions(options, site, globalArguments);
 
         var service = EdgeDriverService.CreateDefaultService();

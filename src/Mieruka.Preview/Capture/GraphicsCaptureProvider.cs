@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Mieruka.Core.Models;
 #if WINDOWS10_0_17763_0_OR_GREATER
 using Mieruka.Preview.Capture.Interop;
+using SharpGen.Runtime;
 #endif
 
 namespace Mieruka.Preview;
@@ -25,8 +26,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private Windows.Graphics.Capture.GraphicsCaptureSession? _session;
     private Windows.Graphics.Capture.GraphicsCaptureItem? _captureItem;
     private Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice? _direct3DDevice;
-    private Vortice.Direct3D11.Device? _d3dDevice;
-    private Vortice.Direct3D11.DeviceContext? _d3dContext;
+    private Vortice.Direct3D11.ID3D11Device? _d3dDevice;
+    private Vortice.Direct3D11.ID3D11DeviceContext? _d3dContext;
     private Windows.Graphics.SizeInt32 _currentSize;
 
     /// <inheritdoc />
@@ -167,11 +168,33 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             return;
         }
 
-        _d3dDevice = new Vortice.Direct3D11.Device(
-            Vortice.Direct3D.DriverType.Hardware,
-            Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport);
+        var creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport;
+        var featureLevels = new[]
+        {
+            Vortice.Direct3D.FeatureLevel.Level_12_1,
+            Vortice.Direct3D.FeatureLevel.Level_12_0,
+            Vortice.Direct3D.FeatureLevel.Level_11_1,
+            Vortice.Direct3D.FeatureLevel.Level_11_0,
+            Vortice.Direct3D.FeatureLevel.Level_10_1,
+            Vortice.Direct3D.FeatureLevel.Level_10_0,
+        };
 
-        _d3dContext = _d3dDevice.ImmediateContext;
+        var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+            IntPtr.Zero,
+            Vortice.Direct3D.DriverType.Hardware,
+            IntPtr.Zero,
+            (int)creationFlags,
+            featureLevels,
+            featureLevels.Length,
+            Vortice.Direct3D11.D3D11.SdkVersion,
+            out var device,
+            out _,
+            out var context);
+
+        result.CheckError();
+
+        _d3dDevice = device;
+        _d3dContext = context;
 
         using var dxgiDevice = _d3dDevice.QueryInterface<Vortice.DXGI.IDXGIDevice>();
         var hr = CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice.NativePointer, out var graphicsDevice);
@@ -196,14 +219,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _d3dDevice = null;
     }
 
-    private Vortice.Direct3D11.Texture2D CreateTextureFromSurface(Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface surface)
+    private Vortice.Direct3D11.ID3D11Texture2D CreateTextureFromSurface(Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface surface)
     {
         var textureGuid = typeof(Vortice.Direct3D11.ID3D11Texture2D).GUID;
         var nativeResource = GraphicsCaptureInterop.GetInterfaceFromSurface(surface, textureGuid);
-        return new Vortice.Direct3D11.Texture2D(nativeResource);
+        return new Vortice.Direct3D11.ID3D11Texture2D(nativeResource);
     }
 
-    private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.Texture2D texture, int width, int height)
+    private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.ID3D11Texture2D texture, int width, int height)
     {
         var description = texture.Description;
 
@@ -221,7 +244,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             OptionFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
         };
 
-        using var staging = new Vortice.Direct3D11.Texture2D(_d3dDevice!, stagingDesc);
+        using var staging = _d3dDevice!.CreateTexture2D(stagingDesc);
         _d3dContext!.CopyResource(texture, staging);
 
         var dataBox = _d3dContext.Map(staging, 0, Vortice.Direct3D11.MapMode.Read, Vortice.Direct3D11.MapFlags.None);
@@ -278,7 +301,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     [DllImport("d3d11.dll", ExactSpelling = true)]
     private static extern int CreateDirect3D11DeviceFromDXGIDevice(IntPtr dxgiDevice, out IntPtr graphicsDevice);
 #else
-    public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
+    public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived
+    {
+        add { }
+        remove { }
+    }
 
     public bool IsSupported => false;
 

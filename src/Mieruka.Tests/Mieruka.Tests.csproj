@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../config/samples/appsettings.sample.json">
+    <None Include="../../config/samples/appsettings.sample.json">
       <Link>config/appsettings.sample.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

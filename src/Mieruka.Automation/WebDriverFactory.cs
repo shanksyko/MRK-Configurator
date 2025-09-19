@@ -1,3 +1,4 @@
+using System;
 using OpenQA.Selenium;
 
 namespace Mieruka.Automation;
