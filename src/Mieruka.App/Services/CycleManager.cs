@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 
@@ -24,9 +22,14 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<string, AppConfig> _applications = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SiteConfig> _sites = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<HotkeyAction, HotkeyRegistration> _hotkeyRegistrations = new();
     private readonly Random _random = new();
-    private readonly HotkeySink? _hotkeySink;
+    private readonly HotkeyManager? _hotkeyManager;
+    private readonly bool _ownsHotkeyManager;
+
+    private const string PlayPauseHotkeyKey = "Cycle.PlayPause";
+    private const string NextHotkeyKey = "Cycle.Next";
+    private const string PreviousHotkeyKey = "Cycle.Previous";
+    private const string ReapplyBindingsHotkeyKey = "Cycle.ReapplyBindings";
 
     private List<CycleTargetContext> _playlist = new();
     private CycleConfig _cycleConfig = new();
@@ -43,15 +46,22 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
     /// Initializes a new instance of the <see cref="CycleManager"/> class.
     /// </summary>
     /// <param name="bindingService">Service responsible for applying window placements.</param>
+    /// <param name="hotkeyManager">Manager used to register global hotkeys.</param>
     /// <param name="telemetry">Optional telemetry sink used to record playback events.</param>
-    public CycleManager(BindingService bindingService, ITelemetry? telemetry = null)
+    public CycleManager(BindingService bindingService, HotkeyManager? hotkeyManager = null, ITelemetry? telemetry = null)
     {
         _bindingService = bindingService ?? throw new ArgumentNullException(nameof(bindingService));
         _telemetry = telemetry ?? NullTelemetry.Instance;
 
-        if (OperatingSystem.IsWindows())
+        if (hotkeyManager is not null)
         {
-            _hotkeySink = new HotkeySink();
+            _hotkeyManager = hotkeyManager;
+            _ownsHotkeyManager = false;
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            _hotkeyManager = new HotkeyManager(_telemetry);
+            _ownsHotkeyManager = true;
         }
     }
 
@@ -209,7 +219,11 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
         ClearHotkeys();
 
         _timer?.Dispose();
-        _hotkeySink?.Dispose();
+
+        if (_ownsHotkeyManager)
+        {
+            _hotkeyManager?.Dispose();
+        }
 
         GC.SuppressFinalize(this);
     }
@@ -546,7 +560,7 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
 
     private void RefreshHotkeys()
     {
-        if (_hotkeySink is null)
+        if (_hotkeyManager is null)
         {
             return;
         }
@@ -558,66 +572,33 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
             hotkeys = _cycleConfig.Hotkeys ?? new CycleHotkeyConfig();
         }
 
-        RegisterHotkey(HotkeyAction.PlayPause, hotkeys.PlayPause, TogglePlayback);
-        RegisterHotkey(HotkeyAction.Next, hotkeys.Next, () => Navigate(1));
-        RegisterHotkey(HotkeyAction.Previous, hotkeys.Previous, () => Navigate(-1));
+        RegisterHotkey(PlayPauseHotkeyKey, "Cycle - Play/Pause", hotkeys.PlayPause, TogglePlayback);
+        RegisterHotkey(NextHotkeyKey, "Cycle - Next", hotkeys.Next, () => Navigate(1));
+        RegisterHotkey(PreviousHotkeyKey, "Cycle - Previous", hotkeys.Previous, () => Navigate(-1));
+        RegisterHotkey(ReapplyBindingsHotkeyKey, "Reapply Bindings", hotkeys.ReapplyBindings, () => _bindingService.ReapplyAllBindings());
     }
 
-    private void RegisterHotkey(HotkeyAction action, string? gesture, Action handler)
+    private void RegisterHotkey(string key, string displayName, string? gesture, Action handler)
     {
-        if (_hotkeySink is null)
+        if (_hotkeyManager is null)
         {
             return;
         }
 
-        var normalized = NormalizeGesture(gesture);
-
-        if (_hotkeyRegistrations.TryGetValue(action, out var existing))
-        {
-            if (string.Equals(existing.Gesture, normalized, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            _hotkeySink.Unregister(existing.Id);
-            _hotkeyRegistrations.Remove(action);
-        }
-
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return;
-        }
-
-        if (!HotkeyBinding.TryParse(normalized, out var binding))
-        {
-            _telemetry.Warn($"Invalid hotkey '{gesture}' for action '{action}'.");
-            return;
-        }
-
-        try
-        {
-            var identifier = _hotkeySink.Register(binding, handler);
-            _hotkeyRegistrations[action] = new HotkeyRegistration(identifier, normalized);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error($"Failed to register hotkey '{normalized}' for action '{action}'.", ex);
-        }
+        _hotkeyManager.RegisterOrUpdate(key, displayName, gesture, handler);
     }
 
     private void ClearHotkeys()
     {
-        if (_hotkeySink is null)
+        if (_hotkeyManager is null)
         {
             return;
         }
 
-        foreach (var registration in _hotkeyRegistrations.Values)
-        {
-            _hotkeySink.Unregister(registration.Id);
-        }
-
-        _hotkeyRegistrations.Clear();
+        _hotkeyManager.Unregister(PlayPauseHotkeyKey);
+        _hotkeyManager.Unregister(NextHotkeyKey);
+        _hotkeyManager.Unregister(PreviousHotkeyKey);
+        _hotkeyManager.Unregister(ReapplyBindingsHotkeyKey);
     }
 
     private void TogglePlayback()
@@ -701,23 +682,6 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
         return result;
     }
 
-    private static string? NormalizeGesture(string? gesture)
-    {
-        if (string.IsNullOrWhiteSpace(gesture))
-        {
-            return null;
-        }
-
-        var parts = gesture
-            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(part => part.Trim())
-            .Where(part => part.Length > 0)
-            .Select(part => part.ToUpperInvariant());
-
-        var normalized = string.Join('+', parts);
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
-
     private void EnsureNotDisposed()
     {
         if (_disposed)
@@ -733,109 +697,9 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
         Paused,
     }
 
-    private enum HotkeyAction
-    {
-        PlayPause,
-        Next,
-        Previous,
-    }
-
     private sealed record class CycleTargetContext(string ItemId, EntryKind Kind, string TargetId, TimeSpan Duration)
     {
         public string KindName => Kind == EntryKind.Application ? "app" : "site";
-    }
-
-    private readonly record struct HotkeyRegistration(int Id, string Gesture);
-
-    private readonly record struct HotkeyBinding(uint Modifiers, uint Key)
-    {
-        public uint Modifiers { get; } = Modifiers;
-        public uint Key { get; } = Key;
-
-        public static bool TryParse(string? gesture, out HotkeyBinding binding)
-        {
-            binding = default;
-
-            if (string.IsNullOrWhiteSpace(gesture))
-            {
-                return false;
-            }
-
-            var tokens = gesture.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            uint modifiers = 0;
-            uint key = 0;
-
-            foreach (var token in tokens)
-            {
-                var upper = token.Trim().ToUpperInvariant();
-
-                switch (upper)
-                {
-                    case "CTRL":
-                    case "CONTROL":
-                        modifiers |= NativeMethods.MOD_CONTROL;
-                        continue;
-
-                    case "ALT":
-                        modifiers |= NativeMethods.MOD_ALT;
-                        continue;
-
-                    case "SHIFT":
-                        modifiers |= NativeMethods.MOD_SHIFT;
-                        continue;
-
-                    case "WIN":
-                    case "WINDOWS":
-                    case "SUPER":
-                    case "META":
-                        modifiers |= NativeMethods.MOD_WIN;
-                        continue;
-                }
-
-                if (TryParseKey(upper, out var parsedKey))
-                {
-                    key = parsedKey;
-                    continue;
-                }
-
-                return false;
-            }
-
-            if (key == 0)
-            {
-                return false;
-            }
-
-            binding = new HotkeyBinding(modifiers, key);
-            return true;
-        }
-
-        private static bool TryParseKey(string token, out uint key)
-        {
-            if (Enum.TryParse(token, true, out Keys parsed) && parsed != Keys.None)
-            {
-                key = (uint)(parsed & Keys.KeyCode);
-                return key != 0;
-            }
-
-            if (token.Length == 1)
-            {
-                key = (uint)char.ToUpperInvariant(token[0]);
-                return true;
-            }
-
-            if (token.StartsWith("F", StringComparison.OrdinalIgnoreCase) &&
-                int.TryParse(token.AsSpan(1), out var functionKey) &&
-                functionKey is >= 1 and <= 24)
-            {
-                key = (uint)(Keys.F1 + functionKey - 1);
-                return true;
-            }
-
-            key = 0;
-            return false;
-        }
     }
 
     private static class WindowActivator
@@ -883,196 +747,8 @@ public sealed class CycleManager : IOrchestrationComponent, IDisposable
         }
     }
 
-    private sealed class HotkeySink : IDisposable
-    {
-        private readonly Thread _thread;
-        private readonly ManualResetEventSlim _windowReady = new(false);
-        private readonly ManualResetEventSlim _threadExited = new(false);
-        private HotkeyWindow? _window;
-        private SynchronizationContext? _context;
-        private bool _disposed;
-
-        public HotkeySink()
-        {
-            _thread = new Thread(ThreadMain)
-            {
-                IsBackground = true,
-                Name = "CycleManager.Hotkeys",
-            };
-            _thread.SetApartmentState(ApartmentState.STA);
-            _thread.Start();
-            _windowReady.Wait();
-        }
-
-        public int Register(HotkeyBinding binding, Action handler)
-        {
-            if (handler is null)
-            {
-                throw new ArgumentNullException(nameof(handler));
-            }
-
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HotkeySink));
-            }
-
-            var tcs = new TaskCompletionSource<int>();
-            _context!.Post(_ =>
-            {
-                try
-                {
-                    tcs.SetResult(_window!.Register(binding, handler));
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
-                }
-            }, null);
-
-            return tcs.Task.GetAwaiter().GetResult();
-        }
-
-        public void Unregister(int registrationId)
-        {
-            if (_disposed || _context is null)
-            {
-                return;
-            }
-
-            var tcs = new TaskCompletionSource<bool>();
-            _context.Post(_ =>
-            {
-                _window?.Unregister(registrationId);
-                tcs.SetResult(true);
-            }, null);
-            tcs.Task.GetAwaiter().GetResult();
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-
-            if (_context is null)
-            {
-                _windowReady.Dispose();
-                _threadExited.Dispose();
-                return;
-            }
-
-            _context.Post(_ =>
-            {
-                _window?.Dispose();
-                Application.ExitThread();
-            }, null);
-
-            _threadExited.Wait();
-            _windowReady.Dispose();
-            _threadExited.Dispose();
-        }
-
-        private void ThreadMain()
-        {
-            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
-            _context = SynchronizationContext.Current;
-
-            using var window = new HotkeyWindow(action => Task.Run(action));
-            window.CreateHandle(new CreateParams());
-            _window = window;
-            _windowReady.Set();
-
-            Application.Run();
-
-            _window = null;
-            _threadExited.Set();
-        }
-    }
-
-    private sealed class HotkeyWindow : NativeWindow, IDisposable
-    {
-        private readonly Dictionary<int, Action> _handlers = new();
-        private readonly Action<Action> _dispatch;
-        private int _nextId;
-
-        public HotkeyWindow(Action<Action> dispatch)
-        {
-            _dispatch = dispatch;
-        }
-
-        public int Register(HotkeyBinding binding, Action handler)
-        {
-            if (Handle == IntPtr.Zero)
-            {
-                CreateHandle(new CreateParams());
-            }
-
-            var id = ++_nextId;
-            if (!NativeMethods.RegisterHotKey(Handle, id, binding.Modifiers, binding.Key))
-            {
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to register hotkey.");
-            }
-
-            _handlers[id] = handler;
-            return id;
-        }
-
-        public void Unregister(int id)
-        {
-            if (_handlers.Remove(id))
-            {
-                NativeMethods.UnregisterHotKey(Handle, id);
-            }
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == NativeMethods.WM_HOTKEY)
-            {
-                var id = (int)m.WParam;
-                if (_handlers.TryGetValue(id, out var handler))
-                {
-                    _dispatch(handler);
-                }
-
-                return;
-            }
-
-            base.WndProc(ref m);
-        }
-
-        public void Dispose()
-        {
-            foreach (var id in _handlers.Keys.ToList())
-            {
-                NativeMethods.UnregisterHotKey(Handle, id);
-            }
-
-            _handlers.Clear();
-            if (Handle != IntPtr.Zero)
-            {
-                DestroyHandle();
-            }
-        }
-    }
-
     private static class NativeMethods
     {
-        public const int WM_HOTKEY = 0x0312;
-        public const uint MOD_ALT = 0x0001;
-        public const uint MOD_CONTROL = 0x0002;
-        public const uint MOD_SHIFT = 0x0004;
-        public const uint MOD_WIN = 0x0008;
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
         [DllImport("user32.dll")]
         public static extern bool IsIconic(IntPtr hWnd);
 

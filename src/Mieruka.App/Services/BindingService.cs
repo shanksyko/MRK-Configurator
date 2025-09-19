@@ -193,6 +193,21 @@ public sealed class BindingService : IDisposable
     }
 
     /// <summary>
+    /// Reapplies the window configuration for all tracked bindings.
+    /// </summary>
+    public void ReapplyAllBindings()
+    {
+        EnsureNotDisposed();
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        ReapplyAll();
+    }
+
+    /// <summary>
     /// Releases resources associated with the service.
     /// </summary>
     public void Dispose()
