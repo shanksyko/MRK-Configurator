@@ -63,6 +63,11 @@ public sealed record class SiteConfig
     public IDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
+    /// Optional automation profile used to authenticate against the site.
+    /// </summary>
+    public LoginProfile? Login { get; init; }
+
+    /// <summary>
     /// Desired window placement.
     /// </summary>
     public WindowConfig Window { get; init; } = new();
