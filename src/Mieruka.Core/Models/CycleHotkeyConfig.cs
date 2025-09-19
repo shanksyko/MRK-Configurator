@@ -19,4 +19,9 @@ public sealed record class CycleHotkeyConfig
     /// Key combination that returns to the previous item in the cycle.
     /// </summary>
     public string? Previous { get; init; } = "Ctrl+Alt+Left";
+
+    /// <summary>
+    /// Key combination that reapplies all configured window bindings.
+    /// </summary>
+    public string? ReapplyBindings { get; init; } = "Ctrl+Alt+R";
 }
