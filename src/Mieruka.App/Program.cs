@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Windows.Forms;
 using Mieruka.App.Config;
+using Mieruka.App.Services;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using Serilog;
@@ -29,6 +31,7 @@ internal static class Program
             var monitors = ResolveMonitors(displayService, config);
             var workspace = new ConfiguratorWorkspace(config, monitors);
 
+            using var diagnosticsService = InitializeDiagnosticsService(workspace, config);
             using var configForm = new ConfigForm(workspace, store, displayService, migrator);
             Application.Run(configForm);
 
@@ -94,5 +97,91 @@ internal static class Program
         }
 
         return new DisplayService();
+    }
+
+    private static DiagnosticsService? InitializeDiagnosticsService(ConfiguratorWorkspace workspace, GeneralConfig config)
+    {
+        if (!HttpListener.IsSupported)
+        {
+            return null;
+        }
+
+        try
+        {
+            var service = new DiagnosticsService(() => BuildDiagnosticsReport(workspace, config));
+            service.Start();
+            return service;
+        }
+        catch (HttpListenerException ex)
+        {
+            Log.Warning(ex, "Falha ao iniciar o serviço de diagnósticos HTTP.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Erro inesperado ao iniciar o serviço de diagnósticos.");
+        }
+
+        return null;
+    }
+
+    private static DiagnosticsService.DiagnosticsReport BuildDiagnosticsReport(ConfiguratorWorkspace workspace, GeneralConfig config)
+    {
+        var monitorsActive = workspace.Monitors?.Count ?? 0;
+        var cyclesRunning = CountActiveCycleItems(config?.Cycle);
+        var watchdogsActive = CountActiveWatchdogs(workspace);
+        var status = monitorsActive > 0 ? "Healthy" : "Degraded";
+
+        return new DiagnosticsService.DiagnosticsReport
+        {
+            Status = status,
+            MonitorsActive = monitorsActive,
+            PreviewFps = 0,
+            CyclesRunning = cyclesRunning,
+            WatchdogsActive = watchdogsActive,
+        };
+    }
+
+    private static int CountActiveCycleItems(CycleConfig? cycle)
+    {
+        if (cycle is not { Enabled: true })
+        {
+            return 0;
+        }
+
+        var items = cycle.Items ?? Array.Empty<CycleItem>();
+        var active = 0;
+
+        foreach (var item in items)
+        {
+            if (item is { Enabled: true })
+            {
+                active++;
+            }
+        }
+
+        return active;
+    }
+
+    private static int CountActiveWatchdogs(ConfiguratorWorkspace workspace)
+    {
+        var count = 0;
+
+        foreach (var app in workspace.Applications)
+        {
+            if (app?.Watchdog?.Enabled != false)
+            {
+                count++;
+            }
+        }
+
+        foreach (var site in workspace.Sites)
+        {
+            if (site?.Watchdog?.Enabled != false)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 }
