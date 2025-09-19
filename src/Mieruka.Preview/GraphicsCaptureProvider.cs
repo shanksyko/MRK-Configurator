@@ -1,0 +1,297 @@
+using System;
+using System.Drawing;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Threading;
+using System.Threading.Tasks;
+using Mieruka.Core.Models;
+using WinRT;
+
+namespace Mieruka.Preview;
+
+/// <summary>
+/// Monitor capture provider that uses Windows.Graphics.Capture APIs.
+/// </summary>
+[SupportedOSPlatform("windows10.0.17763")]
+public sealed class GraphicsCaptureProvider : IMonitorCapture
+{
+#if WINDOWS10_0_17763_0_OR_GREATER
+    private readonly object _gate = new();
+    private Windows.Graphics.Capture.Direct3D11CaptureFramePool? _framePool;
+    private Windows.Graphics.Capture.GraphicsCaptureSession? _session;
+    private Windows.Graphics.Capture.GraphicsCaptureItem? _captureItem;
+    private Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice? _direct3DDevice;
+    private Vortice.Direct3D11.Device? _d3dDevice;
+    private Vortice.Direct3D11.DeviceContext? _d3dContext;
+    private Windows.Graphics.SizeInt32 _currentSize;
+
+    /// <inheritdoc />
+    public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
+
+    /// <inheritdoc />
+    public bool IsSupported => IsGraphicsCaptureAvailable;
+
+    /// <inheritdoc />
+    public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!IsGraphicsCaptureAvailable)
+        {
+            throw new PlatformNotSupportedException("Windows Graphics Capture is not supported on this system.");
+        }
+
+        if (monitor.DeviceName is null)
+        {
+            throw new ArgumentException("Monitor device name is not defined.", nameof(monitor));
+        }
+
+        lock (_gate)
+        {
+            if (_session is not null)
+            {
+                throw new InvalidOperationException("Capture session already started.");
+            }
+
+            if (!MonitorUtilities.TryGetMonitorHandle(monitor.DeviceName, out var monitorHandle, out var bounds))
+            {
+                throw new InvalidOperationException($"Unable to locate monitor '{monitor.DeviceName}'.");
+            }
+
+            InitializeDirect3D();
+            _captureItem = WinRT.Interop.GraphicsCaptureItemInterop.CreateForMonitor(monitorHandle);
+            _currentSize = _captureItem.Size;
+
+            _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.Create(
+                _direct3DDevice!,
+                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                2,
+                _captureItem.Size);
+
+            _framePool.FrameArrived += OnFrameArrived;
+
+            _session = _framePool.CreateCaptureSession(_captureItem);
+            _session.IsCursorCaptureEnabled = true;
+            _session.IsBorderRequired = false;
+            _session.StartCapture();
+
+            // ensure bounds stored so fallback can use if needed
+            _ = bounds;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public ValueTask StopAsync()
+    {
+        lock (_gate)
+        {
+            if (_framePool is not null)
+            {
+                _framePool.FrameArrived -= OnFrameArrived;
+                _framePool.Dispose();
+                _framePool = null;
+            }
+
+            if (_session is not null)
+            {
+                _session.Dispose();
+                _session = null;
+            }
+
+            _captureItem = null;
+            ReleaseDirect3D();
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
+    }
+
+    private void OnFrameArrived(Windows.Graphics.Capture.Direct3D11CaptureFramePool sender, object args)
+    {
+        Windows.Graphics.Capture.Direct3D11CaptureFrame? frame = null;
+
+        try
+        {
+            frame = sender.TryGetNextFrame();
+            if (frame is null)
+            {
+                return;
+            }
+
+            if (frame.ContentSize.Width <= 0 || frame.ContentSize.Height <= 0)
+            {
+                return;
+            }
+
+            if (!frame.ContentSize.Equals(_currentSize) && _framePool is not null && _captureItem is not null)
+            {
+                _currentSize = frame.ContentSize;
+                sender.Recreate(_direct3DDevice!, Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _currentSize);
+            }
+
+            using var texture = CreateTextureFromSurface(frame.Surface);
+            var bitmap = CopyTextureToBitmap(texture, frame.ContentSize.Width, frame.ContentSize.Height);
+            DispatchFrame(bitmap);
+        }
+        catch
+        {
+            // Ignore transient frame failures.
+        }
+        finally
+        {
+            frame?.Dispose();
+        }
+    }
+
+    private void InitializeDirect3D()
+    {
+        if (_d3dDevice is not null)
+        {
+            return;
+        }
+
+        _d3dDevice = new Vortice.Direct3D11.Device(
+            Vortice.Direct3D.DriverType.Hardware,
+            Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport);
+
+        _d3dContext = _d3dDevice.ImmediateContext;
+
+        using var dxgiDevice = _d3dDevice.QueryInterface<Vortice.DXGI.IDXGIDevice>();
+        var hr = CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice.NativePointer, out var graphicsDevice);
+        Marshal.ThrowExceptionForHR(hr);
+        if (graphicsDevice == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
+        }
+        _direct3DDevice = WinRT.MarshalInterface<Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice>.FromAbi(graphicsDevice);
+    }
+
+    private void ReleaseDirect3D()
+    {
+        _direct3DDevice?.Dispose();
+        _direct3DDevice = null;
+
+        _d3dContext?.ClearState();
+        _d3dContext?.Dispose();
+        _d3dContext = null;
+
+        _d3dDevice?.Dispose();
+        _d3dDevice = null;
+    }
+
+    private Vortice.Direct3D11.Texture2D CreateTextureFromSurface(Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface surface)
+    {
+        var access = surface.As<WinRT.Interop.IDirect3DDxgiInterfaceAccess>();
+        var textureGuid = typeof(Vortice.Direct3D11.ID3D11Texture2D).GUID;
+        Marshal.ThrowExceptionForHR(access.GetInterface(ref textureGuid, out var nativeResource));
+        return new Vortice.Direct3D11.Texture2D(nativeResource);
+    }
+
+    private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.Texture2D texture, int width, int height)
+    {
+        var description = texture.Description;
+
+        var stagingDesc = new Vortice.Direct3D11.Texture2DDescription
+        {
+            Width = width,
+            Height = height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = description.Format,
+            SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+            Usage = Vortice.Direct3D11.ResourceUsage.Staging,
+            CpuAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Read,
+            BindFlags = Vortice.Direct3D11.BindFlags.None,
+            OptionFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
+        };
+
+        using var staging = new Vortice.Direct3D11.Texture2D(_d3dDevice!, stagingDesc);
+        _d3dContext!.CopyResource(texture, staging);
+
+        var dataBox = _d3dContext.Map(staging, 0, Vortice.Direct3D11.MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+
+        try
+        {
+            var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var bitmapData = bitmap.LockBits(
+                new Rectangle(0, 0, width, height),
+                System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            try
+            {
+                unsafe
+                {
+                    var sourcePtr = (byte*)dataBox.DataPointer;
+                    var destinationPtr = (byte*)bitmapData.Scan0;
+                    var bytesPerRow = width * 4;
+
+                    for (var y = 0; y < height; y++)
+                    {
+                        Buffer.MemoryCopy(sourcePtr, destinationPtr, bitmapData.Stride, bytesPerRow);
+                        sourcePtr += dataBox.RowPitch;
+                        destinationPtr += bitmapData.Stride;
+                    }
+                }
+            }
+            finally
+            {
+                bitmap.UnlockBits(bitmapData);
+            }
+
+            return bitmap;
+        }
+        finally
+        {
+            _d3dContext.Unmap(staging, 0);
+        }
+    }
+
+    private void DispatchFrame(Bitmap bitmap)
+    {
+        var handler = FrameArrived;
+        if (handler is null)
+        {
+            bitmap.Dispose();
+            return;
+        }
+
+        handler(this, new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow));
+    }
+
+    [DllImport("d3d11.dll", ExactSpelling = true)]
+    private static extern int CreateDirect3D11DeviceFromDXGIDevice(IntPtr dxgiDevice, out IntPtr graphicsDevice);
+#else
+    public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
+
+    public bool IsSupported => false;
+
+    public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
+        => throw new PlatformNotSupportedException();
+
+    public ValueTask StopAsync() => ValueTask.CompletedTask;
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+#endif
+
+    /// <summary>
+    /// Gets a value indicating whether Windows Graphics Capture APIs are available.
+    /// </summary>
+    public static bool IsGraphicsCaptureAvailable
+    {
+#if WINDOWS10_0_17763_0_OR_GREATER
+        get => Windows.Graphics.Capture.GraphicsCaptureSession.IsSupported();
+#else
+        get => false;
+#endif
+    }
+}
