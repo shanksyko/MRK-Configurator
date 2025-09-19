@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Mieruka.Core.Layouts;
 
 namespace Mieruka.Core.Models;
 
@@ -26,6 +27,11 @@ public sealed record class GeneralConfig
     /// Sites managed by the configurator.
     /// </summary>
     public IList<SiteConfig> Sites { get; init; } = new List<SiteConfig>();
+
+    /// <summary>
+    /// Zone presets available for layouts.
+    /// </summary>
+    public IList<ZonePreset> ZonePresets { get; init; } = new List<ZonePreset>(ZonePreset.Defaults);
 
     /// <summary>
     /// Playback cycle definition.
