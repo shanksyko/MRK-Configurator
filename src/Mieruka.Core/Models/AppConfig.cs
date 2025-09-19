@@ -33,6 +33,11 @@ public sealed record class AppConfig
     public IDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
+    /// Watchdog related settings that describe how the application should be supervised.
+    /// </summary>
+    public WatchdogSettings Watchdog { get; init; } = new();
+
+    /// <summary>
     /// Desired window placement.
     /// </summary>
     public WindowConfig Window { get; init; } = new();
