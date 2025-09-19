@@ -6,4 +6,8 @@
   <ItemGroup>
     <PackageReference Include="Selenium.WebDriver" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Mieruka.Core/Mieruka.Core.csproj" />
+  </ItemGroup>
 </Project>

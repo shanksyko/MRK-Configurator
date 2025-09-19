@@ -18,6 +18,31 @@ public sealed record class SiteConfig
     public string Url { get; init; } = string.Empty;
 
     /// <summary>
+    /// Preferred browser for rendering the site.
+    /// </summary>
+    public BrowserType Browser { get; init; } = BrowserType.Chrome;
+
+    /// <summary>
+    /// Additional arguments applied when launching the browser for this site.
+    /// </summary>
+    public IList<string> BrowserArguments { get; init; } = new List<string>();
+
+    /// <summary>
+    /// Optional user data directory used when launching Chromium browsers.
+    /// </summary>
+    public string? UserDataDirectory { get; init; }
+
+    /// <summary>
+    /// Optional profile directory used when launching Chromium browsers.
+    /// </summary>
+    public string? ProfileDirectory { get; init; }
+
+    /// <summary>
+    /// Launches the browser in app mode (chromeless window).
+    /// </summary>
+    public bool AppMode { get; init; }
+
+    /// <summary>
     /// Controls whether the browser should use kiosk mode.
     /// </summary>
     public bool KioskMode { get; init; }
