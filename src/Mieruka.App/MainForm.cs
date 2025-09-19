@@ -1,0 +1,488 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Windows.Forms;
+using Mieruka.App.Config;
+using Mieruka.App.Controls;
+using Mieruka.Core.Models;
+using Mieruka.Core.Services;
+using Serilog;
+
+namespace Mieruka.App;
+
+/// <summary>
+/// Main window used to assign applications and sites to monitors.
+/// </summary>
+internal sealed class MainForm : Form
+{
+    private readonly ConfiguratorWorkspace _workspace;
+    private readonly JsonStore<GeneralConfig> _store;
+    private readonly IDisplayService? _displayService;
+    private readonly ImageList _imageList;
+    private readonly ListView _applicationsList;
+    private readonly ListView _sitesList;
+    private readonly FlowLayoutPanel _monitorPanel;
+    private readonly StatusStrip _statusStrip;
+    private readonly ToolStripStatusLabel _statusLabel;
+    private readonly List<MonitorPreviewControl> _monitorPreviews = new();
+
+    private EntryReference? _selectedEntry;
+    private bool _isUpdatingSelection;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainForm"/> class.
+    /// </summary>
+    /// <param name="workspace">Workspace that exposes the configuration being edited.</param>
+    /// <param name="store">Backing store used to persist changes.</param>
+    /// <param name="displayService">Optional display service used to observe topology changes.</param>
+    public MainForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService)
+    {
+        _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _displayService = displayService;
+
+        Text = "MRK Configurator";
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(960, 600);
+
+        _imageList = new ImageList
+        {
+            ImageSize = new Size(32, 32),
+            ColorDepth = ColorDepth.Depth32Bit,
+        };
+        _imageList.Images.Add("app", SystemIcons.Application);
+        _imageList.Images.Add("site", SystemIcons.Information);
+
+        _applicationsList = CreateListView();
+        _applicationsList.LargeImageList = _imageList;
+        _applicationsList.SmallImageList = _imageList;
+        _applicationsList.SelectedIndexChanged += OnApplicationsSelectedIndexChanged;
+        _applicationsList.ItemDrag += OnListItemDrag;
+
+        _sitesList = CreateListView();
+        _sitesList.LargeImageList = _imageList;
+        _sitesList.SmallImageList = _imageList;
+        _sitesList.SelectedIndexChanged += OnSitesSelectedIndexChanged;
+        _sitesList.ItemDrag += OnListItemDrag;
+
+        var appsTab = new TabPage("Aplicativos")
+        {
+            Padding = new Padding(4),
+        };
+        appsTab.Controls.Add(_applicationsList);
+
+        var sitesTab = new TabPage("Sites")
+        {
+            Padding = new Padding(4),
+        };
+        sitesTab.Controls.Add(_sitesList);
+
+        var tabControl = new TabControl
+        {
+            Dock = DockStyle.Fill,
+            Font = SystemFonts.MessageBoxFont,
+        };
+        tabControl.TabPages.Add(appsTab);
+        tabControl.TabPages.Add(sitesTab);
+
+        var monitorContainer = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(8),
+        };
+
+        _monitorPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(4),
+        };
+
+        monitorContainer.Controls.Add(_monitorPanel);
+
+        var splitContainer = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            FixedPanel = FixedPanel.Panel1,
+            SplitterDistance = 320,
+            Panel1MinSize = 240,
+            Panel2MinSize = 320,
+        };
+
+        splitContainer.Panel1.Controls.Add(tabControl);
+        splitContainer.Panel2.Controls.Add(monitorContainer);
+
+        _statusLabel = new ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
+        _statusStrip = new StatusStrip();
+        _statusStrip.Items.Add(_statusLabel);
+
+        Controls.Add(splitContainer);
+        Controls.Add(_statusStrip);
+
+        PopulateLists();
+        BuildMonitorPreviews();
+
+        _displayService?.TopologyChanged += OnTopologyChanged;
+    }
+
+    /// <inheritdoc />
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        UpdateStatus();
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            if (_displayService is not null)
+            {
+                _displayService.TopologyChanged -= OnTopologyChanged;
+            }
+
+            foreach (var preview in _monitorPreviews)
+            {
+                preview.EntryDropped -= OnMonitorEntryDropped;
+                preview.SelectionApplied -= OnMonitorSelectionApplied;
+            }
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+
+        try
+        {
+            var config = _workspace.BuildConfiguration();
+            _store.SaveAsync(config).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao salvar a configuração.");
+            MessageBox.Show(this, $"Não foi possível salvar as alterações: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void PopulateLists()
+    {
+        _applicationsList.BeginUpdate();
+        _applicationsList.Items.Clear();
+
+        foreach (var app in _workspace.Applications)
+        {
+            var entry = EntryReference.Create(EntryKind.Application, app.Id);
+            var displayName = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
+            var item = new ListViewItem(displayName)
+            {
+                Tag = entry,
+                ImageKey = "app",
+                ToolTipText = app.ExecutablePath,
+            };
+
+            _applicationsList.Items.Add(item);
+        }
+
+        _applicationsList.EndUpdate();
+
+        _sitesList.BeginUpdate();
+        _sitesList.Items.Clear();
+
+        foreach (var site in _workspace.Sites)
+        {
+            var entry = EntryReference.Create(EntryKind.Site, site.Id);
+            var displayName = string.IsNullOrWhiteSpace(site.Window.Title) ? site.Id : site.Window.Title;
+            var item = new ListViewItem(displayName)
+            {
+                Tag = entry,
+                ImageKey = "site",
+                ToolTipText = site.Url,
+            };
+
+            _sitesList.Items.Add(item);
+        }
+
+        _sitesList.EndUpdate();
+    }
+
+    private void BuildMonitorPreviews()
+    {
+        _monitorPanel.SuspendLayout();
+        foreach (var preview in _monitorPreviews)
+        {
+            preview.EntryDropped -= OnMonitorEntryDropped;
+            preview.SelectionApplied -= OnMonitorSelectionApplied;
+            preview.Dispose();
+        }
+
+        _monitorPreviews.Clear();
+        _monitorPanel.Controls.Clear();
+
+        foreach (var monitor in _workspace.Monitors)
+        {
+            var preview = new MonitorPreviewControl
+            {
+                Width = 320,
+                Height = 260,
+                Margin = new Padding(8),
+            };
+
+            preview.Monitor = monitor;
+            preview.EntryDropped += OnMonitorEntryDropped;
+            preview.SelectionApplied += OnMonitorSelectionApplied;
+
+            _monitorPreviews.Add(preview);
+            _monitorPanel.Controls.Add(preview);
+        }
+
+        _monitorPanel.ResumeLayout();
+        UpdateMonitorPreviews();
+    }
+
+    private static ListView CreateListView()
+    {
+        return new ListView
+        {
+            Dock = DockStyle.Fill,
+            MultiSelect = false,
+            HideSelection = false,
+            ShowItemToolTips = true,
+            View = View.Tile,
+        };
+    }
+
+    private void OnApplicationsSelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_isUpdatingSelection)
+        {
+            return;
+        }
+
+        try
+        {
+            _isUpdatingSelection = true;
+            if (_applicationsList.SelectedItems.Count > 0)
+            {
+                _sitesList.SelectedItems.Clear();
+                _selectedEntry = _applicationsList.SelectedItems[0].Tag as EntryReference;
+            }
+            else if (_sitesList.SelectedItems.Count == 0)
+            {
+                _selectedEntry = null;
+            }
+
+            UpdateMonitorPreviews();
+            UpdateStatus();
+        }
+        finally
+        {
+            _isUpdatingSelection = false;
+        }
+    }
+
+    private void OnSitesSelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (_isUpdatingSelection)
+        {
+            return;
+        }
+
+        try
+        {
+            _isUpdatingSelection = true;
+            if (_sitesList.SelectedItems.Count > 0)
+            {
+                _applicationsList.SelectedItems.Clear();
+                _selectedEntry = _sitesList.SelectedItems[0].Tag as EntryReference;
+            }
+            else if (_applicationsList.SelectedItems.Count == 0)
+            {
+                _selectedEntry = null;
+            }
+
+            UpdateMonitorPreviews();
+            UpdateStatus();
+        }
+        finally
+        {
+            _isUpdatingSelection = false;
+        }
+    }
+
+    private void OnListItemDrag(object? sender, ItemDragEventArgs e)
+    {
+        if (e.Item is not ListViewItem item || item.Tag is not EntryReference entry)
+        {
+            return;
+        }
+
+        DoDragDrop(EntryReference.CreateDataObject(entry), DragDropEffects.Move);
+    }
+
+    private void OnMonitorEntryDropped(object? sender, MonitorPreviewControl.EntryDroppedEventArgs e)
+    {
+        if (!_workspace.TryAssignEntryToMonitor(e.Entry, e.Monitor))
+        {
+            MessageBox.Show(this, "Não foi possível aplicar a configuração ao monitor selecionado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _selectedEntry = e.Entry;
+        SelectEntryInList(e.Entry);
+        UpdateMonitorPreviews();
+        UpdateStatus($"{e.Entry.Id} atribuído a {e.Monitor.Name}.");
+    }
+
+    private void OnMonitorSelectionApplied(object? sender, MonitorPreviewControl.SelectionAppliedEventArgs e)
+    {
+        if (_selectedEntry is null)
+        {
+            UpdateStatus("Selecione um aplicativo ou site antes de desenhar uma área.");
+            return;
+        }
+
+        if (!_workspace.TryApplySelection(_selectedEntry, e.Monitor, e.Selection))
+        {
+            MessageBox.Show(this, "Não foi possível aplicar a seleção ao item atual.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        UpdateMonitorPreviews();
+        UpdateStatus($"Área atualizada para {_selectedEntry.Id} em {e.Monitor.Name}.");
+    }
+
+    private void OnTopologyChanged(object? sender, EventArgs e)
+    {
+        try
+        {
+            var monitors = _displayService?.Monitors() ?? Array.Empty<MonitorInfo>();
+            if (monitors.Count == 0)
+            {
+                return;
+            }
+
+            _workspace.UpdateMonitors(monitors);
+            BuildMonitorPreviews();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha ao atualizar monitores");
+        }
+    }
+
+    private void UpdateMonitorPreviews()
+    {
+        WindowConfig? window = null;
+        MonitorInfo? windowMonitor = null;
+
+        if (_selectedEntry is not null)
+        {
+            window = _workspace.GetWindow(_selectedEntry);
+            if (window is not null)
+            {
+                windowMonitor = _workspace.FindMonitor(window.Monitor);
+            }
+        }
+
+        foreach (var preview in _monitorPreviews)
+        {
+            if (window is not null && windowMonitor is not null && KeysEqual(windowMonitor.Key, preview.Monitor?.Key))
+            {
+                preview.DisplayWindow(window);
+            }
+            else
+            {
+                preview.DisplayWindow(null);
+            }
+        }
+    }
+
+    private void SelectEntryInList(EntryReference entry)
+    {
+        try
+        {
+            _isUpdatingSelection = true;
+
+            if (entry.Kind == EntryKind.Application)
+            {
+                var item = EntryReference.FindItem(_applicationsList, entry);
+                if (item is not null)
+                {
+                    _sitesList.SelectedItems.Clear();
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                }
+            }
+            else
+            {
+                var item = EntryReference.FindItem(_sitesList, entry);
+                if (item is not null)
+                {
+                    _applicationsList.SelectedItems.Clear();
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                }
+            }
+        }
+        finally
+        {
+            _isUpdatingSelection = false;
+        }
+    }
+
+    private void UpdateStatus(string? message = null)
+    {
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            _statusLabel.Text = message;
+            return;
+        }
+
+        if (_selectedEntry is null)
+        {
+            _statusLabel.Text = "Selecione um item e arraste para um monitor para iniciar.";
+            return;
+        }
+
+        var window = _workspace.GetWindow(_selectedEntry);
+        if (window is null)
+        {
+            _statusLabel.Text = $"Nenhuma configuração aplicada para {_selectedEntry.Id}.";
+            return;
+        }
+
+        var monitor = _workspace.FindMonitor(window.Monitor);
+        if (monitor is null)
+        {
+            _statusLabel.Text = $"{_selectedEntry.Id} ainda não possui um monitor atribuído.";
+            return;
+        }
+
+        var rectangle = _workspace.GetSelectionRectangle(window, monitor);
+        _statusLabel.Text = $"{_selectedEntry.Id}: {monitor.Name} ({rectangle.X},{rectangle.Y}) {rectangle.Width}x{rectangle.Height}.";
+    }
+
+    private static bool KeysEqual(MonitorKey? left, MonitorKey? right)
+    {
+        if (left is null || right is null)
+        {
+            return false;
+        }
+
+        return string.Equals(left.DeviceId, right.DeviceId, StringComparison.OrdinalIgnoreCase)
+            && left.DisplayIndex == right.DisplayIndex
+            && left.AdapterLuidHigh == right.AdapterLuidHigh
+            && left.AdapterLuidLow == right.AdapterLuidLow
+            && left.TargetId == right.TargetId;
+    }
+}
