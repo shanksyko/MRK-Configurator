@@ -12,12 +12,15 @@ internal static class MonitorUtilities
         monitorHandle = IntPtr.Zero;
         bounds = default;
 
+        var locatedMonitor = IntPtr.Zero;
+        var locatedBounds = default(RECT);
+
         if (string.IsNullOrWhiteSpace(deviceName))
         {
             return false;
         }
 
-        var callback = new MonitorEnumProc((hMonitor, _, ref RECT rect, _) =>
+        var callback = new MonitorEnumProc((IntPtr hMonitor, IntPtr _, ref RECT rect, IntPtr __) =>
         {
             var info = new MONITORINFOEX
             {
@@ -34,14 +37,21 @@ internal static class MonitorUtilities
                 return true;
             }
 
-            monitorHandle = hMonitor;
-            bounds = info.rcMonitor;
+            locatedMonitor = hMonitor;
+            locatedBounds = info.rcMonitor;
             return false;
         });
 
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
         GC.KeepAlive(callback);
-        return monitorHandle != IntPtr.Zero;
+        if (locatedMonitor == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        monitorHandle = locatedMonitor;
+        bounds = locatedBounds;
+        return true;
     }
 
     [StructLayout(LayoutKind.Sequential)]

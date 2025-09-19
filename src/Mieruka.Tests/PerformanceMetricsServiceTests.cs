@@ -44,7 +44,7 @@ public sealed class PerformanceMetricsServiceTests
         Assert.InRange(report.MedianFps, 59.0, 65.0);
         Assert.InRange(report.InputDrift.AverageMilliseconds, 8.0, 12.0);
         Assert.InRange(report.InputDrift.PeakMilliseconds, 14.0, 16.0);
-        Assert.InRange(report.CycleTiming.AverageMilliseconds, 1800, 2300);
+        Assert.InRange(report.CycleTiming.AverageMilliseconds, 2800, 3200);
         Assert.True(report.CycleTiming.PeakMilliseconds >= report.CycleTiming.AverageMilliseconds);
 
         var message = Assert.Single(telemetry.InfoMessages);

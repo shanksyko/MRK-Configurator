@@ -266,7 +266,7 @@ public sealed class DisplayService : IDisplayService, IDisposable
             var candidate = modeInfos[path.sourceInfo.modeInfoIdx];
             if (candidate.infoType == DISPLAYCONFIG_MODE_INFO_TYPE.Source)
             {
-                sourceMode = candidate.sourceMode;
+                sourceMode = candidate.modeInfo.sourceMode;
                 return true;
             }
         }
@@ -278,7 +278,7 @@ public sealed class DisplayService : IDisplayService, IDisposable
                 mode.adapterId.HighPart == path.sourceInfo.adapterId.HighPart &&
                 mode.adapterId.LowPart == path.sourceInfo.adapterId.LowPart)
             {
-                sourceMode = mode.sourceMode;
+                sourceMode = mode.modeInfo.sourceMode;
                 return true;
             }
         }

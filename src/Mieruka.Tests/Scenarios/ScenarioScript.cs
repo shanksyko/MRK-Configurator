@@ -7,7 +7,7 @@ namespace Mieruka.Tests.Scenarios;
 /// <summary>
 /// Represents a scripted scenario used to stress test performance metrics.
 /// </summary>
-internal sealed class ScenarioScript
+public sealed class ScenarioScript
 {
     public ScenarioScript(
         string name,

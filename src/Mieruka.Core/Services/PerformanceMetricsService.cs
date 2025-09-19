@@ -54,16 +54,20 @@ public sealed class PerformanceMetricsService
         ArgumentNullException.ThrowIfNull(cycleDrift);
 
         var frameSamples = frames.ToList();
+        var frameDurations = frameSamples
+            .Select(sample => sample.Duration.TotalMilliseconds)
+            .Where(duration => duration > 0 && !double.IsNaN(duration) && !double.IsInfinity(duration))
+            .ToList();
         var driftSamples = inputDrift.ToList();
         var cycleSamples = cycleDrift.ToList();
 
-        var averageFrameDuration = frameSamples.Count == 0
+        var averageFrameDuration = frameDurations.Count == 0
             ? 0d
-            : frameSamples.Average(sample => sample.Duration.TotalMilliseconds);
+            : frameDurations.Average();
 
-        var medianFrameDuration = frameSamples.Count == 0
+        var medianFrameDuration = frameDurations.Count == 0
             ? 0d
-            : Median(frameSamples.Select(sample => sample.Duration.TotalMilliseconds));
+            : Median(frameDurations);
 
         var averageFps = averageFrameDuration <= 0 ? 0 : 1000d / averageFrameDuration;
         var medianFps = medianFrameDuration <= 0 ? 0 : 1000d / medianFrameDuration;
