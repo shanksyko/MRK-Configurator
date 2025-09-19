@@ -26,4 +26,9 @@ public sealed record class CycleConfig
     /// Items that compose the cycle.
     /// </summary>
     public IList<CycleItem> Items { get; init; } = new List<CycleItem>();
+
+    /// <summary>
+    /// Keyboard shortcuts that control the playback cycle.
+    /// </summary>
+    public CycleHotkeyConfig Hotkeys { get; init; } = new();
 }
