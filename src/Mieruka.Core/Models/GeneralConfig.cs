@@ -50,4 +50,9 @@ public sealed record class GeneralConfig
     /// Playback cycle definition.
     /// </summary>
     public CycleConfig Cycle { get; init; } = new();
+
+    /// <summary>
+    /// Auto-update settings applied to the configurator.
+    /// </summary>
+    public UpdateConfig AutoUpdate { get; init; } = new();
 }
