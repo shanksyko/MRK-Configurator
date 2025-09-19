@@ -139,6 +139,60 @@ public sealed class BindingService : IDisposable
     }
 
     /// <summary>
+    /// Attempts to reapply the window configuration for the specified entry.
+    /// </summary>
+    /// <param name="kind">Entry category.</param>
+    /// <param name="id">Unique identifier of the entry.</param>
+    /// <param name="handle">Handle currently associated with the entry.</param>
+    /// <returns><c>true</c> when the window was repositioned; otherwise, <c>false</c>.</returns>
+    public bool TryReapplyBinding(EntryKind kind, string id, out IntPtr handle)
+    {
+        EnsureNotDisposed();
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new ArgumentException("Entry identifier cannot be empty.", nameof(id));
+        }
+
+        handle = IntPtr.Zero;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        WindowConfig? window = null;
+        string? kindName = null;
+
+        lock (_gate)
+        {
+            switch (kind)
+            {
+                case EntryKind.Application when _appBindings.TryGetValue(id, out var appBinding):
+                    handle = appBinding.WindowHandle;
+                    window = appBinding.WindowConfig;
+                    kindName = "app";
+                    break;
+
+                case EntryKind.Site when _siteBindings.TryGetValue(id, out var siteBinding):
+                    handle = siteBinding.WindowHandle;
+                    window = siteBinding.WindowConfig;
+                    kindName = "site";
+                    break;
+            }
+        }
+
+        if (handle == IntPtr.Zero || window is null || string.IsNullOrWhiteSpace(kindName))
+        {
+            handle = IntPtr.Zero;
+            return false;
+        }
+
+        ApplyWindow(id, kindName, handle, window);
+        return true;
+    }
+
+    /// <summary>
     /// Releases resources associated with the service.
     /// </summary>
     public void Dispose()
