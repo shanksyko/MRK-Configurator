@@ -31,6 +31,7 @@ internal static class Program
             using var bindingService = displayService is not null ? new BindingService(displayService, telemetry) : null;
             using var cycleManager = bindingService is not null ? new CycleManager(bindingService, telemetry: telemetry) : null;
             using var watchdogService = bindingService is not null ? new WatchdogService(bindingService, telemetry) : null;
+            using var updaterService = new UpdaterService(telemetry);
 
             var monitorComponent = bindingService is not null
                 ? new BindingOrchestrationComponent(bindingService, telemetry)
@@ -50,6 +51,7 @@ internal static class Program
             {
                 cycleManager?.ApplyConfiguration(candidate);
                 watchdogService?.ApplyConfiguration(candidate);
+                updaterService.ApplyConfiguration(candidate.AutoUpdate);
             }
 
             ApplyConfiguration(config);
