@@ -63,6 +63,11 @@ public sealed record class SiteConfig
     public IDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
+    /// Host names allowed to remain open when additional tabs or popups are created.
+    /// </summary>
+    public IList<string> AllowedTabHosts { get; init; } = new List<string>();
+
+    /// <summary>
     /// Optional automation profile used to authenticate against the site.
     /// </summary>
     public LoginProfile? Login { get; init; }
