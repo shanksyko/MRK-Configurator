@@ -24,11 +24,12 @@ internal static class Program
 
             using var displayService = CreateDisplayService();
             var store = CreateStore();
-            var config = LoadConfiguration(store);
+            var migrator = new ConfigMigrator();
+            var config = LoadConfiguration(store, migrator);
             var monitors = ResolveMonitors(displayService, config);
             var workspace = new ConfiguratorWorkspace(config, monitors);
 
-            using var configForm = new ConfigForm(workspace, store, displayService);
+            using var configForm = new ConfigForm(workspace, store, displayService, migrator);
             Application.Run(configForm);
 
             return 0;
@@ -52,11 +53,17 @@ internal static class Program
         return new JsonStore<GeneralConfig>(filePath);
     }
 
-    private static GeneralConfig LoadConfiguration(JsonStore<GeneralConfig> store)
+    private static GeneralConfig LoadConfiguration(JsonStore<GeneralConfig> store, ConfigMigrator migrator)
     {
         try
         {
-            return store.LoadAsync().GetAwaiter().GetResult() ?? new GeneralConfig();
+            var config = store.LoadAsync().GetAwaiter().GetResult();
+            if (config is null)
+            {
+                return new GeneralConfig();
+            }
+
+            return migrator.Migrate(config);
         }
         catch (Exception ex)
         {

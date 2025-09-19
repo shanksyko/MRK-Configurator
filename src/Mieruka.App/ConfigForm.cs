@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Config;
@@ -19,6 +20,7 @@ internal sealed class ConfigForm : Form
 {
     private readonly ConfiguratorWorkspace _workspace;
     private readonly JsonStore<GeneralConfig> _store;
+    private readonly ConfigMigrator _migrator;
     private readonly IDisplayService? _displayService;
     private readonly ConfigValidator _validator;
     private readonly ImageList _imageList;
@@ -42,16 +44,19 @@ internal sealed class ConfigForm : Form
     /// <param name="workspace">Workspace that exposes the configuration being edited.</param>
     /// <param name="store">Backing store used to persist changes.</param>
     /// <param name="displayService">Optional display service used to observe topology changes.</param>
-    public ConfigForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService)
+    public ConfigForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService, ConfigMigrator migrator)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _displayService = displayService;
+        _migrator = migrator ?? throw new ArgumentNullException(nameof(migrator));
         _validator = new ConfigValidator();
 
         Text = "MRK Configurator";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(960, 600);
+
+        var menuStrip = BuildMenu();
 
         _imageList = new ImageList
         {
@@ -178,12 +183,36 @@ internal sealed class ConfigForm : Form
 
         Controls.Add(_layoutContainer);
         Controls.Add(_statusStrip);
+        Controls.Add(menuStrip);
+        MainMenuStrip = menuStrip;
 
         PopulateLists();
         BuildMonitorPreviews();
         RefreshValidation();
 
         _displayService?.TopologyChanged += OnTopologyChanged;
+    }
+
+    private MenuStrip BuildMenu()
+    {
+        var menuStrip = new MenuStrip
+        {
+            Font = SystemFonts.MessageBoxFont,
+        };
+
+        var fileMenu = new ToolStripMenuItem("Arquivo");
+
+        var importItem = new ToolStripMenuItem("Importar...");
+        importItem.Click += OnImportConfiguration;
+
+        var exportItem = new ToolStripMenuItem("Exportar...");
+        exportItem.Click += OnExportConfiguration;
+
+        fileMenu.DropDownItems.Add(importItem);
+        fileMenu.DropDownItems.Add(exportItem);
+
+        menuStrip.Items.Add(fileMenu);
+        return menuStrip;
     }
 
     /// <inheritdoc />
@@ -221,12 +250,80 @@ internal sealed class ConfigForm : Form
         try
         {
             var config = _workspace.BuildConfiguration();
-            _store.SaveAsync(config).GetAwaiter().GetResult();
+            var migrated = _migrator.Migrate(config);
+            _store.SaveAsync(migrated).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao salvar a configuração.");
             MessageBox.Show(this, $"Não foi possível salvar as alterações: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnImportConfiguration(object? sender, EventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "Configurações JSON (*.json)|*.json|Todos os arquivos (*.*)|*.*",
+            Title = "Importar configuração",
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var config = _migrator.ImportFromFile(dialog.FileName);
+            IEnumerable<MonitorInfo>? monitors = null;
+            if (_displayService is not null)
+            {
+                var snapshot = _displayService.Monitors();
+                if (snapshot.Count > 0)
+                {
+                    monitors = snapshot;
+                }
+            }
+
+            _workspace.ApplyConfiguration(config, monitors);
+            _selectedEntry = null;
+            PopulateLists();
+            BuildMonitorPreviews();
+            RefreshValidation();
+            UpdateStatus($"Configuração importada de {Path.GetFileName(dialog.FileName)}.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao importar configuração.");
+            MessageBox.Show(this, $"Não foi possível importar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnExportConfiguration(object? sender, EventArgs e)
+    {
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Configurações JSON (*.json)|*.json|Todos os arquivos (*.*)|*.*",
+            Title = "Exportar configuração",
+            FileName = "appsettings.json",
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var config = _workspace.BuildConfiguration();
+            _migrator.ExportToFile(dialog.FileName, config);
+            UpdateStatus($"Configuração exportada para {Path.GetFileName(dialog.FileName)}.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao exportar configuração.");
+            MessageBox.Show(this, $"Não foi possível exportar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
