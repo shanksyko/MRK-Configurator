@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
 #if WINDOWS10_0_17763_0_OR_GREATER
-using WinRT;
+using Mieruka.Preview.Capture.Interop;
 #endif
 
 namespace Mieruka.Preview;
@@ -65,7 +65,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             }
 
             InitializeDirect3D();
-            _captureItem = WinRT.Interop.GraphicsCaptureItemInterop.CreateForMonitor(monitorHandle);
+            _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
             _currentSize = _captureItem.Size;
 
             _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.CreateFreeThreaded(
@@ -180,7 +180,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         {
             throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
         }
-        _direct3DDevice = WinRT.MarshalInterface<Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice>.FromAbi(graphicsDevice);
+        _direct3DDevice = GraphicsCaptureInterop.CreateDirect3DDevice(graphicsDevice);
     }
 
     private void ReleaseDirect3D()
@@ -198,9 +198,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
     private Vortice.Direct3D11.Texture2D CreateTextureFromSurface(Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface surface)
     {
-        var access = surface.As<WinRT.Interop.IDirect3DDxgiInterfaceAccess>();
         var textureGuid = typeof(Vortice.Direct3D11.ID3D11Texture2D).GUID;
-        Marshal.ThrowExceptionForHR(access.GetInterface(ref textureGuid, out var nativeResource));
+        var nativeResource = GraphicsCaptureInterop.GetInterfaceFromSurface(surface, textureGuid);
         return new Vortice.Direct3D11.Texture2D(nativeResource);
     }
 
