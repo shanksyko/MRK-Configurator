@@ -28,8 +28,8 @@ internal static class Program
             var monitors = ResolveMonitors(displayService, config);
             var workspace = new ConfiguratorWorkspace(config, monitors);
 
-            using var mainForm = new MainForm(workspace, store, displayService);
-            Application.Run(mainForm);
+            using var configForm = new ConfigForm(workspace, store, displayService);
+            Application.Run(configForm);
 
             return 0;
         }

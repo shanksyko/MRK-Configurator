@@ -12,35 +12,42 @@ using Serilog;
 namespace Mieruka.App;
 
 /// <summary>
-/// Main window used to assign applications and sites to monitors.
+/// Main window used to assign applications and sites to monitors while exposing
+/// validation feedback about the configuration.
 /// </summary>
-internal sealed class MainForm : Form
+internal sealed class ConfigForm : Form
 {
     private readonly ConfiguratorWorkspace _workspace;
     private readonly JsonStore<GeneralConfig> _store;
     private readonly IDisplayService? _displayService;
+    private readonly ConfigValidator _validator;
     private readonly ImageList _imageList;
+    private readonly ImageList _issueImageList;
     private readonly ListView _applicationsList;
     private readonly ListView _sitesList;
+    private readonly ListView _issuesList;
     private readonly FlowLayoutPanel _monitorPanel;
+    private readonly SplitContainer _layoutContainer;
     private readonly StatusStrip _statusStrip;
     private readonly ToolStripStatusLabel _statusLabel;
     private readonly List<MonitorPreviewControl> _monitorPreviews = new();
+    private ConfigValidationReport _validationReport = ConfigValidationReport.Empty;
 
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MainForm"/> class.
+    /// Initializes a new instance of the <see cref="ConfigForm"/> class.
     /// </summary>
     /// <param name="workspace">Workspace that exposes the configuration being edited.</param>
     /// <param name="store">Backing store used to persist changes.</param>
     /// <param name="displayService">Optional display service used to observe topology changes.</param>
-    public MainForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService)
+    public ConfigForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _displayService = displayService;
+        _validator = new ConfigValidator();
 
         Text = "MRK Configurator";
         StartPosition = FormStartPosition.CenterScreen;
@@ -53,6 +60,14 @@ internal sealed class MainForm : Form
         };
         _imageList.Images.Add("app", SystemIcons.Application);
         _imageList.Images.Add("site", SystemIcons.Information);
+
+        _issueImageList = new ImageList
+        {
+            ImageSize = new Size(16, 16),
+            ColorDepth = ColorDepth.Depth32Bit,
+        };
+        _issueImageList.Images.Add("error", SystemIcons.Error);
+        _issueImageList.Images.Add("warning", SystemIcons.Warning);
 
         _applicationsList = CreateListView();
         _applicationsList.LargeImageList = _imageList;
@@ -115,15 +130,58 @@ internal sealed class MainForm : Form
         splitContainer.Panel1.Controls.Add(tabControl);
         splitContainer.Panel2.Controls.Add(monitorContainer);
 
+        _issuesList = new ListView
+        {
+            Dock = DockStyle.Fill,
+            MultiSelect = false,
+            HideSelection = false,
+            View = View.Details,
+            FullRowSelect = true,
+            HeaderStyle = ColumnHeaderStyle.Nonclickable,
+            SmallImageList = _issueImageList,
+        };
+        _issuesList.Columns.Add("Tipo", 100, HorizontalAlignment.Left);
+        _issuesList.Columns.Add("Mensagem", 400, HorizontalAlignment.Left);
+
+        var issuesLabel = new Label
+        {
+            Dock = DockStyle.Top,
+            Text = "Problemas detectados",
+            Font = SystemFonts.MessageBoxFont,
+            Padding = new Padding(0, 0, 0, 6),
+        };
+
+        var issuesPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(8),
+        };
+
+        issuesPanel.Controls.Add(_issuesList);
+        issuesPanel.Controls.Add(issuesLabel);
+
+        _layoutContainer = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Horizontal,
+            FixedPanel = FixedPanel.Panel1,
+            Panel1MinSize = 140,
+        };
+
+        _layoutContainer.Panel1.Controls.Add(issuesPanel);
+        _layoutContainer.Panel2.Controls.Add(splitContainer);
+        _layoutContainer.Panel1Collapsed = true;
+
         _statusLabel = new ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
         _statusStrip = new StatusStrip();
         _statusStrip.Items.Add(_statusLabel);
 
-        Controls.Add(splitContainer);
+        Controls.Add(_layoutContainer);
         Controls.Add(_statusStrip);
 
         PopulateLists();
         BuildMonitorPreviews();
+        RefreshValidation();
 
         _displayService?.TopologyChanged += OnTopologyChanged;
     }
@@ -170,6 +228,62 @@ internal sealed class MainForm : Form
             Log.Error(ex, "Falha ao salvar a configuração.");
             MessageBox.Show(this, $"Não foi possível salvar as alterações: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private void RefreshValidation()
+    {
+        ConfigValidationReport report;
+
+        try
+        {
+            var config = _workspace.BuildConfiguration();
+            report = _validator.Validate(config, _workspace.Monitors);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao validar a configuração.");
+            report = new ConfigValidationReport(new[]
+            {
+                new ConfigValidationIssue(ConfigValidationSeverity.Error, $"Falha ao validar a configuração: {ex.Message}"),
+            });
+        }
+
+        _validationReport = report;
+
+        _issuesList.BeginUpdate();
+        _issuesList.Items.Clear();
+
+        foreach (var issue in _validationReport.Issues)
+        {
+            var severityText = issue.Severity == ConfigValidationSeverity.Error ? "Erro" : "Aviso";
+            var description = string.IsNullOrWhiteSpace(issue.Source) ? issue.Message : $"{issue.Source}: {issue.Message}";
+            var item = new ListViewItem(severityText)
+            {
+                ImageKey = issue.Severity == ConfigValidationSeverity.Error ? "error" : "warning",
+                Tag = issue,
+            };
+            item.SubItems.Add(description);
+            _issuesList.Items.Add(item);
+        }
+
+        if (_issuesList.Columns.Count >= 2)
+        {
+            _issuesList.AutoResizeColumn(0, ColumnHeaderAutoResizeStyle.HeaderSize);
+            _issuesList.AutoResizeColumn(1, ColumnHeaderAutoResizeStyle.ColumnContent);
+        }
+
+        _issuesList.EndUpdate();
+
+        var hasIssues = _issuesList.Items.Count > 0;
+        _layoutContainer.Panel1Collapsed = !hasIssues;
+        if (hasIssues)
+        {
+            var desiredHeight = Math.Max(140, Height / 4);
+            var available = Math.Max(140, Height - 200);
+            _layoutContainer.SplitterDistance = Math.Min(desiredHeight, available);
+        }
+
+        UpdateStatus();
     }
 
     private void PopulateLists()
@@ -338,6 +452,7 @@ internal sealed class MainForm : Form
         _selectedEntry = e.Entry;
         SelectEntryInList(e.Entry);
         UpdateMonitorPreviews();
+        RefreshValidation();
         UpdateStatus($"{e.Entry.Id} atribuído a {e.Monitor.Name}.");
     }
 
@@ -356,6 +471,7 @@ internal sealed class MainForm : Form
         }
 
         UpdateMonitorPreviews();
+        RefreshValidation();
         UpdateStatus($"Área atualizada para {_selectedEntry.Id} em {e.Monitor.Name}.");
     }
 
@@ -371,6 +487,7 @@ internal sealed class MainForm : Form
 
             _workspace.UpdateMonitors(monitors);
             BuildMonitorPreviews();
+            RefreshValidation();
         }
         catch (Exception ex)
         {
@@ -448,9 +565,27 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (_validationReport.HasErrors)
+        {
+            var count = _validationReport.ErrorCount;
+            _statusLabel.Text = count == 1
+                ? "Execução bloqueada: 1 erro na configuração."
+                : $"Execução bloqueada: {count} erros na configuração.";
+            return;
+        }
+
         if (_selectedEntry is null)
         {
-            _statusLabel.Text = "Selecione um item e arraste para um monitor para iniciar.";
+            if (_validationReport.WarningCount > 0)
+            {
+                _statusLabel.Text = _validationReport.WarningCount == 1
+                    ? "1 aviso pendente na configuração."
+                    : $"{_validationReport.WarningCount} avisos pendentes na configuração.";
+            }
+            else
+            {
+                _statusLabel.Text = "Selecione um item e arraste para um monitor para iniciar.";
+            }
             return;
         }
 
