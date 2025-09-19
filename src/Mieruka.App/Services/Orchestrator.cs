@@ -34,6 +34,33 @@ public enum OrchestratorState
 }
 
 /// <summary>
+/// Describes a transition between two orchestrator states.
+/// </summary>
+public sealed class OrchestratorStateChangedEventArgs : EventArgs
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OrchestratorStateChangedEventArgs"/> class.
+    /// </summary>
+    /// <param name="previousState">State before the transition.</param>
+    /// <param name="currentState">State after the transition.</param>
+    public OrchestratorStateChangedEventArgs(OrchestratorState previousState, OrchestratorState currentState)
+    {
+        PreviousState = previousState;
+        CurrentState = currentState;
+    }
+
+    /// <summary>
+    /// Gets the state before the transition occurred.
+    /// </summary>
+    public OrchestratorState PreviousState { get; }
+
+    /// <summary>
+    /// Gets the state after the transition occurred.
+    /// </summary>
+    public OrchestratorState CurrentState { get; }
+}
+
+/// <summary>
 /// Defines lifecycle operations that must be supported by components controlled by the orchestrator.
 /// </summary>
 public interface IOrchestrationComponent
@@ -68,6 +95,11 @@ public sealed class Orchestrator
     private readonly SemaphoreSlim _stateGate = new(1, 1);
 
     private OrchestratorState _state = OrchestratorState.Init;
+
+    /// <summary>
+    /// Occurs whenever the orchestrator transitions to a new state.
+    /// </summary>
+    public event EventHandler<OrchestratorStateChangedEventArgs>? StateChanged;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Orchestrator"/> class.
@@ -373,6 +405,12 @@ public sealed class Orchestrator
 
         _telemetry.Info($"Orchestrator state changed from {previous} to {next}.");
         Volatile.Write(ref _state, next);
+
+        var handler = StateChanged;
+        if (handler is not null)
+        {
+            handler(this, new OrchestratorStateChangedEventArgs(previous, next));
+        }
     }
 
     private sealed record class ComponentRegistration(string Name, IOrchestrationComponent Component);

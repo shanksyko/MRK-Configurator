@@ -19,6 +19,11 @@ public sealed class TelemetryService : ITelemetry, IDisposable
     private readonly Logger _logger;
 
     /// <summary>
+    /// Gets the directory where telemetry log files are stored.
+    /// </summary>
+    public string LogDirectory { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TelemetryService"/> class.
     /// </summary>
     public TelemetryService()
@@ -32,13 +37,14 @@ public sealed class TelemetryService : ITelemetry, IDisposable
 
         var logDirectory = Path.Combine(baseDirectory, "Mieruka", "logs");
         Directory.CreateDirectory(logDirectory);
+        LogDirectory = logDirectory;
 
         var configuration = new LoggerConfiguration()
             .MinimumLevel.Information()
             .Enrich.WithProperty("SessionId", SessionId)
             .Enrich.WithProperty("MachineId", MachineId)
             .WriteTo.File(
-                path: Path.Combine(logDirectory, LogFileName),
+                path: Path.Combine(LogDirectory, LogFileName),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 30,
                 shared: true);

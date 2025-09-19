@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Config;
 using Mieruka.App.Services;
+using Mieruka.App.Tray;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using Serilog;
@@ -24,16 +26,44 @@ internal static class Program
         {
             ApplicationConfiguration.Initialize();
 
-            using var displayService = CreateDisplayService();
+            using var telemetry = new TelemetryService();
+            using var displayService = CreateDisplayService(telemetry);
+            using var bindingService = displayService is not null ? new BindingService(displayService, telemetry) : null;
+            using var cycleManager = bindingService is not null ? new CycleManager(bindingService, telemetry: telemetry) : null;
+            using var watchdogService = bindingService is not null ? new WatchdogService(bindingService, telemetry) : null;
+
+            var monitorComponent = bindingService is not null
+                ? new BindingOrchestrationComponent(bindingService, telemetry)
+                : NullOrchestrationComponent.Instance;
+            var rotationComponent = NullOrchestrationComponent.Instance;
+            var cycleComponent = cycleManager as IOrchestrationComponent ?? NullOrchestrationComponent.Instance;
+            var watchdogComponent = watchdogService as IOrchestrationComponent ?? NullOrchestrationComponent.Instance;
+            var orchestrator = new Orchestrator(monitorComponent, rotationComponent, cycleComponent, watchdogComponent, telemetry);
+
             var store = CreateStore();
             var migrator = new ConfigMigrator();
             var config = LoadConfiguration(store, migrator);
             var monitors = ResolveMonitors(displayService, config);
             var workspace = new ConfiguratorWorkspace(config, monitors);
 
+            void ApplyConfiguration(GeneralConfig candidate)
+            {
+                cycleManager?.ApplyConfiguration(candidate);
+                watchdogService?.ApplyConfiguration(candidate);
+            }
+
+            ApplyConfiguration(config);
+
             using var diagnosticsService = InitializeDiagnosticsService(workspace, config);
             using var configForm = new ConfigForm(workspace, store, displayService, migrator);
+            using var trayMenu = new TrayMenuManager(
+                orchestrator,
+                () => LoadConfigurationAsync(store, migrator),
+                ApplyConfiguration,
+                telemetry.LogDirectory);
             Application.Run(configForm);
+
+            orchestrator.StopAsync().GetAwaiter().GetResult();
 
             return 0;
         }
@@ -57,10 +87,13 @@ internal static class Program
     }
 
     private static GeneralConfig LoadConfiguration(JsonStore<GeneralConfig> store, ConfigMigrator migrator)
+        => LoadConfigurationAsync(store, migrator).GetAwaiter().GetResult();
+
+    private static async Task<GeneralConfig> LoadConfigurationAsync(JsonStore<GeneralConfig> store, ConfigMigrator migrator)
     {
         try
         {
-            var config = store.LoadAsync().GetAwaiter().GetResult();
+            var config = await store.LoadAsync().ConfigureAwait(false);
             if (config is null)
             {
                 return new GeneralConfig();
@@ -89,14 +122,14 @@ internal static class Program
         return config.Monitors;
     }
 
-    private static IDisplayService? CreateDisplayService()
+    private static IDisplayService? CreateDisplayService(ITelemetry telemetry)
     {
         if (!OperatingSystem.IsWindows())
         {
             return null;
         }
 
-        return new DisplayService();
+        return new DisplayService(telemetry);
     }
 
     private static DiagnosticsService? InitializeDiagnosticsService(ConfiguratorWorkspace workspace, GeneralConfig config)
