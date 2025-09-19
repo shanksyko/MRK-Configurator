@@ -63,6 +63,11 @@ public sealed record class SiteConfig
     public IDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
+    /// Watchdog related settings that describe how the site should be supervised.
+    /// </summary>
+    public WatchdogSettings Watchdog { get; init; } = new();
+
+    /// <summary>
     /// Host names allowed to remain open when additional tabs or popups are created.
     /// </summary>
     public IList<string> AllowedTabHosts { get; init; } = new List<string>();
