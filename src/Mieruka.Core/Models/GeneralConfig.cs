@@ -24,6 +24,11 @@ public sealed record class GeneralConfig
     public IList<AppConfig> Applications { get; init; } = new List<AppConfig>();
 
     /// <summary>
+    /// Global browser arguments applied to launched sites.
+    /// </summary>
+    public BrowserArgumentsSettings BrowserArguments { get; init; } = new();
+
+    /// <summary>
     /// Sites managed by the configurator.
     /// </summary>
     public IList<SiteConfig> Sites { get; init; } = new List<SiteConfig>();
