@@ -5,7 +5,9 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
+#if WINDOWS10_0_17763_0_OR_GREATER
 using WinRT;
+#endif
 
 namespace Mieruka.Preview;
 
@@ -16,6 +18,8 @@ namespace Mieruka.Preview;
 public sealed class GraphicsCaptureProvider : IMonitorCapture
 {
 #if WINDOWS10_0_17763_0_OR_GREATER
+    private const int FramePoolBufferCount = 4;
+
     private readonly object _gate = new();
     private Windows.Graphics.Capture.Direct3D11CaptureFramePool? _framePool;
     private Windows.Graphics.Capture.GraphicsCaptureSession? _session;
@@ -64,10 +68,10 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             _captureItem = WinRT.Interop.GraphicsCaptureItemInterop.CreateForMonitor(monitorHandle);
             _currentSize = _captureItem.Size;
 
-            _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.Create(
+            _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.CreateFreeThreaded(
                 _direct3DDevice!,
                 Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                2,
+                FramePoolBufferCount,
                 _captureItem.Size);
 
             _framePool.FrameArrived += OnFrameArrived;
@@ -135,7 +139,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             if (!frame.ContentSize.Equals(_currentSize) && _framePool is not null && _captureItem is not null)
             {
                 _currentSize = frame.ContentSize;
-                sender.Recreate(_direct3DDevice!, Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, _currentSize);
+                sender.Recreate(
+                    _direct3DDevice!,
+                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                    FramePoolBufferCount,
+                    _currentSize);
             }
 
             using var texture = CreateTextureFromSurface(frame.Surface);
