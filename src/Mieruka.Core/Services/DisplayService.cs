@@ -145,7 +145,7 @@ public sealed class DisplayService : IDisplayService, IDisposable
         }
 
         RefreshSnapshot();
-        _telemetry.TrackEvent("reposicionado por hot-plug");
+        _telemetry.Info("reposicionado por hot-plug");
         TopologyChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -418,7 +418,17 @@ public sealed class DisplayService : IDisplayService, IDisposable
     {
         public static readonly NullTelemetry Instance = new();
 
-        public void TrackEvent(string eventName, IReadOnlyDictionary<string, string>? properties = null)
+        public void Info(string message, Exception? exception = null)
+        {
+            // Intentionally left blank.
+        }
+
+        public void Warn(string message, Exception? exception = null)
+        {
+            // Intentionally left blank.
+        }
+
+        public void Error(string message, Exception? exception = null)
         {
             // Intentionally left blank.
         }
