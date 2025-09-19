@@ -17,5 +17,6 @@
     <PackageReference Include="Vortice.Direct3D11" Version="3.3.0" />
     <PackageReference Include="Vortice.DXGI" Version="3.3.0" />
     <PackageReference Include="WinRT.Runtime" Version="2.0.7" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
 </Project>
