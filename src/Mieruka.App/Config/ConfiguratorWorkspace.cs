@@ -13,7 +13,7 @@ namespace Mieruka.App.Config;
 /// </summary>
 internal sealed class ConfiguratorWorkspace
 {
-    private readonly GeneralConfig _baseConfig;
+    private GeneralConfig _baseConfig;
     private readonly List<MonitorInfo> _monitors = new();
 
     /// <summary>
@@ -25,16 +25,10 @@ internal sealed class ConfiguratorWorkspace
     {
         _baseConfig = config ?? new GeneralConfig();
 
-        var monitorSnapshot = (monitors ?? _baseConfig.Monitors).ToList();
-        if (monitorSnapshot.Count == 0)
-        {
-            monitorSnapshot.AddRange(_baseConfig.Monitors);
-        }
+        Applications = new BindingList<AppConfig>(new List<AppConfig>());
+        Sites = new BindingList<SiteConfig>(new List<SiteConfig>());
 
-        _monitors.AddRange(monitorSnapshot);
-
-        Applications = new BindingList<AppConfig>(_baseConfig.Applications.Select(CloneApp).ToList());
-        Sites = new BindingList<SiteConfig>(_baseConfig.Sites.Select(CloneSite).ToList());
+        ApplyConfiguration(_baseConfig, monitors);
     }
 
     /// <summary>
@@ -62,6 +56,30 @@ internal sealed class ConfiguratorWorkspace
 
         _monitors.Clear();
         _monitors.AddRange(monitors);
+    }
+
+    /// <summary>
+    /// Replaces the configuration represented by the workspace.
+    /// </summary>
+    /// <param name="config">Configuration that should be loaded.</param>
+    /// <param name="monitors">Optional monitor snapshot overriding the configuration monitors.</param>
+    public void ApplyConfiguration(GeneralConfig config, IEnumerable<MonitorInfo>? monitors = null)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        _baseConfig = config;
+
+        var monitorSnapshot = (monitors ?? config.Monitors).ToList();
+        if (monitorSnapshot.Count == 0)
+        {
+            monitorSnapshot.AddRange(config.Monitors);
+        }
+
+        _monitors.Clear();
+        _monitors.AddRange(monitorSnapshot);
+
+        UpdateBindingList(Applications, config.Applications.Select(CloneApp));
+        UpdateBindingList(Sites, config.Sites.Select(CloneSite));
     }
 
     /// <summary>
@@ -151,6 +169,8 @@ internal sealed class ConfiguratorWorkspace
     {
         return _baseConfig with
         {
+            SchemaVersion = ConfigSchemaVersion.Latest,
+            LegacyVersion = null,
             Monitors = _monitors.ToList(),
             Applications = Applications.ToList(),
             Sites = Sites.ToList(),
@@ -162,6 +182,25 @@ internal sealed class ConfiguratorWorkspace
 
     private static SiteConfig CloneSite(SiteConfig site)
         => site with { Window = site.Window with { } };
+
+    private static void UpdateBindingList<T>(BindingList<T> target, IEnumerable<T> items)
+    {
+        target.RaiseListChangedEvents = false;
+
+        try
+        {
+            target.Clear();
+            foreach (var item in items)
+            {
+                target.Add(item);
+            }
+        }
+        finally
+        {
+            target.RaiseListChangedEvents = true;
+            target.ResetBindings();
+        }
+    }
 
     private AppConfig? UpdateApplication(string id, Func<AppConfig, WindowConfig> updater)
     {

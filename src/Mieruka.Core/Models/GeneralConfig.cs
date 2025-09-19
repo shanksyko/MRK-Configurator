@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using Mieruka.Core.Layouts;
 
 namespace Mieruka.Core.Models;
@@ -9,9 +10,16 @@ namespace Mieruka.Core.Models;
 public sealed record class GeneralConfig
 {
     /// <summary>
-    /// Optional version identifier for the configuration.
+    /// Schema version identifier for the configuration.
     /// </summary>
-    public string Version { get; init; } = "1.0";
+    public string SchemaVersion { get; init; } = ConfigSchemaVersion.Latest;
+
+    /// <summary>
+    /// Legacy version identifier preserved for backward compatibility.
+    /// </summary>
+    [JsonPropertyName("Version")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyVersion { get; init; } = null;
 
     /// <summary>
     /// Describes the monitors available in the environment.
