@@ -19,6 +19,8 @@ public sealed class DisplayService : IDisplayService, IDisposable
 
     private readonly object _gate = new();
     private readonly ITelemetry _telemetry;
+    private readonly SessionChecker _sessionChecker;
+    private readonly bool _ownsSessionChecker;
     private IReadOnlyList<MonitorInfo> _snapshot = Array.Empty<MonitorInfo>();
     private bool _disposed;
 
@@ -26,14 +28,18 @@ public sealed class DisplayService : IDisplayService, IDisposable
     /// Initializes a new instance of the <see cref="DisplayService"/> class.
     /// </summary>
     /// <param name="telemetry">Telemetry sink used to record topology changes.</param>
-    public DisplayService(ITelemetry? telemetry = null)
+    public DisplayService(ITelemetry? telemetry = null, SessionChecker? sessionChecker = null)
     {
         _telemetry = telemetry ?? NullTelemetry.Instance;
+        _sessionChecker = sessionChecker ?? new SessionChecker(_telemetry);
+        _ownsSessionChecker = sessionChecker is null;
 
         if (!OperatingSystem.IsWindows())
         {
             return;
         }
+
+        _sessionChecker.UpdateStatus();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -113,6 +119,11 @@ public sealed class DisplayService : IDisplayService, IDisposable
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
 
+        if (_ownsSessionChecker)
+        {
+            _sessionChecker.Dispose();
+        }
+
         _disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -130,6 +141,8 @@ public sealed class DisplayService : IDisplayService, IDisposable
 
     private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {
+        _sessionChecker.UpdateStatus();
+
         if (e.Reason is SessionSwitchReason.RemoteConnect or SessionSwitchReason.RemoteDisconnect or
             SessionSwitchReason.ConsoleConnect or SessionSwitchReason.ConsoleDisconnect)
         {
@@ -141,6 +154,12 @@ public sealed class DisplayService : IDisplayService, IDisposable
     {
         if (!OperatingSystem.IsWindows())
         {
+            return;
+        }
+
+        if (_sessionChecker.UpdateStatus())
+        {
+            _telemetry.Info("topologia ignorada devido a sessão RDP desconectada");
             return;
         }
 
@@ -413,26 +432,6 @@ public sealed class DisplayService : IDisplayService, IDisposable
             DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY.DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_USB_TUNNEL => "USB Type-C",
             _ => technology.ToString(),
         };
-
-    private sealed class NullTelemetry : ITelemetry
-    {
-        public static readonly NullTelemetry Instance = new();
-
-        public void Info(string message, Exception? exception = null)
-        {
-            // Intentionally left blank.
-        }
-
-        public void Warn(string message, Exception? exception = null)
-        {
-            // Intentionally left blank.
-        }
-
-        public void Error(string message, Exception? exception = null)
-        {
-            // Intentionally left blank.
-        }
-    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct DISPLAYCONFIG_PATH_INFO
