@@ -406,7 +406,7 @@ public sealed class DisplayService : IDisplayService, IDisposable
             return string.Empty;
         }
 
-        var parts = deviceId.Split('\');
+        var parts = deviceId.Split('\\');
         return parts.Length >= 2 ? parts[1] : deviceId;
     }
 
