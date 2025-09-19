@@ -14,4 +14,19 @@ public sealed record class MonitorKey
     /// Zero-based index that represents the monitor position.
     /// </summary>
     public int DisplayIndex { get; init; }
+
+    /// <summary>
+    /// High-order bits of the adapter <c>LUID</c> that owns the monitor target.
+    /// </summary>
+    public int AdapterLuidHigh { get; init; }
+
+    /// <summary>
+    /// Low-order bits of the adapter <c>LUID</c> that owns the monitor target.
+    /// </summary>
+    public int AdapterLuidLow { get; init; }
+
+    /// <summary>
+    /// Identifier of the monitor target within the adapter.
+    /// </summary>
+    public int TargetId { get; init; }
 }

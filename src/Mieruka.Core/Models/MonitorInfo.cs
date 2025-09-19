@@ -16,6 +16,11 @@ public sealed record class MonitorInfo
     public string Name { get; init; } = string.Empty;
 
     /// <summary>
+    /// Logical device name (for example, <c>\\\\.\\DISPLAY1</c>).
+    /// </summary>
+    public string DeviceName { get; init; } = string.Empty;
+
+    /// <summary>
     /// Monitor width in pixels.
     /// </summary>
     public int Width { get; init; }
@@ -34,4 +39,14 @@ public sealed record class MonitorInfo
     /// Indicates if the monitor is the primary one.
     /// </summary>
     public bool IsPrimary { get; init; }
+
+    /// <summary>
+    /// Technology used by the monitor connector.
+    /// </summary>
+    public string Connector { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Extended display identification data identifier associated with the monitor.
+    /// </summary>
+    public string Edid { get; init; } = string.Empty;
 }
