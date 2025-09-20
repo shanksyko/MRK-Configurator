@@ -28,8 +28,11 @@ internal sealed class ConfigForm : Form
     private readonly ListView _applicationsList;
     private readonly ListView _sitesList;
     private readonly ListView _issuesList;
+    private const double ContentSplitterRatio = 0.35;
+
     private readonly FlowLayoutPanel _monitorPanel;
     private readonly SplitContainer _layoutContainer;
+    private readonly SplitContainer _contentContainer;
     private readonly StatusStrip _statusStrip;
     private readonly ToolStripStatusLabel _statusLabel;
     private readonly List<MonitorPreviewControl> _monitorPreviews = new();
@@ -123,17 +126,18 @@ internal sealed class ConfigForm : Form
 
         monitorContainer.Controls.Add(_monitorPanel);
 
-        var splitContainer = new SplitContainer
+        _contentContainer = new SplitContainer
         {
             Dock = DockStyle.Fill,
             FixedPanel = FixedPanel.Panel1,
-            SplitterDistance = 320,
-            Panel1MinSize = 240,
-            Panel2MinSize = 320,
+            Panel1MinSize = 120,
+            Panel2MinSize = 160,
         };
 
-        splitContainer.Panel1.Controls.Add(tabControl);
-        splitContainer.Panel2.Controls.Add(monitorContainer);
+        _contentContainer.Panel1.Controls.Add(tabControl);
+        _contentContainer.Panel2.Controls.Add(monitorContainer);
+        _contentContainer.SizeChanged += OnSplitContainerSizeChanged;
+        _contentContainer.SplitterMoved += OnSplitContainerSplitterMoved;
 
         _issuesList = new ListView
         {
@@ -171,11 +175,14 @@ internal sealed class ConfigForm : Form
             Orientation = Orientation.Horizontal,
             FixedPanel = FixedPanel.Panel1,
             Panel1MinSize = 140,
+            Panel2MinSize = 200,
         };
 
         _layoutContainer.Panel1.Controls.Add(issuesPanel);
-        _layoutContainer.Panel2.Controls.Add(splitContainer);
+        _layoutContainer.Panel2.Controls.Add(_contentContainer);
         _layoutContainer.Panel1Collapsed = true;
+        _layoutContainer.SizeChanged += OnLayoutContainerSizeChanged;
+        _layoutContainer.SplitterMoved += OnLayoutContainerSplitterMoved;
 
         _statusLabel = new ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
         _statusStrip = new StatusStrip();
@@ -222,7 +229,17 @@ internal sealed class ConfigForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        SafeInitSplitter(_contentContainer, ContentSplitterRatio);
+        ClampSplitter(_layoutContainer);
         UpdateStatus();
+    }
+
+    /// <inheritdoc />
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        SafeInitSplitter(_contentContainer, ContentSplitterRatio);
+        ClampSplitter(_layoutContainer);
     }
 
     /// <inheritdoc />
@@ -376,14 +393,38 @@ internal sealed class ConfigForm : Form
 
         var hasIssues = _issuesList.Items.Count > 0;
         _layoutContainer.Panel1Collapsed = !hasIssues;
-        if (hasIssues)
+        if (hasIssues && TryGetSplitterBounds(_layoutContainer, out _, out var minDistance, out var maxDistance))
         {
             var desiredHeight = Math.Max(140, Height / 4);
             var available = Math.Max(140, Height - 200);
-            _layoutContainer.SplitterDistance = Math.Min(desiredHeight, available);
+            var target = Math.Clamp(Math.Min(desiredHeight, available), minDistance, maxDistance);
+            if (target != _layoutContainer.SplitterDistance)
+            {
+                ApplySplitterDistance(_layoutContainer, target);
+            }
         }
 
         UpdateStatus();
+    }
+
+    private void OnSplitContainerSizeChanged(object? sender, EventArgs e)
+    {
+        ClampSplitter(_contentContainer);
+    }
+
+    private void OnSplitContainerSplitterMoved(object? sender, SplitterEventArgs e)
+    {
+        ClampSplitter(_contentContainer);
+    }
+
+    private void OnLayoutContainerSizeChanged(object? sender, EventArgs e)
+    {
+        ClampSplitter(_layoutContainer);
+    }
+
+    private void OnLayoutContainerSplitterMoved(object? sender, SplitterEventArgs e)
+    {
+        ClampSplitter(_layoutContainer);
     }
 
     private void PopulateLists()
@@ -705,6 +746,88 @@ internal sealed class ConfigForm : Form
 
         var rectangle = _workspace.GetSelectionRectangle(window, monitor);
         _statusLabel.Text = $"{_selectedEntry.Id}: {monitor.Name} ({rectangle.X},{rectangle.Y}) {rectangle.Width}x{rectangle.Height}.";
+    }
+
+    private static void SafeInitSplitter(SplitContainer container, double ratio)
+    {
+        if (container is null)
+        {
+            return;
+        }
+
+        ratio = Math.Clamp(ratio, 0d, 1d);
+
+        if (!TryGetSplitterBounds(container, out var availableLength, out var minDistance, out var maxDistance))
+        {
+            return;
+        }
+
+        var target = (int)Math.Round(availableLength * ratio);
+        target = Math.Clamp(target, minDistance, maxDistance);
+
+        if (target == container.SplitterDistance)
+        {
+            return;
+        }
+
+        ApplySplitterDistance(container, target);
+    }
+
+    private static void ClampSplitter(SplitContainer container)
+    {
+        if (container is null)
+        {
+            return;
+        }
+
+        if (!TryGetSplitterBounds(container, out _, out var minDistance, out var maxDistance))
+        {
+            return;
+        }
+
+        var target = Math.Clamp(container.SplitterDistance, minDistance, maxDistance);
+        if (target == container.SplitterDistance)
+        {
+            return;
+        }
+
+        ApplySplitterDistance(container, target);
+    }
+
+    private static bool TryGetSplitterBounds(SplitContainer container, out int availableLength, out int minDistance, out int maxDistance)
+    {
+        availableLength = container.Orientation == Orientation.Horizontal
+            ? container.ClientSize.Height
+            : container.ClientSize.Width;
+
+        minDistance = container.Panel1MinSize;
+        maxDistance = Math.Max(minDistance, availableLength - container.Panel2MinSize);
+
+        if (availableLength <= 0)
+        {
+            maxDistance = minDistance;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void ApplySplitterDistance(SplitContainer container, int distance)
+    {
+        if (container.SplitterDistance == distance)
+        {
+            return;
+        }
+
+        container.SuspendLayout();
+        try
+        {
+            container.SplitterDistance = distance;
+        }
+        finally
+        {
+            container.ResumeLayout();
+        }
     }
 
     private static bool KeysEqual(MonitorKey? left, MonitorKey? right)
