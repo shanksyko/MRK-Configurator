@@ -21,7 +21,7 @@ internal sealed class MonitorPreviewControl : UserControl
         Padding = new Padding(8);
         BackColor = SystemColors.ControlLightLight;
 
-        var captionFont = SystemFonts.CaptionFont ?? Control.DefaultFont;
+        var captionFont = ResolveFont(SystemFonts.CaptionFont);
 
         _titleLabel = new Label
         {
@@ -56,6 +56,21 @@ internal sealed class MonitorPreviewControl : UserControl
     /// Occurs when the user finalizes a rectangular selection.
     /// </summary>
     public event EventHandler<SelectionAppliedEventArgs>? SelectionApplied;
+
+    private static Font ResolveFont(Font? prototype)
+    {
+        if (prototype is not null)
+        {
+            return prototype;
+        }
+
+        if (SystemFonts.DefaultFont is { } defaultFont)
+        {
+            return defaultFont;
+        }
+
+        return Control.DefaultFont;
+    }
 
     /// <summary>
     /// Gets or sets the monitor displayed by the control.
@@ -271,17 +286,19 @@ internal sealed class MonitorPreviewControl : UserControl
             e.Graphics.Clear(BackColor);
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
+            var displayFont = ResolveFont(Font);
+
             if (Monitor is null)
             {
                 using var textBrush = new SolidBrush(SystemColors.GrayText);
-                e.Graphics.DrawString("Nenhum monitor disponível", Font, textBrush, ClientRectangle, _stringFormat);
+                e.Graphics.DrawString("Nenhum monitor disponível", displayFont, textBrush, ClientRectangle, _stringFormat);
                 return;
             }
 
             if (!TryGetMonitorSurface(out var surface, out var scale))
             {
                 using var textBrush = new SolidBrush(SystemColors.GrayText);
-                e.Graphics.DrawString("Monitor inválido", Font, textBrush, ClientRectangle, _stringFormat);
+                e.Graphics.DrawString("Monitor inválido", displayFont, textBrush, ClientRectangle, _stringFormat);
                 return;
             }
 
@@ -322,8 +339,8 @@ internal sealed class MonitorPreviewControl : UserControl
             var caption = Monitor.DeviceName;
             if (!string.IsNullOrWhiteSpace(caption))
             {
-                var captionBounds = new RectangleF(surface.Left, surface.Bottom + 6f, surface.Width, Font.Height + 6f);
-                var messageFont = SystemFonts.MessageBoxFont ?? Font ?? Control.DefaultFont;
+                var captionBounds = new RectangleF(surface.Left, surface.Bottom + 6f, surface.Width, displayFont.Height + 6f);
+                var messageFont = ResolveFont(SystemFonts.MessageBoxFont ?? Font);
                 e.Graphics.DrawString(caption, messageFont, captionBrush, captionBounds, _stringFormat);
             }
         }

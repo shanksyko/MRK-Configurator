@@ -539,7 +539,10 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
 
         lock (_gate)
         {
-            _timer ??= new Timer(OnTimerTick, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            if (_timer is null)
+            {
+                _timer = new Timer(OnTimerTick, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            }
             _currentStartTime = start;
             _currentDuration = dueTime;
             _remainingWhenPaused = TimeSpan.Zero;

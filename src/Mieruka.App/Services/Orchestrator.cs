@@ -135,7 +135,7 @@ public sealed class Orchestrator
     /// <summary>
     /// Gets the current state of the orchestrator.
     /// </summary>
-    public OrchestratorState State => (OrchestratorState)Volatile.Read(ref _state);
+    public OrchestratorState State => ReadState();
 
     /// <summary>
     /// Prepares the orchestrated services and transitions the orchestrator to the running state.
@@ -146,7 +146,7 @@ public sealed class Orchestrator
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var current = (OrchestratorState)Volatile.Read(ref _state);
+            var current = ReadState();
             switch (current)
             {
                 case OrchestratorState.Init:
@@ -186,7 +186,7 @@ public sealed class Orchestrator
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var current = (OrchestratorState)Volatile.Read(ref _state);
+            var current = ReadState();
             if (current is OrchestratorState.Init)
             {
                 _telemetry.Info("Stop requested while orchestrator is in the initial state. No action taken.");
@@ -217,7 +217,7 @@ public sealed class Orchestrator
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if ((OrchestratorState)Volatile.Read(ref _state) != OrchestratorState.Running)
+            if (ReadState() != OrchestratorState.Running)
             {
                 _telemetry.Info("Recover requested while orchestrator is not running. Operation ignored.");
                 return;
@@ -294,7 +294,11 @@ public sealed class Orchestrator
             }
             catch (Exception exception)
             {
-                failures ??= new List<Exception>();
+                if (failures is null)
+                {
+                    failures = new List<Exception>();
+                }
+
                 failures.Add(exception);
             }
         }
@@ -326,7 +330,11 @@ public sealed class Orchestrator
             }
             catch (Exception exception)
             {
-                failures ??= new List<Exception>();
+                if (failures is null)
+                {
+                    failures = new List<Exception>();
+                }
+
                 failures.Add(exception);
             }
         }
@@ -397,20 +405,26 @@ public sealed class Orchestrator
 
     private void TransitionTo(OrchestratorState next)
     {
-        var previous = (OrchestratorState)Volatile.Read(ref _state);
+        var previous = ReadState();
         if (previous == next)
         {
             return;
         }
 
         _telemetry.Info($"Orchestrator state changed from {previous} to {next}.");
-        Volatile.Write(ref _state, (int)next);
+        Interlocked.Exchange(ref _state, (int)next);
 
         var handler = StateChanged;
         if (handler is not null)
         {
             handler(this, new OrchestratorStateChangedEventArgs(previous, next));
         }
+    }
+
+    private OrchestratorState ReadState()
+    {
+        var value = Interlocked.CompareExchange(ref _state, 0, 0);
+        return (OrchestratorState)value;
     }
 
     private sealed record class ComponentRegistration(string Name, IOrchestrationComponent Component);
