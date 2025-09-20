@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Mieruka.Preview;
 
@@ -14,7 +15,27 @@ public static class MonitorCaptureFactory
     /// </summary>
     public static IMonitorCapture Create()
     {
-        var fallback = new GdiMonitorCaptureProvider();
+        var providers = GetAll();
+        if (providers.Count == 0)
+        {
+            throw new PlatformNotSupportedException("Nenhum provedor de captura de monitor está disponível.");
+        }
+
+        if (providers.Count == 1)
+        {
+            return providers[0];
+        }
+
+        return new ResilientMonitorCapture(providers[0], providers[1]);
+    }
+
+    /// <summary>
+    /// Retrieves the list of available monitor capture providers ordered by preference.
+    /// </summary>
+    public static IReadOnlyList<IMonitorCapture> GetAll()
+    {
+        var providers = new List<IMonitorCapture>();
+
 #if WINDOWS10_0_17763_0_OR_GREATER
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
         {
@@ -23,18 +44,21 @@ public static class MonitorCaptureFactory
                 var graphics = new GraphicsCaptureProvider();
                 if (graphics.IsSupported)
                 {
-                    return new ResilientMonitorCapture(graphics, fallback);
+                    providers.Add(graphics);
                 }
-
-                graphics.DisposeAsync().GetAwaiter().GetResult();
+                else
+                {
+                    graphics.DisposeAsync().GetAwaiter().GetResult();
+                }
             }
             catch
             {
-                // Ignore and fall back to GDI capture.
+                // Ignore and continue with the fallback provider.
             }
         }
 #endif
 
-        return fallback;
+        providers.Add(new GdiMonitorCaptureProvider());
+        return providers;
     }
 }

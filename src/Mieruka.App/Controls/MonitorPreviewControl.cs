@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using Mieruka.App.Services;
 using Mieruka.Core.Models;
 
 namespace Mieruka.App.Controls;
@@ -12,6 +13,7 @@ internal sealed class MonitorPreviewControl : UserControl
 {
     private readonly Label _titleLabel;
     private readonly MonitorCanvas _canvas;
+    private bool _isSelected;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MonitorPreviewControl"/> class.
@@ -20,6 +22,7 @@ internal sealed class MonitorPreviewControl : UserControl
     {
         Padding = new Padding(8);
         BackColor = SystemColors.ControlLightLight;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
         var captionFont = ResolveFont(SystemFonts.CaptionFont);
 
@@ -45,6 +48,9 @@ internal sealed class MonitorPreviewControl : UserControl
         _canvas.DragOver += CanvasOnDragEnter;
         _canvas.DragLeave += CanvasOnDragLeave;
         _canvas.DragDrop += CanvasOnDragDrop;
+        _canvas.MouseClick += CanvasOnMouseClick;
+        _titleLabel.MouseClick += CanvasOnMouseClick;
+        MouseClick += CanvasOnMouseClick;
     }
 
     /// <summary>
@@ -56,6 +62,11 @@ internal sealed class MonitorPreviewControl : UserControl
     /// Occurs when the user finalizes a rectangular selection.
     /// </summary>
     public event EventHandler<SelectionAppliedEventArgs>? SelectionApplied;
+
+    /// <summary>
+    /// Occurs when the monitor preview is clicked.
+    /// </summary>
+    public event EventHandler? MonitorSelected;
 
     private static Font ResolveFont(Font? prototype)
     {
@@ -90,7 +101,8 @@ internal sealed class MonitorPreviewControl : UserControl
                 var name = string.IsNullOrWhiteSpace(value.Name)
                     ? $"Monitor {value.Key.DisplayIndex + 1}"
                     : value.Name;
-                _titleLabel.Text = $"{name} ({value.Width}x{value.Height})";
+                var scaleText = value.Scale > 0 ? $"{value.Scale:P0}" : "1";
+                _titleLabel.Text = $"{name} ({value.Width}x{value.Height} @ {scaleText})";
             }
         }
     }
@@ -102,6 +114,24 @@ internal sealed class MonitorPreviewControl : UserControl
     public void DisplayWindow(WindowConfig? window)
     {
         _canvas.DisplayWindow(window);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the monitor preview is selected.
+    /// </summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value)
+            {
+                return;
+            }
+
+            _isSelected = value;
+            Invalidate();
+        }
     }
 
     private void CanvasOnDragEnter(object? sender, DragEventArgs e)
@@ -149,6 +179,28 @@ internal sealed class MonitorPreviewControl : UserControl
         }
 
         SelectionApplied?.Invoke(this, new SelectionAppliedEventArgs(Monitor, selection));
+    }
+
+    private void CanvasOnMouseClick(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+        {
+            MonitorSelected?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+
+        var color = _isSelected ? Color.DodgerBlue : SystemColors.ControlDark;
+        var thickness = _isSelected ? 2 : 1;
+        var rect = ClientRectangle;
+        rect.Width -= 1;
+        rect.Height -= 1;
+
+        using var pen = new Pen(color, thickness);
+        e.Graphics.DrawRectangle(pen, rect);
     }
 
     /// <summary>
