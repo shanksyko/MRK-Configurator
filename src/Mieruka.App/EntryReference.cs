@@ -7,7 +7,7 @@ namespace Mieruka.App;
 /// <summary>
 /// Categorizes the types of entries that can be assigned to monitors.
 /// </summary>
-public enum EntryKind
+internal enum EntryKind
 {
     /// <summary>
     /// Represents a native application entry.

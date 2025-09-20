@@ -21,12 +21,14 @@ internal sealed class MonitorPreviewControl : UserControl
         Padding = new Padding(8);
         BackColor = SystemColors.ControlLightLight;
 
+        var captionFont = SystemFonts.CaptionFont ?? Control.DefaultFont;
+
         _titleLabel = new Label
         {
             Dock = DockStyle.Top,
             TextAlign = ContentAlignment.MiddleCenter,
             Height = 28,
-            Font = new Font(SystemFonts.CaptionFont, FontStyle.Bold),
+            Font = new Font(captionFont, FontStyle.Bold),
         };
 
         _canvas = new MonitorCanvas
@@ -321,7 +323,8 @@ internal sealed class MonitorPreviewControl : UserControl
             if (!string.IsNullOrWhiteSpace(caption))
             {
                 var captionBounds = new RectangleF(surface.Left, surface.Bottom + 6f, surface.Width, Font.Height + 6f);
-                e.Graphics.DrawString(caption, SystemFonts.MessageBoxFont, captionBrush, captionBounds, _stringFormat);
+                var messageFont = SystemFonts.MessageBoxFont ?? Font ?? Control.DefaultFont;
+                e.Graphics.DrawString(caption, messageFont, captionBrush, captionBounds, _stringFormat);
             }
         }
 

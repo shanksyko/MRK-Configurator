@@ -14,7 +14,7 @@ namespace Mieruka.App.Services;
 /// <summary>
 /// Associates configuration entries with running windows and ensures they stay in the desired position.
 /// </summary>
-public sealed class BindingService : IDisposable
+internal sealed class BindingService : IDisposable
 {
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(1200);
 

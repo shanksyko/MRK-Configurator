@@ -7,7 +7,7 @@ namespace Mieruka.Core.Services;
 /// <summary>
 /// Provides access to the display topology available on the machine.
 /// </summary>
-public interface IDisplayService
+public interface IDisplayService : IDisposable
 {
     /// <summary>
     /// Occurs when the monitor topology changes.

@@ -17,7 +17,7 @@ namespace Mieruka.App.Services;
 /// Supervises native applications and browser instances, restarting them when necessary and ensuring
 /// their windows remain in the expected position.
 /// </summary>
-public sealed class WatchdogService : IOrchestrationComponent, IDisposable
+internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
 {
     private static readonly TimeSpan MonitorInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan BindingRefreshInterval = TimeSpan.FromSeconds(30);

@@ -190,7 +190,10 @@ internal sealed class ConfigForm : Form
         BuildMonitorPreviews();
         RefreshValidation();
 
-        _displayService?.TopologyChanged += OnTopologyChanged;
+        if (_displayService is not null)
+        {
+            _displayService.TopologyChanged += OnTopologyChanged;
+        }
     }
 
     private MenuStrip BuildMenu()

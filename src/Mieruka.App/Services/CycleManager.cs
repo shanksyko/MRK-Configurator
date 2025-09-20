@@ -12,7 +12,7 @@ namespace Mieruka.App.Services;
 /// <summary>
 /// Controls the playback of configured entries, rotating their windows on demand.
 /// </summary>
-public sealed class CycleManager : IOrchestrationComponent, IDisposable
+internal sealed class CycleManager : IOrchestrationComponent, IDisposable
 {
     private static readonly TimeSpan MinimumInterval = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);

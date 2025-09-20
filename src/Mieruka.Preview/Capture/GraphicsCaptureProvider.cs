@@ -79,7 +79,10 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             _framePool.FrameArrived += OnFrameArrived;
 
             _session = _framePool.CreateCaptureSession(_captureItem);
-            _session.IsCursorCaptureEnabled = true;
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+            {
+                EnableCursorCapture(_session);
+            }
             _session.StartCapture();
 
             // ensure bounds stored so fallback can use if needed
@@ -87,6 +90,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
 
         return Task.CompletedTask;
+    }
+
+    [SupportedOSPlatform("windows10.0.19041")]
+    private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
+    {
+        session.IsCursorCaptureEnabled = true;
     }
 
     /// <inheritdoc />
@@ -186,15 +195,15 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
             IntPtr.Zero,
             Vortice.Direct3D.DriverType.Hardware,
-            IntPtr.Zero,
-            (int)creationFlags,
+            creationFlags,
             featureLevels,
-            featureLevels.Length,
-            Vortice.Direct3D11.D3D11.SdkVersion,
             out var device,
+            out var featureLevel,
             out var context);
 
         result.CheckError();
+
+        _ = featureLevel;
 
         _d3dDevice = device;
         _d3dContext = context;
