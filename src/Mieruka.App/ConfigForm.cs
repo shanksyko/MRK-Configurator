@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Config;
+using Mieruka.App.Controls;
 using Mieruka.App.Ui;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
