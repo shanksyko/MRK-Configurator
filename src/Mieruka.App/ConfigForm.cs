@@ -1538,7 +1538,6 @@ internal sealed class ConfigForm : Form
             && left.AdapterLuidLow == right.AdapterLuidLow
             && left.TargetId == right.TargetId;
     }
-}
 
     private string DescribeWindow(WindowConfig window)
     {
@@ -2377,8 +2376,8 @@ internal sealed class ConfigForm : Form
 
     private static string FormatArgument(string name, string value)
     {
-        var sanitized = value.Replace(""", "\"");
-        return $"{name}="{sanitized}"";
+        var sanitized = value.Replace("\"", "\\\"");
+        return $"{name}=\"{sanitized}\"";
     }
 
     private string ResolveBrowserExecutable(BrowserType browser)
@@ -2431,4 +2430,6 @@ internal sealed class ConfigForm : Form
             Log.Warning(ex, "Falha durante a automação de login.");
         }
     }
+
+}
 
