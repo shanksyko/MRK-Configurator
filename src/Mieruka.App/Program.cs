@@ -70,7 +70,16 @@ internal static class Program
                 var store = CreateStore();
                 var migrator = new ConfigMigrator();
                 var config = LoadConfiguration(store, migrator);
-                var monitors = ResolveMonitors(displayService, config);
+                var monitorProbes = DetectMonitors();
+
+                if (config.Monitors.Count == 0 && monitorProbes.Count > 0)
+                {
+                    Log.Information("Configurando monitores iniciais a partir da detecção GDI.");
+                    var seeder = new MonitorSeeder();
+                    config = seeder.ApplySeeds(config, monitorProbes, resetPresets: true);
+                }
+
+                var monitors = ResolveMonitors(displayService, config, monitorProbes);
                 var workspace = new ConfiguratorWorkspace(config, monitors);
 
                 void ApplyConfiguration(GeneralConfig candidate)
@@ -141,7 +150,23 @@ internal static class Program
         }
     }
 
-    private static IReadOnlyList<MonitorInfo> ResolveMonitors(IDisplayService? displayService, GeneralConfig config)
+    private static IReadOnlyList<MonitorProbe> DetectMonitors()
+    {
+        try
+        {
+            var enumerator = new GdiMonitorEnumerator();
+            var probes = enumerator.Enumerate();
+            Log.Information("Detecção GDI identificou {MonitorCount} monitor(es).", probes.Count);
+            return probes;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha ao enumerar monitores via GDI. Nenhum monitor inicial será gerado.");
+            return Array.Empty<MonitorProbe>();
+        }
+    }
+
+    private static IReadOnlyList<MonitorInfo> ResolveMonitors(IDisplayService? displayService, GeneralConfig config, IReadOnlyList<MonitorProbe> probes)
     {
         if (displayService is not null)
         {
@@ -150,6 +175,12 @@ internal static class Program
             {
                 return monitors;
             }
+        }
+
+        if (config.Monitors.Count == 0 && probes.Count > 0)
+        {
+            var seeder = new MonitorSeeder();
+            return seeder.CreateMonitors(probes);
         }
 
         if (config.Monitors.Count == 0)

@@ -7,6 +7,7 @@ using System.Windows.Forms;
 using Mieruka.App.Config;
 using Mieruka.App.Controls;
 using Mieruka.App.Ui;
+using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using Serilog;
@@ -46,6 +47,9 @@ internal sealed class ConfigForm : Form
     private ConfigValidationReport _validationReport = ConfigValidationReport.Empty;
 
     private readonly ITelemetry _telemetry;
+    private readonly MonitorSeeder _monitorSeeder;
+    private readonly ToolTip _toolTip;
+    private readonly FlowLayoutPanel _footerPanel;
 
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
@@ -64,6 +68,25 @@ internal sealed class ConfigForm : Form
         _migrator = migrator ?? throw new ArgumentNullException(nameof(migrator));
         _validator = new ConfigValidator();
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
+        _monitorSeeder = new MonitorSeeder();
+
+        _toolTip = new ToolTip
+        {
+            AutoPopDelay = 8000,
+            InitialDelay = 400,
+            ReshowDelay = 200,
+            ShowAlways = true,
+        };
+
+        _footerPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(8),
+        };
 
         AutoScaleMode = AutoScaleMode.Dpi;
 
@@ -194,6 +217,46 @@ internal sealed class ConfigForm : Form
         _statusStrip = new StatusStrip();
         _statusStrip.Items.Add(_statusLabel);
 
+        var detectMonitorsButton = CreateFooterButton(
+            "Detectar Monitores",
+            "Executa uma nova detecção de monitores usando APIs GDI.",
+            OnDetectMonitorsClicked);
+        var saveButton = CreateFooterButton(
+            "Salvar Configuração",
+            "Salva imediatamente todas as alterações no arquivo de configuração.",
+            OnSaveConfigurationClicked);
+        var validateButton = CreateFooterButton(
+            "Validar Configuração",
+            "Roda o validador e destaca problemas encontrados na configuração.",
+            OnValidateConfigurationClicked);
+        var applyPresetButton = CreateFooterButton(
+            "Aplicar Preset",
+            "Seleciona e aplica um preset de zonas para o item atual.",
+            OnApplyPresetClicked);
+        var previewButton = CreateFooterButton(
+            "Testar Preview",
+            "Abre a janela de preview para validar a captura de tela.",
+            OnTestPreviewClicked);
+        var restoreButton = CreateFooterButton(
+            "Restaurar Padrão",
+            "Restaura os presets de zona padrão do aplicativo.",
+            OnRestoreDefaultsClicked);
+        var closeButton = CreateFooterButton(
+            "Fechar",
+            "Fecha a janela do configurador.",
+            OnCloseRequested);
+
+        _footerPanel.Controls.AddRange(new Control[]
+        {
+            detectMonitorsButton,
+            saveButton,
+            validateButton,
+            applyPresetButton,
+            previewButton,
+            restoreButton,
+            closeButton,
+        });
+
         ApplyScaledLayoutMetrics();
 
         LayoutGuards.WireSplitterGuards(_contentContainer, null);
@@ -201,6 +264,7 @@ internal sealed class ConfigForm : Form
         ApplyInitialSplitters();
 
         Controls.Add(_layoutContainer);
+        Controls.Add(_footerPanel);
         Controls.Add(_statusStrip);
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
@@ -269,6 +333,8 @@ internal sealed class ConfigForm : Form
                 preview.EntryDropped -= OnMonitorEntryDropped;
                 preview.SelectionApplied -= OnMonitorSelectionApplied;
             }
+
+            _toolTip.Dispose();
         }
 
         base.Dispose(disposing);
@@ -357,6 +423,161 @@ internal sealed class ConfigForm : Form
             Log.Error(ex, "Falha ao exportar configuração.");
             MessageBox.Show(this, $"Não foi possível exportar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private void OnDetectMonitorsClicked(object? sender, EventArgs e)
+    {
+        Log.Information("Detecção de monitores solicitada manualmente.");
+
+        try
+        {
+            var enumerator = new GdiMonitorEnumerator();
+            var probes = enumerator.Enumerate();
+
+            if (probes.Count == 0)
+            {
+                Log.Warning("Nenhum monitor foi encontrado durante a detecção manual.");
+                MessageBox.Show(this, "Nenhum monitor foi detectado. Verifique as conexões e tente novamente.", "Detecção de Monitores", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var config = _workspace.BuildConfiguration();
+            var updated = _monitorSeeder.ApplySeeds(config, probes, resetPresets: false);
+
+            _workspace.ApplyConfiguration(updated, updated.Monitors);
+            BuildMonitorPreviews();
+            RefreshValidation();
+
+            UpdateStatus($"{probes.Count} monitor(es) detectado(s) e carregado(s).");
+            Log.Information("Detecção manual atualizou a configuração com {MonitorCount} monitor(es).", probes.Count);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao executar a detecção de monitores.");
+            MessageBox.Show(this, $"Não foi possível detectar monitores: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnSaveConfigurationClicked(object? sender, EventArgs e)
+    {
+        Log.Information("Solicitação de salvamento manual da configuração.");
+
+        try
+        {
+            var config = _workspace.BuildConfiguration();
+            var migrated = _migrator.Migrate(config);
+            _store.SaveAsync(migrated).GetAwaiter().GetResult();
+            UpdateStatus("Configuração salva com sucesso.");
+            Log.Information("Configuração salva manualmente pelo usuário.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Erro ao salvar a configuração manualmente.");
+            MessageBox.Show(this, $"Não foi possível salvar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnValidateConfigurationClicked(object? sender, EventArgs e)
+    {
+        Log.Information("Validação manual da configuração iniciada.");
+        RefreshValidation();
+
+        var issueCount = _validationReport.Issues.Count;
+        if (issueCount == 0)
+        {
+            UpdateStatus("Nenhum problema encontrado.");
+            MessageBox.Show(this, "Nenhum problema foi encontrado na configuração.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log.Information("Validação manual concluída sem problemas.");
+        }
+        else
+        {
+            UpdateStatus($"{issueCount} problema(s) encontrado(s).");
+            MessageBox.Show(this, $"Foram encontrados {issueCount} problema(s). Consulte a lista para mais detalhes.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Log.Information("Validação manual encontrou {IssueCount} problema(s).", issueCount);
+        }
+    }
+
+    private void OnApplyPresetClicked(object? sender, EventArgs e)
+    {
+        Log.Information("Aplicação de preset solicitada.");
+
+        if (_selectedEntry is null)
+        {
+            MessageBox.Show(this, "Selecione um aplicativo ou site antes de aplicar um preset.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var config = _workspace.BuildConfiguration();
+        if (config.ZonePresets.Count == 0)
+        {
+            MessageBox.Show(this, "Nenhum preset de zonas está disponível. Utilize 'Restaurar Padrão' para recriá-los.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        using var dialog = new PresetSelectionDialog(config.ZonePresets);
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            Log.Information("Aplicação de preset cancelada pelo usuário.");
+            return;
+        }
+
+        if (dialog.SelectedPreset is null || dialog.SelectedZone is null)
+        {
+            return;
+        }
+
+        ApplyPresetToSelection(dialog.SelectedPreset, dialog.SelectedZone);
+    }
+
+    private void OnTestPreviewClicked(object? sender, EventArgs e)
+    {
+        Log.Information("Teste de preview solicitado.");
+
+        if (_workspace.Monitors.Count == 0)
+        {
+            MessageBox.Show(this, "Nenhum monitor está configurado para exibição de preview.", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            using var previewForm = new PreviewForm(_workspace.Monitors);
+            previewForm.ShowDialog(this);
+            UpdateStatus("Preview encerrado.");
+            Log.Information("Janela de preview encerrada pelo usuário.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao abrir a janela de preview.");
+            MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnRestoreDefaultsClicked(object? sender, EventArgs e)
+    {
+        Log.Information("Restauração dos presets padrão solicitada.");
+
+        try
+        {
+            var config = _workspace.BuildConfiguration();
+            var restored = config with { ZonePresets = _monitorSeeder.CreateDefaultZonePresets() };
+            _workspace.ApplyConfiguration(restored, restored.Monitors);
+            BuildMonitorPreviews();
+            RefreshValidation();
+            UpdateStatus("Presets padrão restaurados.");
+            Log.Information("Presets padrão restaurados com sucesso.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao restaurar os presets padrão.");
+            MessageBox.Show(this, $"Não foi possível restaurar os presets padrão: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnCloseRequested(object? sender, EventArgs e)
+    {
+        Log.Information("Encerrando ConfigForm a pedido do usuário.");
+        Close();
     }
 
     private void RefreshValidation()
@@ -747,6 +968,27 @@ internal sealed class ConfigForm : Form
         ApplySplitterRatio(_contentContainer, ContentSplitterRatio);
     }
 
+    private Button CreateFooterButton(string text, string toolTipText, EventHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(toolTipText);
+        ArgumentNullException.ThrowIfNull(handler);
+
+        var font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
+        var button = new Button
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(4),
+            Text = text,
+            Font = font,
+        };
+
+        button.Click += handler;
+        _toolTip.SetToolTip(button, toolTipText);
+        return button;
+    }
+
     private void ApplyScaledLayoutMetrics()
     {
         var minWidth = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Width);
@@ -828,6 +1070,95 @@ internal sealed class ConfigForm : Form
         }
 
         return container.GetType().Name;
+    }
+
+    private void ApplyPresetToSelection(ZonePreset preset, ZonePreset.Zone zone)
+    {
+        ArgumentNullException.ThrowIfNull(preset);
+        ArgumentNullException.ThrowIfNull(zone);
+
+        if (_selectedEntry is null)
+        {
+            return;
+        }
+
+        var window = _workspace.GetWindow(_selectedEntry);
+        if (window is null)
+        {
+            MessageBox.Show(this, "O item selecionado ainda não possui uma janela configurada.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var monitor = _workspace.FindMonitor(window.Monitor);
+        if (monitor is null)
+        {
+            MessageBox.Show(this, "Associe o item a um monitor antes de aplicar um preset.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var rectangle = CalculateZoneRectangle(zone, monitor);
+        if (!_workspace.TryAssignEntryToMonitor(_selectedEntry, monitor, rectangle))
+        {
+            MessageBox.Show(this, "Não foi possível aplicar o preset ao item selecionado.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Preset '{preset.Name}' aplicado ao item {_selectedEntry.Id}.");
+        Log.Information(
+            "Preset {PresetId} aplicado ao item {EntryId} no monitor {MonitorName}.",
+            preset.Id,
+            _selectedEntry.Id,
+            monitor.Name);
+    }
+
+    private static Rectangle CalculateZoneRectangle(ZonePreset.Zone zone, MonitorInfo monitor)
+    {
+        var width = Math.Max(1, (int)Math.Round(monitor.Width * (zone.WidthPercentage / 100d)));
+        var height = Math.Max(1, (int)Math.Round(monitor.Height * (zone.HeightPercentage / 100d)));
+        var x = (int)Math.Round(monitor.Width * (zone.LeftPercentage / 100d));
+        var y = (int)Math.Round(monitor.Height * (zone.TopPercentage / 100d));
+
+        switch (zone.Anchor)
+        {
+            case ZoneAnchor.TopCenter:
+                x -= width / 2;
+                break;
+            case ZoneAnchor.TopRight:
+                x -= width;
+                break;
+            case ZoneAnchor.CenterLeft:
+                y -= height / 2;
+                break;
+            case ZoneAnchor.Center:
+                x -= width / 2;
+                y -= height / 2;
+                break;
+            case ZoneAnchor.CenterRight:
+                x -= width;
+                y -= height / 2;
+                break;
+            case ZoneAnchor.BottomLeft:
+                y -= height;
+                break;
+            case ZoneAnchor.BottomCenter:
+                x -= width / 2;
+                y -= height;
+                break;
+            case ZoneAnchor.BottomRight:
+                x -= width;
+                y -= height;
+                break;
+            case ZoneAnchor.TopLeft:
+            default:
+                break;
+        }
+
+        x = Math.Clamp(x, 0, Math.Max(0, monitor.Width - width));
+        y = Math.Clamp(y, 0, Math.Max(0, monitor.Height - height));
+
+        return new Rectangle(x, y, width, height);
     }
 
     private static bool KeysEqual(MonitorKey? left, MonitorKey? right)
