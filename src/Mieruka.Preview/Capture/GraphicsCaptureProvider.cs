@@ -34,6 +34,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
 
     /// <inheritdoc />
+    [SupportedOSPlatform("windows10.0.17763")]
     public bool IsSupported => IsGraphicsCaptureAvailable;
 
     /// <inheritdoc />
@@ -181,25 +182,28 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             return;
         }
 
-        var creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport;
-        var featureLevels = new[]
-        {
-            Vortice.Direct3D.FeatureLevel.Level_12_1,
-            Vortice.Direct3D.FeatureLevel.Level_12_0,
-            Vortice.Direct3D.FeatureLevel.Level_11_1,
-            Vortice.Direct3D.FeatureLevel.Level_11_0,
-            Vortice.Direct3D.FeatureLevel.Level_10_1,
-            Vortice.Direct3D.FeatureLevel.Level_10_0,
-        };
+            var creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport;
+            var featureLevels = new[]
+            {
+                Vortice.Direct3D.FeatureLevel.Level_12_1,
+                Vortice.Direct3D.FeatureLevel.Level_12_0,
+                Vortice.Direct3D.FeatureLevel.Level_11_1,
+                Vortice.Direct3D.FeatureLevel.Level_11_0,
+                Vortice.Direct3D.FeatureLevel.Level_10_1,
+                Vortice.Direct3D.FeatureLevel.Level_10_0,
+            };
 
-        var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-            IntPtr.Zero,
-            Vortice.Direct3D.DriverType.Hardware,
-            creationFlags,
-            featureLevels,
-            out var device,
-            out var featureLevel,
-            out var context);
+            var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+                IntPtr.Zero,
+                Vortice.Direct3D.DriverType.Hardware,
+                IntPtr.Zero,
+                (int)creationFlags,
+                featureLevels,
+                featureLevels.Length,
+                Vortice.Direct3D11.D3D11.SdkVersion,
+                out var device,
+                out var featureLevel,
+                out var context);
 
         result.CheckError();
 

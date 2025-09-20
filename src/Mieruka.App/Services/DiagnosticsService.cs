@@ -260,9 +260,9 @@ public sealed class DiagnosticsService : IDisposable
         }
 
         var normalized = path;
-        if (normalized.Length > 1)
+        if (normalized.Length > 1 && normalized.EndsWith("/", StringComparison.Ordinal))
         {
-            normalized = normalized.TrimEnd('/');
+            normalized = normalized[..^1];
         }
 
         return string.Equals(normalized, _healthPath, StringComparison.OrdinalIgnoreCase);
@@ -289,7 +289,7 @@ public sealed class DiagnosticsService : IDisposable
 
         if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
         {
-            path = path.TrimEnd('/');
+            path = path[..^1];
         }
 
         return path;
