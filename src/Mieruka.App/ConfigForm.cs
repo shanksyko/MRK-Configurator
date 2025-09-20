@@ -30,6 +30,8 @@ internal sealed class ConfigForm : Form
     private readonly ListView _issuesList;
     private const double ContentSplitterRatio = 0.35;
 
+    private const double LayoutSplitterRatio = 0.35;
+
     private readonly FlowLayoutPanel _monitorPanel;
     private readonly SplitContainer _layoutContainer;
     private readonly SplitContainer _contentContainer;
@@ -37,6 +39,8 @@ internal sealed class ConfigForm : Form
     private readonly ToolStripStatusLabel _statusLabel;
     private readonly List<MonitorPreviewControl> _monitorPreviews = new();
     private ConfigValidationReport _validationReport = ConfigValidationReport.Empty;
+
+    private readonly ITelemetry _telemetry;
 
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
@@ -47,13 +51,14 @@ internal sealed class ConfigForm : Form
     /// <param name="workspace">Workspace that exposes the configuration being edited.</param>
     /// <param name="store">Backing store used to persist changes.</param>
     /// <param name="displayService">Optional display service used to observe topology changes.</param>
-    public ConfigForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService, ConfigMigrator migrator)
+    public ConfigForm(ConfiguratorWorkspace workspace, JsonStore<GeneralConfig> store, IDisplayService? displayService, ConfigMigrator migrator, ITelemetry telemetry)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _displayService = displayService;
         _migrator = migrator ?? throw new ArgumentNullException(nameof(migrator));
         _validator = new ConfigValidator();
+        _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
 
         Text = "MRK Configurator";
         StartPosition = FormStartPosition.CenterScreen;
@@ -128,6 +133,7 @@ internal sealed class ConfigForm : Form
 
         _contentContainer = new SplitContainer
         {
+            Name = "ContentSplitContainer",
             Dock = DockStyle.Fill,
             FixedPanel = FixedPanel.Panel1,
             Panel1MinSize = 120,
@@ -138,6 +144,7 @@ internal sealed class ConfigForm : Form
         _contentContainer.Panel2.Controls.Add(monitorContainer);
         _contentContainer.SizeChanged += OnSplitContainerSizeChanged;
         _contentContainer.SplitterMoved += OnSplitContainerSplitterMoved;
+        _contentContainer.DpiChangedAfterParent += OnSplitContainerDpiChanged;
 
         _issuesList = new ListView
         {
@@ -171,6 +178,7 @@ internal sealed class ConfigForm : Form
 
         _layoutContainer = new SplitContainer
         {
+            Name = "LayoutSplitContainer",
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
             FixedPanel = FixedPanel.Panel1,
@@ -183,6 +191,7 @@ internal sealed class ConfigForm : Form
         _layoutContainer.Panel1Collapsed = true;
         _layoutContainer.SizeChanged += OnLayoutContainerSizeChanged;
         _layoutContainer.SplitterMoved += OnLayoutContainerSplitterMoved;
+        _layoutContainer.DpiChangedAfterParent += OnSplitContainerDpiChanged;
 
         _statusLabel = new ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
         _statusStrip = new StatusStrip();
@@ -229,8 +238,10 @@ internal sealed class ConfigForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        SafeInitSplitter(_layoutContainer, LayoutSplitterRatio);
         SafeInitSplitter(_contentContainer, ContentSplitterRatio);
         ClampSplitter(_layoutContainer);
+        ClampSplitter(_contentContainer);
         UpdateStatus();
     }
 
@@ -238,8 +249,10 @@ internal sealed class ConfigForm : Form
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
         base.OnDpiChanged(e);
+        SafeInitSplitter(_layoutContainer, LayoutSplitterRatio);
         SafeInitSplitter(_contentContainer, ContentSplitterRatio);
         ClampSplitter(_layoutContainer);
+        ClampSplitter(_contentContainer);
     }
 
     /// <inheritdoc />
@@ -409,12 +422,18 @@ internal sealed class ConfigForm : Form
 
     private void OnSplitContainerSizeChanged(object? sender, EventArgs e)
     {
-        ClampSplitter(_contentContainer);
+        if (sender is SplitContainer container)
+        {
+            ClampSplitter(container);
+        }
     }
 
     private void OnSplitContainerSplitterMoved(object? sender, SplitterEventArgs e)
     {
-        ClampSplitter(_contentContainer);
+        if (sender is SplitContainer container)
+        {
+            ClampSplitter(container);
+        }
     }
 
     private void OnLayoutContainerSizeChanged(object? sender, EventArgs e)
@@ -425,6 +444,25 @@ internal sealed class ConfigForm : Form
     private void OnLayoutContainerSplitterMoved(object? sender, SplitterEventArgs e)
     {
         ClampSplitter(_layoutContainer);
+    }
+
+    private void OnSplitContainerDpiChanged(object? sender, EventArgs e)
+    {
+        if (sender is not SplitContainer container)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(container, _layoutContainer))
+        {
+            SafeInitSplitter(container, LayoutSplitterRatio);
+        }
+        else if (ReferenceEquals(container, _contentContainer))
+        {
+            SafeInitSplitter(container, ContentSplitterRatio);
+        }
+
+        ClampSplitter(container);
     }
 
     private void PopulateLists()
@@ -748,7 +786,7 @@ internal sealed class ConfigForm : Form
         _statusLabel.Text = $"{_selectedEntry.Id}: {monitor.Name} ({rectangle.X},{rectangle.Y}) {rectangle.Width}x{rectangle.Height}.";
     }
 
-    private static void SafeInitSplitter(SplitContainer container, double ratio)
+    private void SafeInitSplitter(SplitContainer container, double ratio)
     {
         if (container is null)
         {
@@ -773,7 +811,7 @@ internal sealed class ConfigForm : Form
         ApplySplitterDistance(container, target);
     }
 
-    private static void ClampSplitter(SplitContainer container)
+    private void ClampSplitter(SplitContainer container)
     {
         if (container is null)
         {
@@ -785,12 +823,15 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        var target = Math.Clamp(container.SplitterDistance, minDistance, maxDistance);
-        if (target == container.SplitterDistance)
+        var current = container.SplitterDistance;
+        var target = Math.Clamp(current, minDistance, maxDistance);
+        if (target == current)
         {
             return;
         }
 
+        var context = GetContainerContext(container);
+        _telemetry.Warn($"Splitter distance for {context} adjusted from {current} to {target} (bounds {minDistance}-{maxDistance}).");
         ApplySplitterDistance(container, target);
     }
 
@@ -812,8 +853,13 @@ internal sealed class ConfigForm : Form
         return true;
     }
 
-    private static void ApplySplitterDistance(SplitContainer container, int distance)
+    private void ApplySplitterDistance(SplitContainer container, int distance)
     {
+        if (container is null)
+        {
+            return;
+        }
+
         if (container.SplitterDistance == distance)
         {
             return;
@@ -824,10 +870,57 @@ internal sealed class ConfigForm : Form
         {
             container.SplitterDistance = distance;
         }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            var context = GetContainerContext(container);
+            if (!TryGetSplitterBounds(container, out _, out var minDistance, out var maxDistance))
+            {
+                _telemetry.Warn($"Failed to adjust splitter distance for {context} to {distance}: bounds unavailable.", ex);
+                return;
+            }
+
+            var clamped = Math.Clamp(distance, minDistance, maxDistance);
+            _telemetry.Warn($"Splitter distance for {context} rejected value {distance}. Auto-correcting to {clamped} (bounds {minDistance}-{maxDistance}).", ex);
+
+            try
+            {
+                container.SplitterDistance = clamped;
+            }
+            catch (ArgumentOutOfRangeException retryEx)
+            {
+                _telemetry.Error($"Unable to recover splitter distance for {context}. Requested {clamped} within bounds {minDistance}-{maxDistance}.", retryEx);
+            }
+        }
         finally
         {
             container.ResumeLayout();
         }
+    }
+
+    private string GetContainerContext(SplitContainer container)
+    {
+        if (ReferenceEquals(container, _layoutContainer))
+        {
+            return "layout split container";
+        }
+
+        if (ReferenceEquals(container, _contentContainer))
+        {
+            return "content split container";
+        }
+
+        if (!string.IsNullOrWhiteSpace(container.Name))
+        {
+            return container.Name;
+        }
+
+        var accessibleName = container.AccessibleName;
+        if (!string.IsNullOrWhiteSpace(accessibleName))
+        {
+            return accessibleName;
+        }
+
+        return container.GetType().Name;
     }
 
     private static bool KeysEqual(MonitorKey? left, MonitorKey? right)
