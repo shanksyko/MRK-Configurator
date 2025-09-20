@@ -37,6 +37,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     public bool IsSupported => IsGraphicsCaptureAvailable;
 
     /// <inheritdoc />
+    [SupportedOSPlatform("windows10.0.17763")]
     public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(monitor);
@@ -79,7 +80,6 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             _session = _framePool.CreateCaptureSession(_captureItem);
             _session.IsCursorCaptureEnabled = true;
-            _session.IsBorderRequired = false;
             _session.StartCapture();
 
             // ensure bounds stored so fallback can use if needed
@@ -90,6 +90,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     }
 
     /// <inheritdoc />
+    [SupportedOSPlatform("windows10.0.17763")]
     public ValueTask StopAsync()
     {
         lock (_gate)
@@ -115,11 +116,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     }
 
     /// <inheritdoc />
+    [SupportedOSPlatform("windows10.0.17763")]
     public async ValueTask DisposeAsync()
     {
         await StopAsync().ConfigureAwait(false);
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private void OnFrameArrived(Windows.Graphics.Capture.Direct3D11CaptureFramePool sender, object args)
     {
         Windows.Graphics.Capture.Direct3D11CaptureFrame? frame = null;
@@ -161,6 +164,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private void InitializeDirect3D()
     {
         if (_d3dDevice is not null)
@@ -188,7 +192,6 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             featureLevels.Length,
             Vortice.Direct3D11.D3D11.SdkVersion,
             out var device,
-            out _,
             out var context);
 
         result.CheckError();
@@ -206,6 +209,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _direct3DDevice = GraphicsCaptureInterop.CreateDirect3DDevice(graphicsDevice);
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private void ReleaseDirect3D()
     {
         _direct3DDevice?.Dispose();
@@ -219,6 +223,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _d3dDevice = null;
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private Vortice.Direct3D11.ID3D11Texture2D CreateTextureFromSurface(Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface surface)
     {
         var textureGuid = typeof(Vortice.Direct3D11.ID3D11Texture2D).GUID;
@@ -226,6 +231,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         return new Vortice.Direct3D11.ID3D11Texture2D(nativeResource);
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.ID3D11Texture2D texture, int width, int height)
     {
         var description = texture.Description;
@@ -239,9 +245,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             Format = description.Format,
             SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
             Usage = Vortice.Direct3D11.ResourceUsage.Staging,
-            CpuAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Read,
+            CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Read,
             BindFlags = Vortice.Direct3D11.BindFlags.None,
-            OptionFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
+            MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
         };
 
         using var staging = _d3dDevice!.CreateTexture2D(stagingDesc);
@@ -286,6 +292,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private void DispatchFrame(Bitmap bitmap)
     {
         var handler = FrameArrived;
@@ -320,12 +327,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     /// <summary>
     /// Gets a value indicating whether Windows Graphics Capture APIs are available.
     /// </summary>
-    public static bool IsGraphicsCaptureAvailable
-    {
 #if WINDOWS10_0_17763_0_OR_GREATER
-        get => Windows.Graphics.Capture.GraphicsCaptureSession.IsSupported();
+    [SupportedOSPlatform("windows10.0.17763")]
+    public static bool IsGraphicsCaptureAvailable
+        => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && Windows.Graphics.Capture.GraphicsCaptureSession.IsSupported();
 #else
-        get => false;
+    public static bool IsGraphicsCaptureAvailable => false;
 #endif
-    }
 }
