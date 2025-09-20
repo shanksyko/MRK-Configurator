@@ -55,13 +55,16 @@ internal static class LayoutGuards
             return;
         }
 
+        panel1Min = Math.Min(panel1Min, available);
+        panel2Min = Math.Min(panel2Min, available);
+
         var max = available - panel2Min;
         if (max < panel1Min)
         {
             return;
         }
 
-        var fallback = extent / 2;
+        var fallback = Math.Clamp(available / 2, panel1Min, max);
         var target = desired ?? fallback;
         var clamped = Math.Clamp(target, panel1Min, max);
 
@@ -107,11 +110,11 @@ internal static class LayoutGuards
             SafeApplySplitter(container, preferred);
         }
 
-        container.HandleCreated += (_, _) => ApplySafeSplitter();
-        container.SizeChanged += (_, _) => ApplySafeSplitter();
         container.SplitterMoved += (_, _) => ApplyClampOnly();
 
         Form? trackedForm = null;
+        EventHandler formCreatedHandler = (_, _) => ApplySafeSplitter();
+        EventHandler formSizedHandler = (_, _) => ApplySafeSplitter();
         DpiChangedEventHandler dpiHandler = (_, _) => ApplySafeSplitter();
 
         void AttachFormHandler()
@@ -124,13 +127,22 @@ internal static class LayoutGuards
 
             if (trackedForm is not null)
             {
+                trackedForm.HandleCreated -= formCreatedHandler;
+                trackedForm.SizeChanged -= formSizedHandler;
                 trackedForm.DpiChanged -= dpiHandler;
             }
 
             trackedForm = form;
             if (trackedForm is not null)
             {
+                trackedForm.HandleCreated += formCreatedHandler;
+                trackedForm.SizeChanged += formSizedHandler;
                 trackedForm.DpiChanged += dpiHandler;
+
+                if (trackedForm.IsHandleCreated)
+                {
+                    ApplySafeSplitter();
+                }
             }
         }
 
@@ -139,6 +151,8 @@ internal static class LayoutGuards
         {
             if (trackedForm is not null)
             {
+                trackedForm.HandleCreated -= formCreatedHandler;
+                trackedForm.SizeChanged -= formSizedHandler;
                 trackedForm.DpiChanged -= dpiHandler;
                 trackedForm = null;
             }
