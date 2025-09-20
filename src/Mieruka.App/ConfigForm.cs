@@ -1,15 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Globalization;
 using Mieruka.App.Config;
 using Mieruka.App.Controls;
+using Mieruka.App.Services;
 using Mieruka.App.Ui;
+using Mieruka.Automation.Drivers;
+using Mieruka.Automation.Login;
+using Mieruka.Automation.Tabs;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
+using Mieruka.Core.Interop;
+using OpenQA.Selenium;
 using Serilog;
 
 namespace Mieruka.App;
@@ -29,6 +40,18 @@ internal sealed class ConfigForm : Form
     private readonly ImageList _issueImageList;
     private readonly ListView _applicationsList;
     private readonly ListView _sitesList;
+    private readonly BindingSource _appsBinding;
+    private readonly BindingSource _sitesBinding;
+    private readonly Button _appAddButton;
+    private readonly Button _appEditButton;
+    private readonly Button _appRemoveButton;
+    private readonly Button _appDuplicateButton;
+    private readonly Button _appTestButton;
+    private readonly Button _siteAddButton;
+    private readonly Button _siteEditButton;
+    private readonly Button _siteRemoveButton;
+    private readonly Button _siteDuplicateButton;
+    private readonly Button _siteTestButton;
     private readonly ListView _issuesList;
     private const double ContentSplitterRatio = 0.35;
     private const double LayoutSplitterRatio = 0.35;
@@ -50,9 +73,11 @@ internal sealed class ConfigForm : Form
     private readonly MonitorSeeder _monitorSeeder;
     private readonly ToolTip _toolTip;
     private readonly FlowLayoutPanel _footerPanel;
+    private MonitorPreviewControl? _activePreview;
 
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
+    private readonly object _testGate = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConfigForm"/> class.
@@ -115,28 +140,33 @@ internal sealed class ConfigForm : Form
         _issueImageList.Images.Add("warning", SystemIcons.Warning);
 
         _applicationsList = CreateListView();
-        _applicationsList.LargeImageList = _imageList;
         _applicationsList.SmallImageList = _imageList;
         _applicationsList.SelectedIndexChanged += OnApplicationsSelectedIndexChanged;
         _applicationsList.ItemDrag += OnListItemDrag;
+        ConfigureApplicationListView(_applicationsList);
 
         _sitesList = CreateListView();
-        _sitesList.LargeImageList = _imageList;
         _sitesList.SmallImageList = _imageList;
         _sitesList.SelectedIndexChanged += OnSitesSelectedIndexChanged;
         _sitesList.ItemDrag += OnListItemDrag;
+        ConfigureSiteListView(_sitesList);
+
+        _appsBinding = new BindingSource { DataSource = _workspace.Applications };
+        _sitesBinding = new BindingSource { DataSource = _workspace.Sites };
+        _appsBinding.ListChanged += (_, _) => RefreshApplicationsList();
+        _sitesBinding.ListChanged += (_, _) => RefreshSitesList();
 
         var appsTab = new TabPage("Aplicativos")
         {
             Padding = new Padding(4),
         };
-        appsTab.Controls.Add(_applicationsList);
+        appsTab.Controls.Add(BuildApplicationTab());
 
         var sitesTab = new TabPage("Sites")
         {
             Padding = new Padding(4),
         };
-        sitesTab.Controls.Add(_sitesList);
+        sitesTab.Controls.Add(BuildSiteTab());
 
         var tabControl = new TabControl
         {
@@ -332,6 +362,7 @@ internal sealed class ConfigForm : Form
             {
                 preview.EntryDropped -= OnMonitorEntryDropped;
                 preview.SelectionApplied -= OnMonitorSelectionApplied;
+                preview.MonitorSelected -= OnMonitorSelected;
             }
 
             _toolTip.Dispose();
@@ -643,43 +674,161 @@ internal sealed class ConfigForm : Form
 
     private void PopulateLists()
     {
+        RefreshApplicationsList();
+        RefreshSitesList();
+    }
+
+    private void RefreshApplicationsList()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(RefreshApplicationsList));
+            return;
+        }
+
+        var selected = _applicationsList.SelectedItems.Count > 0
+            ? _applicationsList.SelectedItems[0].Tag as EntryReference
+            : _selectedEntry?.Kind == EntryKind.Application ? _selectedEntry : null;
+
         _applicationsList.BeginUpdate();
         _applicationsList.Items.Clear();
 
         foreach (var app in _workspace.Applications)
         {
-            var entry = EntryReference.Create(EntryKind.Application, app.Id);
-            var displayName = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
-            var item = new ListViewItem(displayName)
-            {
-                Tag = entry,
-                ImageKey = "app",
-                ToolTipText = app.ExecutablePath,
-            };
-
+            var item = CreateApplicationItem(app);
             _applicationsList.Items.Add(item);
         }
 
         _applicationsList.EndUpdate();
+
+        if (selected is not null)
+        {
+            var item = EntryReference.FindItem(_applicationsList, selected);
+            if (item is not null)
+            {
+                item.Selected = true;
+                item.Focused = true;
+                item.EnsureVisible();
+            }
+        }
+
+        AutoSizeColumns(_applicationsList);
+        UpdateApplicationButtons();
+    }
+
+    private void RefreshSitesList()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(RefreshSitesList));
+            return;
+        }
+
+        var selected = _sitesList.SelectedItems.Count > 0
+            ? _sitesList.SelectedItems[0].Tag as EntryReference
+            : _selectedEntry?.Kind == EntryKind.Site ? _selectedEntry : null;
 
         _sitesList.BeginUpdate();
         _sitesList.Items.Clear();
 
         foreach (var site in _workspace.Sites)
         {
-            var entry = EntryReference.Create(EntryKind.Site, site.Id);
-            var displayName = string.IsNullOrWhiteSpace(site.Window.Title) ? site.Id : site.Window.Title;
-            var item = new ListViewItem(displayName)
-            {
-                Tag = entry,
-                ImageKey = "site",
-                ToolTipText = site.Url,
-            };
-
+            var item = CreateSiteItem(site);
             _sitesList.Items.Add(item);
         }
 
         _sitesList.EndUpdate();
+
+        if (selected is not null)
+        {
+            var item = EntryReference.FindItem(_sitesList, selected);
+            if (item is not null)
+            {
+                item.Selected = true;
+                item.Focused = true;
+                item.EnsureVisible();
+            }
+        }
+
+        AutoSizeColumns(_sitesList);
+        UpdateSiteButtons();
+    }
+
+    private ListViewItem CreateApplicationItem(AppConfig app)
+    {
+        var entry = EntryReference.Create(EntryKind.Application, app.Id);
+        var displayName = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
+        var item = new ListViewItem(displayName)
+        {
+            Tag = entry,
+            ImageKey = "app",
+            ToolTipText = app.ExecutablePath,
+        };
+
+        item.SubItems.Add(app.ExecutablePath);
+        item.SubItems.Add(app.Arguments ?? string.Empty);
+        item.SubItems.Add(DescribeWindow(app.Window));
+        return item;
+    }
+
+    private ListViewItem CreateSiteItem(SiteConfig site)
+    {
+        var entry = EntryReference.Create(EntryKind.Site, site.Id);
+        var displayName = string.IsNullOrWhiteSpace(site.Window.Title) ? site.Id : site.Window.Title;
+        var item = new ListViewItem(displayName)
+        {
+            Tag = entry,
+            ImageKey = "site",
+            ToolTipText = site.Url,
+        };
+
+        item.SubItems.Add(site.Url);
+        item.SubItems.Add(site.Browser.ToString());
+
+        var profile = string.Join(", ", new[]
+        {
+            string.IsNullOrWhiteSpace(site.UserDataDirectory) ? null : site.UserDataDirectory,
+            string.IsNullOrWhiteSpace(site.ProfileDirectory) ? null : site.ProfileDirectory,
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        item.SubItems.Add(profile);
+
+        var modeParts = new List<string>();
+        if (site.AppMode)
+        {
+            modeParts.Add("App");
+        }
+        else
+        {
+            modeParts.Add("Janela");
+        }
+
+        if (site.KioskMode)
+        {
+            modeParts.Add("Kiosk");
+        }
+
+        item.SubItems.Add(string.Join(" + ", modeParts));
+        item.SubItems.Add(site.Login is null ? "Não" : "Sim");
+        item.SubItems.Add(DescribeWindow(site.Window));
+        return item;
+    }
+
+    private static void AutoSizeColumns(ListView listView)
+    {
+        if (listView.Columns.Count == 0)
+        {
+            return;
+        }
+
+        foreach (ColumnHeader column in listView.Columns)
+        {
+            column.AutoResize(ColumnHeaderAutoResizeStyle.ColumnContent);
+            var headerWidth = TextRenderer.MeasureText(column.Text, listView.Font).Width + 24;
+            if (column.Width < headerWidth)
+            {
+                column.Width = headerWidth;
+            }
+        }
     }
 
     private void BuildMonitorPreviews()
@@ -689,6 +838,8 @@ internal sealed class ConfigForm : Form
         {
             preview.EntryDropped -= OnMonitorEntryDropped;
             preview.SelectionApplied -= OnMonitorSelectionApplied;
+            preview.MonitorSelected -= OnMonitorSelected;
+            _toolTip.SetToolTip(preview, null);
             preview.Dispose();
         }
 
@@ -707,6 +858,8 @@ internal sealed class ConfigForm : Form
             preview.Monitor = monitor;
             preview.EntryDropped += OnMonitorEntryDropped;
             preview.SelectionApplied += OnMonitorSelectionApplied;
+            preview.MonitorSelected += OnMonitorSelected;
+            _toolTip.SetToolTip(preview, BuildMonitorToolTip(monitor));
 
             _monitorPreviews.Add(preview);
             _monitorPanel.Controls.Add(preview);
@@ -724,8 +877,129 @@ internal sealed class ConfigForm : Form
             MultiSelect = false,
             HideSelection = false,
             ShowItemToolTips = true,
-            View = View.Tile,
+            View = View.Details,
+            FullRowSelect = true,
+            HeaderStyle = ColumnHeaderStyle.Nonclickable,
         };
+    }
+
+    private Control BuildApplicationTab()
+    {
+        var container = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        container.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        _applicationsList.Dock = DockStyle.Fill;
+        container.Controls.Add(_applicationsList, 0, 0);
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Padding = new Padding(0, 6, 0, 0),
+        };
+
+        _appAddButton = CreateActionButton("Adicionar", OnAddApplicationClicked);
+        _appEditButton = CreateActionButton("Editar", OnEditApplicationClicked, enabled: false);
+        _appRemoveButton = CreateActionButton("Remover", OnRemoveApplicationClicked, enabled: false);
+        _appDuplicateButton = CreateActionButton("Duplicar", OnDuplicateApplicationClicked, enabled: false);
+        _appTestButton = CreateActionButton("Testar", OnTestApplicationClicked, enabled: false);
+
+        buttonPanel.Controls.Add(_appAddButton);
+        buttonPanel.Controls.Add(_appEditButton);
+        buttonPanel.Controls.Add(_appRemoveButton);
+        buttonPanel.Controls.Add(_appDuplicateButton);
+        buttonPanel.Controls.Add(_appTestButton);
+
+        container.Controls.Add(buttonPanel, 0, 1);
+        return container;
+    }
+
+    private Control BuildSiteTab()
+    {
+        var container = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        container.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        _sitesList.Dock = DockStyle.Fill;
+        container.Controls.Add(_sitesList, 0, 0);
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Padding = new Padding(0, 6, 0, 0),
+        };
+
+        _siteAddButton = CreateActionButton("Adicionar", OnAddSiteClicked);
+        _siteEditButton = CreateActionButton("Editar", OnEditSiteClicked, enabled: false);
+        _siteRemoveButton = CreateActionButton("Remover", OnRemoveSiteClicked, enabled: false);
+        _siteDuplicateButton = CreateActionButton("Duplicar", OnDuplicateSiteClicked, enabled: false);
+        _siteTestButton = CreateActionButton("Testar", OnTestSiteClicked, enabled: false);
+
+        buttonPanel.Controls.Add(_siteAddButton);
+        buttonPanel.Controls.Add(_siteEditButton);
+        buttonPanel.Controls.Add(_siteRemoveButton);
+        buttonPanel.Controls.Add(_siteDuplicateButton);
+        buttonPanel.Controls.Add(_siteTestButton);
+
+        container.Controls.Add(buttonPanel, 0, 1);
+        return container;
+    }
+
+    private Button CreateActionButton(string text, EventHandler onClick, bool enabled = true)
+    {
+        var button = new Button
+        {
+            Text = text,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Enabled = enabled,
+            Margin = new Padding(0, 0, 6, 0),
+        };
+        button.Click += onClick;
+        return button;
+    }
+
+    private static void ConfigureApplicationListView(ListView listView)
+    {
+        listView.Columns.Clear();
+        listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
+        listView.Columns.Add("Executável", 260, HorizontalAlignment.Left);
+        listView.Columns.Add("Argumentos", 220, HorizontalAlignment.Left);
+        listView.Columns.Add("Destino", 220, HorizontalAlignment.Left);
+    }
+
+    private static void ConfigureSiteListView(ListView listView)
+    {
+        listView.Columns.Clear();
+        listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
+        listView.Columns.Add("URL", 260, HorizontalAlignment.Left);
+        listView.Columns.Add("Navegador", 100, HorizontalAlignment.Left);
+        listView.Columns.Add("Perfil", 200, HorizontalAlignment.Left);
+        listView.Columns.Add("Modo", 160, HorizontalAlignment.Left);
+        listView.Columns.Add("Login", 120, HorizontalAlignment.Left);
+        listView.Columns.Add("Destino", 220, HorizontalAlignment.Left);
     }
 
     private void OnApplicationsSelectedIndexChanged(object? sender, EventArgs e)
@@ -742,14 +1016,17 @@ internal sealed class ConfigForm : Form
             {
                 _sitesList.SelectedItems.Clear();
                 _selectedEntry = _applicationsList.SelectedItems[0].Tag as EntryReference;
+                _appsBinding.Position = _applicationsList.SelectedItems[0].Index;
             }
             else if (_sitesList.SelectedItems.Count == 0)
             {
                 _selectedEntry = null;
+                _appsBinding.Position = -1;
             }
 
             UpdateMonitorPreviews();
             UpdateStatus();
+            UpdateApplicationButtons();
         }
         finally
         {
@@ -771,14 +1048,17 @@ internal sealed class ConfigForm : Form
             {
                 _applicationsList.SelectedItems.Clear();
                 _selectedEntry = _sitesList.SelectedItems[0].Tag as EntryReference;
+                _sitesBinding.Position = _sitesList.SelectedItems[0].Index;
             }
             else if (_applicationsList.SelectedItems.Count == 0)
             {
                 _selectedEntry = null;
+                _sitesBinding.Position = -1;
             }
 
             UpdateMonitorPreviews();
             UpdateStatus();
+            UpdateSiteButtons();
         }
         finally
         {
@@ -805,6 +1085,10 @@ internal sealed class ConfigForm : Form
         }
 
         _selectedEntry = e.Entry;
+        if (sender is MonitorPreviewControl preview)
+        {
+            _activePreview = preview;
+        }
         SelectEntryInList(e.Entry);
         UpdateMonitorPreviews();
         RefreshValidation();
@@ -828,6 +1112,69 @@ internal sealed class ConfigForm : Form
         UpdateMonitorPreviews();
         RefreshValidation();
         UpdateStatus($"Área atualizada para {_selectedEntry.Id} em {e.Monitor.Name}.");
+    }
+
+    private void OnMonitorSelected(object? sender, EventArgs e)
+    {
+        if (sender is not MonitorPreviewControl preview || preview.Monitor is null)
+        {
+            return;
+        }
+
+        foreach (var candidate in _monitorPreviews)
+        {
+            candidate.IsSelected = ReferenceEquals(candidate, preview);
+        }
+
+        _activePreview = preview;
+        Log.Information("Preview: selected monitor={StableId}", ResolveMonitorStableId(preview.Monitor));
+
+        if (_selectedEntry is null)
+        {
+            UpdateStatus($"Monitor selecionado: {preview.Monitor.Name}");
+            return;
+        }
+
+        var window = _workspace.GetWindow(_selectedEntry);
+        if (window is null)
+        {
+            return;
+        }
+
+        if (KeysEqual(window.Monitor, preview.Monitor.Key))
+        {
+            UpdateMonitorPreviews();
+            UpdateStatus($"{_selectedEntry.Id} já está atribuído a {preview.Monitor.Name}.");
+            return;
+        }
+
+        Rectangle? selection = window.FullScreen
+            ? null
+            : new Rectangle(
+                window.X ?? 0,
+                window.Y ?? 0,
+                window.Width ?? preview.Monitor.Width,
+                window.Height ?? preview.Monitor.Height);
+
+        if (!_workspace.TryAssignEntryToMonitor(_selectedEntry, preview.Monitor, selection))
+        {
+            MessageBox.Show(this, "Não foi possível atribuir o monitor selecionado ao item atual.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        switch (_selectedEntry.Kind)
+        {
+            case EntryKind.Application:
+                RefreshApplicationsList();
+                break;
+            case EntryKind.Site:
+                RefreshSitesList();
+                break;
+        }
+
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"{_selectedEntry.Id} atribuído a {preview.Monitor.Name}.");
     }
 
     private void OnTopologyChanged(object? sender, EventArgs e)
@@ -864,17 +1211,34 @@ internal sealed class ConfigForm : Form
             }
         }
 
+        MonitorPreviewControl? active = null;
+        MonitorInfo? activeMonitor = windowMonitor ?? _activePreview?.Monitor;
+
         foreach (var preview in _monitorPreviews)
         {
-            if (window is not null && windowMonitor is not null && KeysEqual(windowMonitor.Key, preview.Monitor?.Key))
+            var monitor = preview.Monitor;
+            var matchesWindow = window is not null && monitor is not null && KeysEqual(window.Monitor, monitor.Key);
+
+            preview.DisplayWindow(matchesWindow ? window : null);
+
+            var shouldSelect = activeMonitor is not null && monitor is not null && KeysEqual(activeMonitor.Key, monitor.Key);
+            preview.IsSelected = shouldSelect;
+
+            if (shouldSelect)
             {
-                preview.DisplayWindow(window);
+                active = preview;
             }
-            else
-            {
-                preview.DisplayWindow(null);
-            }
+
+            _toolTip.SetToolTip(preview, monitor is not null ? BuildMonitorToolTip(monitor) : null);
         }
+
+        if (active is null && _monitorPreviews.Count > 0)
+        {
+            _monitorPreviews[0].IsSelected = true;
+            active = _monitorPreviews[0];
+        }
+
+        _activePreview = active;
     }
 
     private void SelectEntryInList(EntryReference entry)
@@ -1175,3 +1539,896 @@ internal sealed class ConfigForm : Form
             && left.TargetId == right.TargetId;
     }
 }
+
+    private string DescribeWindow(WindowConfig window)
+    {
+        var monitors = _workspace.Monitors;
+        if (monitors.Count == 0)
+        {
+            return "Sem monitor";
+        }
+
+        var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, monitors, window);
+        var monitorName = !string.IsNullOrWhiteSpace(monitor.Name)
+            ? monitor.Name
+            : !string.IsNullOrWhiteSpace(monitor.DeviceName)
+                ? monitor.DeviceName
+                : $"Monitor {monitor.Key.DisplayIndex + 1}";
+
+        string zone;
+        if (window.FullScreen)
+        {
+            zone = "Tela cheia";
+        }
+        else
+        {
+            var width = window.Width ?? monitor.Width;
+            var height = window.Height ?? monitor.Height;
+            var x = window.X ?? 0;
+            var y = window.Y ?? 0;
+            zone = $"{width}x{height} @ ({x},{y})";
+        }
+
+        return $"{monitorName} - {zone}";
+    }
+
+    private WindowConfig NormalizeWindow(WindowConfig window)
+    {
+        var monitors = _workspace.Monitors;
+        if (monitors.Count == 0)
+        {
+            return window with
+            {
+                Monitor = new MonitorKey(),
+                X = null,
+                Y = null,
+                Width = null,
+                Height = null,
+                FullScreen = true,
+            };
+        }
+
+        var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, monitors, window);
+        if (!monitors.Any(m => KeysEqual(m.Key, monitor.Key)))
+        {
+            monitor = monitors[0];
+        }
+
+        if (window.FullScreen)
+        {
+            return window with
+            {
+                Monitor = monitor.Key,
+                X = null,
+                Y = null,
+                Width = null,
+                Height = null,
+                FullScreen = true,
+            };
+        }
+
+        var width = Math.Clamp(window.Width ?? monitor.Width, 1, monitor.Width);
+        var height = Math.Clamp(window.Height ?? monitor.Height, 1, monitor.Height);
+        var x = Math.Clamp(window.X ?? 0, 0, Math.Max(0, monitor.Width - width));
+        var y = Math.Clamp(window.Y ?? 0, 0, Math.Max(0, monitor.Height - height));
+
+        return window with
+        {
+            Monitor = monitor.Key,
+            X = x,
+            Y = y,
+            Width = width,
+            Height = height,
+            FullScreen = false,
+        };
+    }
+
+    private string EnsureUniqueApplicationId(string candidate, string? originalId = null)
+    {
+        var baseId = string.IsNullOrWhiteSpace(candidate) ? "Aplicativo" : candidate.Trim();
+        var unique = baseId;
+        var suffix = 1;
+
+        bool Exists(string value) => _workspace.Applications.Any(app =>
+            !string.Equals(app.Id, originalId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(app.Id, value, StringComparison.OrdinalIgnoreCase));
+
+        while (Exists(unique))
+        {
+            suffix++;
+            unique = $"{baseId} ({suffix})";
+        }
+
+        return unique;
+    }
+
+    private string EnsureUniqueSiteId(string candidate, string? originalId = null)
+    {
+        var baseId = string.IsNullOrWhiteSpace(candidate) ? "Site" : candidate.Trim();
+        var unique = baseId;
+        var suffix = 1;
+
+        bool Exists(string value) => _workspace.Sites.Any(site =>
+            !string.Equals(site.Id, originalId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(site.Id, value, StringComparison.OrdinalIgnoreCase));
+
+        while (Exists(unique))
+        {
+            suffix++;
+            unique = $"{baseId} ({suffix})";
+        }
+
+        return unique;
+    }
+
+    private void UpdateApplicationButtons()
+    {
+        var hasSelection = _applicationsList.SelectedItems.Count > 0;
+        _appEditButton.Enabled = hasSelection;
+        _appRemoveButton.Enabled = hasSelection;
+        _appDuplicateButton.Enabled = hasSelection;
+        _appTestButton.Enabled = hasSelection && OperatingSystem.IsWindows();
+    }
+
+    private void UpdateSiteButtons()
+    {
+        var hasSelection = _sitesList.SelectedItems.Count > 0;
+        _siteEditButton.Enabled = hasSelection;
+        _siteRemoveButton.Enabled = hasSelection;
+        _siteDuplicateButton.Enabled = hasSelection;
+        _siteTestButton.Enabled = hasSelection && OperatingSystem.IsWindows();
+    }
+
+    private AppConfig? GetSelectedApplication()
+    {
+        if (_applicationsList.SelectedItems.Count == 0)
+        {
+            return null;
+        }
+
+        if (_applicationsList.SelectedItems[0].Tag is not EntryReference entry)
+        {
+            return null;
+        }
+
+        return _workspace.Applications.FirstOrDefault(app =>
+            string.Equals(app.Id, entry.Id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private SiteConfig? GetSelectedSite()
+    {
+        if (_sitesList.SelectedItems.Count == 0)
+        {
+            return null;
+        }
+
+        if (_sitesList.SelectedItems[0].Tag is not EntryReference entry)
+        {
+            return null;
+        }
+
+        return _workspace.Sites.FirstOrDefault(site =>
+            string.Equals(site.Id, entry.Id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ApplyApplicationUpdate(string originalId, AppConfig updated)
+    {
+        for (var i = 0; i < _workspace.Applications.Count; i++)
+        {
+            if (string.Equals(_workspace.Applications[i].Id, originalId, StringComparison.OrdinalIgnoreCase))
+            {
+                _workspace.Applications[i] = updated;
+                return;
+            }
+        }
+    }
+
+    private void ApplySiteUpdate(string originalId, SiteConfig updated)
+    {
+        for (var i = 0; i < _workspace.Sites.Count; i++)
+        {
+            if (string.Equals(_workspace.Sites[i].Id, originalId, StringComparison.OrdinalIgnoreCase))
+            {
+                _workspace.Sites[i] = updated;
+                return;
+            }
+        }
+    }
+
+    private static string DescribeZone(WindowConfig window)
+    {
+        if (window.FullScreen)
+        {
+            return "full";
+        }
+
+        var width = window.Width ?? 0;
+        var height = window.Height ?? 0;
+        var x = window.X ?? 0;
+        var y = window.Y ?? 0;
+        return $"{width}x{height}@{x},{y}";
+    }
+
+    private static string ResolveMonitorStableId(MonitorInfo monitor)
+    {
+        if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId))
+        {
+            return monitor.Key.DeviceId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+        {
+            return monitor.DeviceName;
+        }
+
+        return monitor.Key.DisplayIndex.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string BuildMonitorToolTip(MonitorInfo monitor)
+    {
+        var lines = new List<string>
+        {
+            $"ID: {ResolveMonitorStableId(monitor)}",
+            $"Resolução: {monitor.Width}x{monitor.Height}",
+            $"Escala: {(monitor.Scale > 0 ? monitor.Scale : 1):P0}",
+        };
+
+        if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+        {
+            lines.Add($"Device: {monitor.DeviceName}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.Connector))
+        {
+            lines.Add($"Conector: {monitor.Connector}");
+        }
+
+        lines.Add(monitor.IsPrimary ? "Principal: Sim" : "Principal: Não");
+        return string.Join(Environment.NewLine, lines);
+    }
+
+
+    private void OnAddApplicationClicked(object? sender, EventArgs e)
+    {
+        using var dialog = new AppEditorDialog(_workspace.Monitors);
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        {
+            return;
+        }
+
+        var window = NormalizeWindow(dialog.Result.Window);
+        var id = EnsureUniqueApplicationId(dialog.Result.Id);
+        var app = dialog.Result with { Id = id, Window = window };
+
+        _selectedEntry = EntryReference.Create(EntryKind.Application, app.Id);
+        _workspace.Applications.Add(app);
+        Log.Information("Apps:Add -> {Name}", app.Id);
+
+        RefreshApplicationsList();
+        SelectEntryInList(_selectedEntry);
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Aplicativo '{app.Id}' adicionado.");
+    }
+
+    private void OnEditApplicationClicked(object? sender, EventArgs e)
+    {
+        var current = GetSelectedApplication();
+        if (current is null)
+        {
+            return;
+        }
+
+        using var dialog = new AppEditorDialog(_workspace.Monitors, current);
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        {
+            return;
+        }
+
+        var window = NormalizeWindow(dialog.Result.Window);
+        var id = EnsureUniqueApplicationId(dialog.Result.Id, current.Id);
+        var updated = dialog.Result with { Id = id, Window = window };
+
+        ApplyApplicationUpdate(current.Id, updated);
+        _selectedEntry = EntryReference.Create(EntryKind.Application, updated.Id);
+        Log.Information("Apps:Edit -> {Name}", updated.Id);
+
+        RefreshApplicationsList();
+        SelectEntryInList(_selectedEntry);
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Aplicativo '{updated.Id}' atualizado.");
+    }
+
+    private void OnRemoveApplicationClicked(object? sender, EventArgs e)
+    {
+        var current = GetSelectedApplication();
+        if (current is null)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(this, $"Deseja remover o aplicativo '{current.Id}'?", "Remover aplicativo", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        Log.Information("Apps:Remove -> {Name}", current.Id);
+        _workspace.Applications.Remove(current);
+        _selectedEntry = null;
+
+        RefreshApplicationsList();
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Aplicativo '{current.Id}' removido.");
+    }
+
+    private void OnDuplicateApplicationClicked(object? sender, EventArgs e)
+    {
+        var current = GetSelectedApplication();
+        if (current is null)
+        {
+            return;
+        }
+
+        var candidateId = $"{current.Id} (cópia)";
+        var id = EnsureUniqueApplicationId(candidateId);
+        var title = string.IsNullOrWhiteSpace(current.Window.Title) ? id : $"{current.Window.Title} (cópia)";
+        var window = NormalizeWindow(current.Window with { Title = title });
+
+        var duplicate = current with
+        {
+            Id = id,
+            Window = window,
+        };
+
+        _selectedEntry = EntryReference.Create(EntryKind.Application, duplicate.Id);
+        _workspace.Applications.Add(duplicate);
+        Log.Information("Apps:Duplicate -> {Name}", duplicate.Id);
+
+        RefreshApplicationsList();
+        SelectEntryInList(_selectedEntry);
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Aplicativo '{duplicate.Id}' duplicado.");
+    }
+
+    private async void OnTestApplicationClicked(object? sender, EventArgs e)
+    {
+        var app = GetSelectedApplication();
+        if (app is null)
+        {
+            return;
+        }
+
+        _appTestButton.Enabled = false;
+
+        try
+        {
+            UpdateStatus($"Testando aplicativo '{app.Id}'...");
+            Log.Information("Apps:Test -> {Name}", app.Id);
+            var success = await Task.Run(() => TestApplication(app)).ConfigureAwait(true);
+            var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, app.Window);
+            var result = success ? "ok" : "fail";
+            Log.Information(
+                "Test(App) -> monitor={Monitor}, zone={Zone}, result={Result}",
+                ResolveMonitorStableId(monitor),
+                DescribeZone(app.Window),
+                result);
+            UpdateStatus(success
+                ? $"Aplicativo '{app.Id}' iniciado com sucesso."
+                : $"Falha ao testar '{app.Id}'. Verifique o log para mais detalhes.");
+        }
+        finally
+        {
+            UpdateApplicationButtons();
+        }
+    }
+
+    private bool TestApplication(AppConfig app)
+    {
+        if (!File.Exists(app.ExecutablePath))
+        {
+            BeginInvoke(new Action(() =>
+                MessageBox.Show(this, $"O executável '{app.ExecutablePath}' não foi encontrado.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            return false;
+        }
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = app.ExecutablePath,
+                Arguments = app.Arguments ?? string.Empty,
+                UseShellExecute = false,
+            };
+
+            foreach (var pair in app.EnvironmentVariables)
+            {
+                startInfo.Environment[pair.Key] = pair.Value;
+            }
+
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                BeginInvoke(new Action(() =>
+                    MessageBox.Show(this, "Process.Start retornou nulo ao iniciar o aplicativo.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                return false;
+            }
+
+            var handle = WaitForMainWindowAsync(process, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
+            if (handle == IntPtr.Zero)
+            {
+                BeginInvoke(new Action(() =>
+                    MessageBox.Show(this, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            }
+            else
+            {
+                TryPositionWindow(app.Window, handle);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao testar aplicativo {AppId}.", app.Id);
+            BeginInvoke(new Action(() =>
+                MessageBox.Show(this, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            return false;
+        }
+    }
+
+    private static async Task<IntPtr> WaitForMainWindowAsync(Process process, TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            process.WaitForInputIdle((int)timeout.TotalMilliseconds);
+        }
+        catch
+        {
+        }
+
+        while (!process.HasExited && stopwatch.Elapsed < timeout)
+        {
+            process.Refresh();
+            if (process.MainWindowHandle != IntPtr.Zero)
+            {
+                return process.MainWindowHandle;
+            }
+
+            await Task.Delay(200).ConfigureAwait(false);
+        }
+
+        process.Refresh();
+        return process.MainWindowHandle;
+    }
+
+    private bool TryPositionWindow(WindowConfig window, IntPtr handle)
+    {
+        if (handle == IntPtr.Zero || !OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, window);
+            var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
+            var topMost = window.AlwaysOnTop || window.FullScreen;
+            WindowMover.MoveTo(handle, bounds, topMost, restoreIfMinimized: true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha ao posicionar janela durante o teste.");
+            return false;
+        }
+    }
+
+
+    private void OnAddSiteClicked(object? sender, EventArgs e)
+    {
+        using var dialog = new SiteEditorDialog(_workspace.Monitors);
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        {
+            return;
+        }
+
+        var window = NormalizeWindow(dialog.Result.Window);
+        var id = EnsureUniqueSiteId(dialog.Result.Id);
+        var site = dialog.Result with
+        {
+            Id = id,
+            Window = window,
+            BrowserArguments = dialog.Result.BrowserArguments?.ToList() ?? new List<string>(),
+            AllowedTabHosts = dialog.Result.AllowedTabHosts?.ToList() ?? new List<string>(),
+        };
+
+        _selectedEntry = EntryReference.Create(EntryKind.Site, site.Id);
+        _workspace.Sites.Add(site);
+        Log.Information("Sites:Add -> {Name}", $"{site.Id}|{site.Url}");
+
+        RefreshSitesList();
+        SelectEntryInList(_selectedEntry);
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Site '{site.Id}' adicionado.");
+    }
+
+    private void OnEditSiteClicked(object? sender, EventArgs e)
+    {
+        var current = GetSelectedSite();
+        if (current is null)
+        {
+            return;
+        }
+
+        using var dialog = new SiteEditorDialog(_workspace.Monitors, current);
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        {
+            return;
+        }
+
+        var window = NormalizeWindow(dialog.Result.Window);
+        var id = EnsureUniqueSiteId(dialog.Result.Id, current.Id);
+        var updated = dialog.Result with
+        {
+            Id = id,
+            Window = window,
+            BrowserArguments = dialog.Result.BrowserArguments?.ToList() ?? new List<string>(),
+            AllowedTabHosts = dialog.Result.AllowedTabHosts?.ToList() ?? new List<string>(),
+        };
+
+        ApplySiteUpdate(current.Id, updated);
+        _selectedEntry = EntryReference.Create(EntryKind.Site, updated.Id);
+        Log.Information("Sites:Edit -> {Name}", $"{updated.Id}|{updated.Url}");
+
+        RefreshSitesList();
+        SelectEntryInList(_selectedEntry);
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Site '{updated.Id}' atualizado.");
+    }
+
+    private void OnRemoveSiteClicked(object? sender, EventArgs e)
+    {
+        var current = GetSelectedSite();
+        if (current is null)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(this, $"Deseja remover o site '{current.Id}'?", "Remover site", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        Log.Information("Sites:Remove -> {Name}", $"{current.Id}|{current.Url}");
+        _workspace.Sites.Remove(current);
+        _selectedEntry = null;
+
+        RefreshSitesList();
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Site '{current.Id}' removido.");
+    }
+
+    private void OnDuplicateSiteClicked(object? sender, EventArgs e)
+    {
+        var current = GetSelectedSite();
+        if (current is null)
+        {
+            return;
+        }
+
+        var candidateId = $"{current.Id} (cópia)";
+        var id = EnsureUniqueSiteId(candidateId);
+        var title = string.IsNullOrWhiteSpace(current.Window.Title) ? id : $"{current.Window.Title} (cópia)";
+        var window = NormalizeWindow(current.Window with { Title = title });
+
+        var duplicate = current with
+        {
+            Id = id,
+            Window = window,
+            BrowserArguments = current.BrowserArguments?.ToList() ?? new List<string>(),
+            AllowedTabHosts = current.AllowedTabHosts?.ToList() ?? new List<string>(),
+        };
+
+        _selectedEntry = EntryReference.Create(EntryKind.Site, duplicate.Id);
+        _workspace.Sites.Add(duplicate);
+        Log.Information("Sites:Duplicate -> {Name}", $"{duplicate.Id}|{duplicate.Url}");
+
+        RefreshSitesList();
+        SelectEntryInList(_selectedEntry);
+        UpdateMonitorPreviews();
+        RefreshValidation();
+        UpdateStatus($"Site '{duplicate.Id}' duplicado.");
+    }
+
+    private async void OnTestSiteClicked(object? sender, EventArgs e)
+    {
+        var site = GetSelectedSite();
+        if (site is null)
+        {
+            return;
+        }
+
+        _siteTestButton.Enabled = false;
+
+        try
+        {
+            UpdateStatus($"Testando site '{site.Id}'...");
+            Log.Information("Sites:Test -> {Name}", $"{site.Id}|{site.Url}");
+            var success = await Task.Run(() => TestSite(site)).ConfigureAwait(true);
+            var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, site.Window);
+            var result = success ? "ok" : "fail";
+            Log.Information(
+                "Test(Site) -> monitor={Monitor}, zone={Zone}, result={Result}",
+                ResolveMonitorStableId(monitor),
+                DescribeZone(site.Window),
+                result);
+            UpdateStatus(success
+                ? $"Site '{site.Id}' iniciado com sucesso."
+                : $"Falha ao testar '{site.Id}'. Consulte os logs para mais detalhes.");
+        }
+        finally
+        {
+            UpdateSiteButtons();
+        }
+    }
+
+    private bool TestSite(SiteConfig site)
+    {
+        try
+        {
+            return RequiresSelenium(site)
+                ? TestSiteWithSelenium(site)
+                : TestSiteWithProcess(site);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao testar site {SiteId}.", site.Id);
+            BeginInvoke(new Action(() =>
+                MessageBox.Show(this, $"Falha ao testar o site: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            return false;
+        }
+    }
+
+    private static bool RequiresSelenium(SiteConfig site)
+    {
+        if (site.Login is { } login)
+        {
+            if (!string.IsNullOrWhiteSpace(login.Username)
+                || !string.IsNullOrWhiteSpace(login.Password)
+                || !string.IsNullOrWhiteSpace(login.UserSelector)
+                || !string.IsNullOrWhiteSpace(login.PassSelector)
+                || !string.IsNullOrWhiteSpace(login.SubmitSelector)
+                || !string.IsNullOrWhiteSpace(login.Script))
+            {
+                return true;
+            }
+        }
+
+        return site.AllowedTabHosts?.Any(host => !string.IsNullOrWhiteSpace(host)) == true;
+    }
+
+    private bool TestSiteWithProcess(SiteConfig site)
+    {
+        var executable = ResolveBrowserExecutable(site.Browser);
+        var arguments = BuildBrowserArgumentString(site);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = arguments,
+            UseShellExecute = true,
+        };
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            BeginInvoke(new Action(() =>
+                MessageBox.Show(this, "Falha ao iniciar o navegador.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            return false;
+        }
+
+        var handle = WaitForMainWindowAsync(process, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
+        if (handle == IntPtr.Zero)
+        {
+            BeginInvoke(new Action(() =>
+                MessageBox.Show(this, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+        }
+        else
+        {
+            TryPositionWindow(site.Window, handle);
+        }
+
+        return true;
+    }
+
+    private bool TestSiteWithSelenium(SiteConfig site)
+    {
+        var launcher = new BrowserLauncher(new WebDriverFactory());
+        IWebDriver? driver = null;
+
+        try
+        {
+            driver = launcher.Launch(site, _workspace.BrowserArguments);
+            ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
+            ExecuteLoginAsync(driver, site.Login).GetAwaiter().GetResult();
+
+            if (OperatingSystem.IsWindows())
+            {
+                var handleString = driver.CurrentWindowHandle;
+                if (long.TryParse(handleString, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handleValue))
+                {
+                    var handle = new IntPtr(handleValue);
+                    TryPositionWindow(site.Window, handle);
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Erro ao testar site via Selenium {SiteId}.", site.Id);
+            BeginInvoke(new Action(() =>
+                MessageBox.Show(this, $"Falha ao iniciar o Selenium: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            return false;
+        }
+    }
+
+    private string BuildBrowserArgumentString(SiteConfig site)
+    {
+        var arguments = CollectBrowserArguments(site).ToList();
+        if (!site.AppMode && !string.IsNullOrWhiteSpace(site.Url))
+        {
+            arguments.Add(site.Url);
+        }
+
+        return string.Join(' ', arguments);
+    }
+
+    private IEnumerable<string> CollectBrowserArguments(SiteConfig site)
+    {
+        var arguments = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddArgument(string? argument)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                return;
+            }
+
+            if (seen.Add(argument))
+            {
+                arguments.Add(argument);
+            }
+        }
+
+        foreach (var argument in GetGlobalBrowserArguments(site.Browser))
+        {
+            AddArgument(argument);
+        }
+
+        foreach (var argument in site.BrowserArguments ?? Array.Empty<string>())
+        {
+            AddArgument(argument);
+        }
+
+        if (!string.IsNullOrWhiteSpace(site.UserDataDirectory) && !ContainsArgument(arguments, "--user-data-dir", matchByPrefix: true))
+        {
+            AddArgument(FormatArgument("--user-data-dir", site.UserDataDirectory));
+        }
+
+        if (!string.IsNullOrWhiteSpace(site.ProfileDirectory) && !ContainsArgument(arguments, "--profile-directory", matchByPrefix: true))
+        {
+            AddArgument(FormatArgument("--profile-directory", site.ProfileDirectory));
+        }
+
+        if (site.KioskMode && !ContainsArgument(arguments, "--kiosk"))
+        {
+            AddArgument("--kiosk");
+        }
+
+        if (site.AppMode)
+        {
+            if (!string.IsNullOrWhiteSpace(site.Url) && !ContainsArgument(arguments, "--app", matchByPrefix: true))
+            {
+                AddArgument(FormatArgument("--app", site.Url));
+            }
+        }
+
+        return arguments;
+    }
+
+    private IEnumerable<string> GetGlobalBrowserArguments(BrowserType browser)
+    {
+        return browser switch
+        {
+            BrowserType.Chrome => _workspace.BrowserArguments.Chrome ?? Array.Empty<string>(),
+            BrowserType.Edge => _workspace.BrowserArguments.Edge ?? Array.Empty<string>(),
+            _ => Array.Empty<string>(),
+        };
+    }
+
+    private static bool ContainsArgument(IEnumerable<string> arguments, string name, bool matchByPrefix = false)
+    {
+        foreach (var argument in arguments)
+        {
+            if (matchByPrefix)
+            {
+                if (argument.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            else if (string.Equals(argument, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string FormatArgument(string name, string value)
+    {
+        var sanitized = value.Replace(""", "\"");
+        return $"{name}="{sanitized}"";
+    }
+
+    private string ResolveBrowserExecutable(BrowserType browser)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return browser switch
+            {
+                BrowserType.Chrome => "chrome.exe",
+                BrowserType.Edge => "msedge.exe",
+                _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
+            };
+        }
+
+        return browser switch
+        {
+            BrowserType.Chrome => "google-chrome",
+            BrowserType.Edge => "microsoft-edge",
+            _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
+        };
+    }
+
+    private void ApplyWhitelist(IWebDriver driver, IEnumerable<string> hosts)
+    {
+        var sanitized = hosts?.Where(static host => !string.IsNullOrWhiteSpace(host)).ToList();
+        if (sanitized is null || sanitized.Count == 0)
+        {
+            return;
+        }
+
+        var tabManager = new TabManager(_telemetry);
+        var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        _ = Task.Run(() => tabManager.MonitorAsync(driver, sanitized, cancellation.Token));
+    }
+
+    private async Task ExecuteLoginAsync(IWebDriver driver, LoginProfile? login)
+    {
+        if (login is null)
+        {
+            return;
+        }
+
+        var loginService = new LoginService(_telemetry);
+        try
+        {
+            await loginService.TryLoginAsync(driver, login, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha durante a automação de login.");
+        }
+    }
+

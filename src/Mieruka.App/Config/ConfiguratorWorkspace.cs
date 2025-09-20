@@ -42,6 +42,11 @@ internal sealed class ConfiguratorWorkspace
     public BindingList<SiteConfig> Sites { get; }
 
     /// <summary>
+    /// Gets the global browser arguments configured for the environment.
+    /// </summary>
+    public BrowserArgumentsSettings BrowserArguments => _baseConfig.BrowserArguments;
+
+    /// <summary>
     /// Gets the monitors available in the workspace.
     /// </summary>
     public IReadOnlyList<MonitorInfo> Monitors => new ReadOnlyCollection<MonitorInfo>(_monitors);
