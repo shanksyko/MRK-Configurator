@@ -757,54 +757,15 @@ internal sealed class ConfigForm : Form
         {
             var panel1Min = Math.Max(100, LogicalToDeviceUnits(ContentPanel1MinLogical));
             var panel2Min = Math.Max(100, LogicalToDeviceUnits(ContentPanel2MinLogical));
-            SetSafeMinSizes(_contentContainer, panel1Min, panel2Min);
+            LayoutGuards.SetSafeMinSizes(_contentContainer, panel1Min, panel2Min);
         }
 
         if (_layoutContainer is not null)
         {
             var panel1Min = Math.Max(100, LogicalToDeviceUnits(LayoutPanel1MinLogical));
             var panel2Min = Math.Max(100, LogicalToDeviceUnits(LayoutPanel2MinLogical));
-            SetSafeMinSizes(_layoutContainer, panel1Min, panel2Min);
+            LayoutGuards.SetSafeMinSizes(_layoutContainer, panel1Min, panel2Min);
         }
-    }
-
-    private static void SetSafeMinSizes(SplitContainer? container, int panel1Min, int panel2Min)
-    {
-        if (container is null || container.IsDisposed)
-        {
-            return;
-        }
-
-        panel1Min = Math.Max(0, panel1Min);
-        panel2Min = Math.Max(0, panel2Min);
-
-        var orientation = container.Orientation;
-        var extent = orientation == Orientation.Horizontal
-            ? container.ClientSize.Height
-            : container.ClientSize.Width;
-        var splitterWidth = Math.Max(0, container.SplitterWidth);
-        var available = Math.Max(0, extent - splitterWidth);
-
-        if (available > 0)
-        {
-            var total = panel1Min + panel2Min;
-            if (total > available && total > 0)
-            {
-                var scale = available / (double)total;
-                var scaledPanel1 = (int)Math.Round(panel1Min * scale, MidpointRounding.AwayFromZero);
-                scaledPanel1 = Math.Clamp(scaledPanel1, 0, available);
-                var scaledPanel2 = available - scaledPanel1;
-
-                panel1Min = scaledPanel1;
-                panel2Min = Math.Max(0, scaledPanel2);
-            }
-        }
-
-        container.Panel1MinSize = panel1Min;
-        container.Panel2MinSize = panel2Min;
-
-        var desired = container.IsHandleCreated ? container.SplitterDistance : (int?)null;
-        LayoutGuards.SafeApplySplitter(container, desired);
     }
 
     private void ApplySplitterRatio(SplitContainer? container, double ratio)

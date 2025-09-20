@@ -12,7 +12,7 @@ internal static class ApplicationConfiguration
     /// </summary>
     public static void Initialize()
     {
-        Application.SetHighDpiMode(HighDpiMode.SystemAware);
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
     }
