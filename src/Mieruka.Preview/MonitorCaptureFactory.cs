@@ -14,13 +14,27 @@ public static class MonitorCaptureFactory
     /// </summary>
     public static IMonitorCapture Create()
     {
+        var fallback = new GdiMonitorCaptureProvider();
 #if WINDOWS10_0_17763_0_OR_GREATER
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
         {
-            return new GraphicsCaptureProvider();
+            try
+            {
+                var graphics = new GraphicsCaptureProvider();
+                if (graphics.IsSupported)
+                {
+                    return new ResilientMonitorCapture(graphics, fallback);
+                }
+
+                graphics.DisposeAsync().GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // Ignore and fall back to GDI capture.
+            }
         }
 #endif
 
-        return new GdiMonitorCaptureProvider();
+        return fallback;
     }
 }
