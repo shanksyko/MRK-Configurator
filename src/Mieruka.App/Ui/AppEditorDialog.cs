@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Config;
 using Mieruka.App.Services;
+using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 
 namespace Mieruka.App.Ui;
@@ -13,25 +15,27 @@ namespace Mieruka.App.Ui;
 internal sealed class AppEditorDialog : Form
 {
     private readonly IReadOnlyList<MonitorInfo> _monitors;
+    private readonly IReadOnlyList<ZonePreset> _zonePresets;
+    private readonly List<ZoneOption> _zoneOptions = new();
     private readonly TextBox _nameBox;
     private readonly TextBox _titleBox;
     private readonly TextBox _pathBox;
     private readonly TextBox _argsBox;
     private readonly ComboBox _monitorBox;
-    private readonly CheckBox _fullScreenCheck;
-    private readonly NumericUpDown _xBox;
-    private readonly NumericUpDown _yBox;
-    private readonly NumericUpDown _widthBox;
-    private readonly NumericUpDown _heightBox;
+    private readonly ComboBox _zoneBox;
     private readonly CheckBox _topMostCheck;
+    private readonly Button _testButton;
 
-    public AppEditorDialog(IReadOnlyList<MonitorInfo> monitors, AppConfig? template = null)
+    public AppEditorDialog(IReadOnlyList<MonitorInfo> monitors, IReadOnlyList<ZonePreset> zonePresets, AppConfig? template = null)
     {
         _monitors = monitors ?? Array.Empty<MonitorInfo>();
+        _zonePresets = zonePresets ?? Array.Empty<ZonePreset>();
 
         AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96f, 96f);
+        MinimumSize = new Size(900, 600);
         StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
@@ -43,19 +47,24 @@ internal sealed class AppEditorDialog : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 0,
-            Padding = new Padding(12),
+            Padding = new Padding(16),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72f));
 
         _nameBox = CreateTextBox(baseFont);
         _titleBox = CreateTextBox(baseFont);
         _pathBox = CreateTextBox(baseFont);
-        _argsBox = CreateTextBox(baseFont);
+        _argsBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Font = baseFont,
+            Multiline = true,
+            Height = 80,
+            ScrollBars = ScrollBars.Vertical,
+        };
 
         _monitorBox = new ComboBox
         {
@@ -63,20 +72,15 @@ internal sealed class AppEditorDialog : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
+        _monitorBox.SelectedIndexChanged += (_, _) => PopulateZones(GetSelectedZoneIdentifier());
 
-        _fullScreenCheck = new CheckBox
+        _zoneBox = new ComboBox
         {
-            Text = "Tela cheia",
             Dock = DockStyle.Fill,
-            Checked = true,
+            DropDownStyle = ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
-        _fullScreenCheck.CheckedChanged += (_, _) => UpdateWindowFieldsState();
 
-        _xBox = CreateNumericBox();
-        _yBox = CreateNumericBox();
-        _widthBox = CreateNumericBox(minimum: 100, defaultValue: 800);
-        _heightBox = CreateNumericBox(minimum: 100, defaultValue: 600);
         _topMostCheck = new CheckBox
         {
             Text = "Sempre no topo",
@@ -106,37 +110,18 @@ internal sealed class AppEditorDialog : Form
         };
         browseButton.Click += OnBrowseClicked;
         pathPanel.Controls.Add(browseButton, 1, 0);
-
         AddRow(layout, "Executável", pathPanel);
+
         AddRow(layout, "Argumentos", _argsBox);
         AddRow(layout, "Monitor", _monitorBox);
-        AddRow(layout, string.Empty, _fullScreenCheck);
-
-        var positionPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
-        positionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
-        positionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
-        positionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
-        positionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
-
-        positionPanel.Controls.Add(CreateLabeledNumeric("X", _xBox, baseFont), 0, 0);
-        positionPanel.Controls.Add(CreateLabeledNumeric("Y", _yBox, baseFont), 1, 0);
-        positionPanel.Controls.Add(CreateLabeledNumeric("Largura", _widthBox, baseFont), 2, 0);
-        positionPanel.Controls.Add(CreateLabeledNumeric("Altura", _heightBox, baseFont), 3, 0);
-
-        AddRow(layout, "Posicionamento", positionPanel);
+        AddRow(layout, "Zona", _zoneBox);
         AddRow(layout, string.Empty, _topMostCheck);
 
         var buttonPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(12),
+            Padding = new Padding(16),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
@@ -158,8 +143,17 @@ internal sealed class AppEditorDialog : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
+        _testButton = new Button
+        {
+            Text = "Testar",
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+        _testButton.Click += OnTestClicked;
+
         buttonPanel.Controls.Add(okButton);
         buttonPanel.Controls.Add(cancelButton);
+        buttonPanel.Controls.Add(_testButton);
 
         Controls.Add(layout);
         Controls.Add(buttonPanel);
@@ -167,10 +161,12 @@ internal sealed class AppEditorDialog : Form
         AcceptButton = okButton;
         CancelButton = cancelButton;
 
-        PopulateMonitors(template?.Window.Monitor);
+        PopulateMonitors(template?.TargetMonitorStableId, template?.Window.Monitor);
+        PopulateZones(template?.TargetZonePresetId);
         LoadTemplate(template);
-        UpdateWindowFieldsState();
     }
+
+    public Func<AppConfig, Task<bool>>? TestHandler { get; set; }
 
     public AppConfig? Result { get; private set; }
 
@@ -181,44 +177,6 @@ internal sealed class AppEditorDialog : Form
             Dock = DockStyle.Fill,
             Font = baseFont,
         };
-    }
-
-    private static NumericUpDown CreateNumericBox(int minimum = 0, int maximum = 40000, int defaultValue = 0)
-    {
-        return new NumericUpDown
-        {
-            Dock = DockStyle.Fill,
-            Minimum = minimum,
-            Maximum = maximum,
-            Value = defaultValue,
-            DecimalPlaces = 0,
-            Increment = 1,
-        };
-    }
-
-    private static Control CreateLabeledNumeric(string caption, Control editor, Font font)
-    {
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
-
-        var label = new Label
-        {
-            Text = caption,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.BottomLeft,
-            Font = font,
-            AutoSize = true,
-        };
-
-        panel.Controls.Add(label, 0, 0);
-        panel.Controls.Add(editor, 0, 1);
-        return panel;
     }
 
     private static void AddRow(TableLayoutPanel panel, string caption, Control control)
@@ -247,7 +205,7 @@ internal sealed class AppEditorDialog : Form
         panel.Controls.Add(control, 1, row);
     }
 
-    private void PopulateMonitors(MonitorKey? selected)
+    private void PopulateMonitors(string? stableId, MonitorKey? fallback)
     {
         _monitorBox.Items.Clear();
 
@@ -256,8 +214,7 @@ internal sealed class AppEditorDialog : Form
             var name = string.IsNullOrWhiteSpace(monitor.Name)
                 ? $"Monitor {monitor.Key.DisplayIndex + 1}"
                 : monitor.Name;
-
-            var displayName = $"{name} ({monitor.Width}x{monitor.Height} - {monitor.Scale:P0})";
+            var displayName = $"{name} ({monitor.Width}x{monitor.Height} - {(monitor.Scale > 0 ? monitor.Scale : 1):P0})";
             _monitorBox.Items.Add(new MonitorOption(displayName, monitor));
         }
 
@@ -271,11 +228,24 @@ internal sealed class AppEditorDialog : Form
 
         _monitorBox.Enabled = true;
 
-        if (selected is not null)
+        if (!string.IsNullOrWhiteSpace(stableId))
         {
             for (var i = 0; i < _monitorBox.Items.Count; i++)
             {
-                if (_monitorBox.Items[i] is MonitorOption option && MonitorKeysEqual(option.Monitor.Key, selected))
+                if (_monitorBox.Items[i] is MonitorOption option &&
+                    string.Equals(WindowPlacementHelper.ResolveStableId(option.Monitor), stableId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _monitorBox.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        if (fallback is not null)
+        {
+            for (var i = 0; i < _monitorBox.Items.Count; i++)
+            {
+                if (_monitorBox.Items[i] is MonitorOption option && MonitorKeysEqual(option.Monitor.Key, fallback))
                 {
                     _monitorBox.SelectedIndex = i;
                     return;
@@ -285,6 +255,56 @@ internal sealed class AppEditorDialog : Form
 
         _monitorBox.SelectedIndex = 0;
     }
+
+    private void PopulateZones(string? selectedIdentifier)
+    {
+        _zoneOptions.Clear();
+        _zoneBox.Items.Clear();
+
+        foreach (var preset in _zonePresets)
+        {
+            foreach (var zone in preset.Zones)
+            {
+                var identifier = string.IsNullOrWhiteSpace(zone.Id)
+                    ? preset.Id
+                    : $"{preset.Id}:{zone.Id}";
+                var label = string.IsNullOrWhiteSpace(zone.Id)
+                    ? preset.Name
+                    : $"{preset.Name} - {zone.Id}";
+                var isFull = Math.Abs(zone.WidthPercentage - 100d) < 0.01 && Math.Abs(zone.HeightPercentage - 100d) < 0.01 &&
+                    Math.Abs(zone.LeftPercentage) < 0.01 && Math.Abs(zone.TopPercentage) < 0.01;
+                var option = new ZoneOption(identifier, label, preset.Id, zone, isFull);
+                _zoneOptions.Add(option);
+                _zoneBox.Items.Add(option);
+            }
+        }
+
+        if (_zoneBox.Items.Count == 0)
+        {
+            _zoneBox.Items.Add("Nenhuma zona disponível");
+            _zoneBox.SelectedIndex = 0;
+            _zoneBox.Enabled = false;
+            return;
+        }
+
+        _zoneBox.Enabled = true;
+
+        if (!string.IsNullOrWhiteSpace(selectedIdentifier))
+        {
+            var match = _zoneOptions.FirstOrDefault(option =>
+                string.Equals(option.Identifier, selectedIdentifier, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                _zoneBox.SelectedItem = match;
+                return;
+            }
+        }
+
+        _zoneBox.SelectedIndex = 0;
+    }
+
+    private string? GetSelectedZoneIdentifier()
+        => _zoneBox.SelectedItem is ZoneOption option ? option.Identifier : null;
 
     private void LoadTemplate(AppConfig? template)
     {
@@ -297,27 +317,177 @@ internal sealed class AppEditorDialog : Form
         _titleBox.Text = template.Window.Title;
         _pathBox.Text = template.ExecutablePath;
         _argsBox.Text = template.Arguments ?? string.Empty;
-        _fullScreenCheck.Checked = template.Window.FullScreen;
         _topMostCheck.Checked = template.Window.AlwaysOnTop;
 
-        if (!template.Window.FullScreen)
+        if (!string.IsNullOrWhiteSpace(template.TargetZonePresetId))
         {
-            _xBox.Value = ClampNumeric(template.Window.X);
-            _yBox.Value = ClampNumeric(template.Window.Y);
-            _widthBox.Value = ClampNumeric(template.Window.Width, _widthBox.Minimum, _widthBox.Maximum, (int)_widthBox.Value);
-            _heightBox.Value = ClampNumeric(template.Window.Height, _heightBox.Minimum, _heightBox.Maximum, (int)_heightBox.Value);
+            var match = _zoneOptions.FirstOrDefault(option =>
+                string.Equals(option.Identifier, template.TargetZonePresetId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                _zoneBox.SelectedItem = match;
+                return;
+            }
+        }
+
+        var monitor = ResolveSelectedMonitor();
+        var zoneRect = WindowPlacementHelper.CreateZoneFromWindow(template.Window, monitor);
+        var inferred = _zoneOptions.FirstOrDefault(option => ZoneMatches(option.Zone, zoneRect));
+        if (inferred is not null)
+        {
+            _zoneBox.SelectedItem = inferred;
         }
     }
 
-    private static decimal ClampNumeric(int? value, decimal min = 0, decimal max = 40000, int fallback = 0)
+    private async void OnTestClicked(object? sender, EventArgs e)
     {
-        if (!value.HasValue)
+        if (TestHandler is null)
         {
-            return fallback;
+            return;
         }
 
-        var clamped = Math.Clamp(value.Value, (int)min, (int)max);
-        return clamped;
+        if (!ValidateInputs())
+        {
+            return;
+        }
+
+        var config = CreateConfigFromInputs();
+
+        try
+        {
+            _testButton.Enabled = false;
+            await TestHandler(config).ConfigureAwait(true);
+        }
+        finally
+        {
+            _testButton.Enabled = true;
+        }
+    }
+
+    private void OnSaveRequested(object? sender, EventArgs e)
+    {
+        if (!ValidateInputs())
+        {
+            DialogResult = DialogResult.None;
+            return;
+        }
+
+        Result = CreateConfigFromInputs();
+    }
+
+    private AppConfig CreateConfigFromInputs()
+    {
+        var monitor = ResolveSelectedMonitor();
+        var window = BuildWindowConfig(monitor);
+        var zoneIdentifier = GetSelectedZoneIdentifier();
+
+        return new AppConfig
+        {
+            Id = _nameBox.Text.Trim(),
+            ExecutablePath = _pathBox.Text.Trim(),
+            Arguments = string.IsNullOrWhiteSpace(_argsBox.Text) ? null : _argsBox.Text.Trim(),
+            Window = window with { Title = _titleBox.Text?.Trim() ?? string.Empty },
+            TargetMonitorStableId = WindowPlacementHelper.ResolveStableId(monitor),
+            TargetZonePresetId = zoneIdentifier,
+        };
+    }
+
+    private MonitorInfo ResolveSelectedMonitor()
+    {
+        if (_monitorBox.SelectedItem is MonitorOption option)
+        {
+            return option.Monitor;
+        }
+
+        return _monitors.FirstOrDefault() ?? new MonitorInfo();
+    }
+
+    private WindowConfig BuildWindowConfig(MonitorInfo monitor)
+    {
+        if (_zoneBox.SelectedItem is ZoneOption option)
+        {
+            if (option.IsFull)
+            {
+                return new WindowConfig
+                {
+                    Monitor = monitor.Key,
+                    FullScreen = true,
+                    AlwaysOnTop = _topMostCheck.Checked,
+                };
+            }
+
+            var zoneRect = WindowPlacementHelper.ZoneRect.FromZone(option.Zone);
+            var relative = CalculateRelativeRectangle(zoneRect, monitor);
+
+            return new WindowConfig
+            {
+                Monitor = monitor.Key,
+                X = relative.X,
+                Y = relative.Y,
+                Width = relative.Width,
+                Height = relative.Height,
+                FullScreen = false,
+                AlwaysOnTop = _topMostCheck.Checked,
+            };
+        }
+
+        return new WindowConfig
+        {
+            Monitor = monitor.Key,
+            FullScreen = true,
+            AlwaysOnTop = _topMostCheck.Checked,
+        };
+    }
+
+    private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
+    {
+        var monitorWidth = Math.Max(1, monitor.Width);
+        var monitorHeight = Math.Max(1, monitor.Height);
+
+        var width = Math.Max(1, (int)Math.Round(monitorWidth * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
+        var height = Math.Max(1, (int)Math.Round(monitorHeight * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));
+        var x = (int)Math.Round(monitorWidth * (zone.LeftPercentage / 100d), MidpointRounding.AwayFromZero);
+        var y = (int)Math.Round(monitorHeight * (zone.TopPercentage / 100d), MidpointRounding.AwayFromZero);
+
+        switch (zone.Anchor)
+        {
+            case ZoneAnchor.TopCenter:
+                x -= width / 2;
+                break;
+            case ZoneAnchor.TopRight:
+                x -= width;
+                break;
+            case ZoneAnchor.CenterLeft:
+                y -= height / 2;
+                break;
+            case ZoneAnchor.Center:
+                x -= width / 2;
+                y -= height / 2;
+                break;
+            case ZoneAnchor.CenterRight:
+                x -= width;
+                y -= height / 2;
+                break;
+            case ZoneAnchor.BottomLeft:
+                y -= height;
+                break;
+            case ZoneAnchor.BottomCenter:
+                x -= width / 2;
+                y -= height;
+                break;
+            case ZoneAnchor.BottomRight:
+                x -= width;
+                y -= height;
+                break;
+            case ZoneAnchor.TopLeft:
+            default:
+                break;
+        }
+
+        x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
+        y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
+
+        return new Rectangle(x, y, width, height);
     }
 
     private void OnBrowseClicked(object? sender, EventArgs e)
@@ -332,35 +502,6 @@ internal sealed class AppEditorDialog : Form
         {
             _pathBox.Text = dialog.FileName;
         }
-    }
-
-    private void UpdateWindowFieldsState()
-    {
-        var enabled = !_fullScreenCheck.Checked;
-        _xBox.Enabled = enabled;
-        _yBox.Enabled = enabled;
-        _widthBox.Enabled = enabled;
-        _heightBox.Enabled = enabled;
-    }
-
-    private void OnSaveRequested(object? sender, EventArgs e)
-    {
-        if (!ValidateInputs())
-        {
-            DialogResult = DialogResult.None;
-            return;
-        }
-
-        var monitor = ResolveSelectedMonitor();
-        var window = BuildWindowConfig(monitor);
-
-        Result = new AppConfig
-        {
-            Id = _nameBox.Text.Trim(),
-            ExecutablePath = _pathBox.Text.Trim(),
-            Arguments = string.IsNullOrWhiteSpace(_argsBox.Text) ? null : _argsBox.Text.Trim(),
-            Window = window with { Title = _titleBox.Text?.Trim() ?? string.Empty },
-        };
     }
 
     private bool ValidateInputs()
@@ -395,44 +536,23 @@ internal sealed class AppEditorDialog : Form
             }
         }
 
+        if (_zoneBox.Enabled && _zoneBox.SelectedItem is not ZoneOption)
+        {
+            MessageBox.Show(this, "Selecione uma zona para posicionar o aplicativo.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _zoneBox.Focus();
+            return false;
+        }
+
         return true;
     }
 
-    private MonitorInfo ResolveSelectedMonitor()
+    private static bool ZoneMatches(ZonePreset.Zone zone, WindowPlacementHelper.ZoneRect rect)
     {
-        if (_monitorBox.SelectedItem is MonitorOption option)
-        {
-            return option.Monitor;
-        }
-
-        return _monitors.FirstOrDefault() ?? new MonitorInfo();
-    }
-
-    private WindowConfig BuildWindowConfig(MonitorInfo monitor)
-    {
-        var selectedMonitor = WindowPlacementHelper.ResolveMonitor(null, _monitors, new WindowConfig { Monitor = monitor.Key });
-        var fullScreen = _fullScreenCheck.Checked;
-
-        if (fullScreen)
-        {
-            return new WindowConfig
-            {
-                Monitor = selectedMonitor.Key,
-                FullScreen = true,
-                AlwaysOnTop = _topMostCheck.Checked,
-            };
-        }
-
-        return new WindowConfig
-        {
-            Monitor = selectedMonitor.Key,
-            X = (int)_xBox.Value,
-            Y = (int)_yBox.Value,
-            Width = (int)_widthBox.Value,
-            Height = (int)_heightBox.Value,
-            FullScreen = false,
-            AlwaysOnTop = _topMostCheck.Checked,
-        };
+        var tolerance = 0.5d;
+        return Math.Abs(zone.LeftPercentage - rect.LeftPercentage) < tolerance
+            && Math.Abs(zone.TopPercentage - rect.TopPercentage) < tolerance
+            && Math.Abs(zone.WidthPercentage - rect.WidthPercentage) < tolerance
+            && Math.Abs(zone.HeightPercentage - rect.HeightPercentage) < tolerance;
     }
 
     private static bool MonitorKeysEqual(MonitorKey left, MonitorKey? right)
@@ -450,6 +570,11 @@ internal sealed class AppEditorDialog : Form
     }
 
     private sealed record class MonitorOption(string DisplayName, MonitorInfo Monitor)
+    {
+        public override string ToString() => DisplayName;
+    }
+
+    private sealed record class ZoneOption(string Identifier, string DisplayName, string PresetId, ZonePreset.Zone Zone, bool IsFull)
     {
         public override string ToString() => DisplayName;
     }

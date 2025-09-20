@@ -1,7 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
+using Mieruka.Core.Interop;
+using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 
@@ -13,6 +20,42 @@ namespace Mieruka.App.Services;
 internal static class WindowPlacementHelper
 {
     private const int EnumCurrentSettings = -1;
+    private const int ErrorInvalidWindowHandle = 1400;
+    private const uint MonitorDefaultToNearest = 0x00000002;
+    private static readonly TimeSpan DefaultPlacementTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Represents a rectangular region defined as percentages of a monitor surface.
+    /// </summary>
+    public readonly struct ZoneRect
+    {
+        public ZoneRect(double leftPercentage, double topPercentage, double widthPercentage, double heightPercentage, ZoneAnchor anchor)
+        {
+            LeftPercentage = leftPercentage;
+            TopPercentage = topPercentage;
+            WidthPercentage = widthPercentage;
+            HeightPercentage = heightPercentage;
+            Anchor = anchor;
+        }
+
+        public double LeftPercentage { get; }
+
+        public double TopPercentage { get; }
+
+        public double WidthPercentage { get; }
+
+        public double HeightPercentage { get; }
+
+        public ZoneAnchor Anchor { get; }
+
+        public static ZoneRect Full => new(0d, 0d, 100d, 100d, ZoneAnchor.TopLeft);
+
+        public static ZoneRect FromZone(ZonePreset.Zone zone)
+        {
+            ArgumentNullException.ThrowIfNull(zone);
+            return new ZoneRect(zone.LeftPercentage, zone.TopPercentage, zone.WidthPercentage, zone.HeightPercentage, zone.Anchor);
+        }
+    }
 
     /// <summary>
     /// Resolves the monitor that should be used for the supplied window configuration.
@@ -98,6 +141,181 @@ internal static class WindowPlacementHelper
         return new Rectangle(0, 0, monitor.Width, monitor.Height);
     }
 
+    /// <summary>
+    /// Resolves a stable identifier for the provided monitor.
+    /// </summary>
+    public static string ResolveStableId(MonitorInfo monitor)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId))
+        {
+            return monitor.Key.DeviceId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+        {
+            return monitor.DeviceName;
+        }
+
+        return monitor.Key.DisplayIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Searches for a monitor using a stable identifier.
+    /// </summary>
+    public static MonitorInfo? GetMonitorByStableId(IReadOnlyList<MonitorInfo> monitors, string? stableId)
+    {
+        ArgumentNullException.ThrowIfNull(monitors);
+
+        if (string.IsNullOrWhiteSpace(stableId))
+        {
+            return null;
+        }
+
+        foreach (var monitor in monitors)
+        {
+            if (string.Equals(ResolveStableId(monitor), stableId, StringComparison.OrdinalIgnoreCase))
+            {
+                return monitor;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts to resolve a zone preset entry using a combined identifier (preset[:zone]).
+    /// </summary>
+    public static bool TryGetZoneRect(IEnumerable<ZonePreset> presets, string? target, out ZoneRect zoneRect)
+    {
+        zoneRect = ZoneRect.Full;
+
+        if (presets is null || string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
+        var (presetId, zoneId) = ParseZoneKey(target);
+
+        var preset = presets.FirstOrDefault(p => string.Equals(p.Id, presetId, StringComparison.OrdinalIgnoreCase));
+        if (preset is null)
+        {
+            return false;
+        }
+
+        ZonePreset.Zone? zone = null;
+
+        if (!string.IsNullOrEmpty(zoneId))
+        {
+            zone = preset.Zones.FirstOrDefault(z => string.Equals(z.Id, zoneId, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (preset.Zones.Count == 1)
+        {
+            zone = preset.Zones[0];
+        }
+
+        if (zone is null)
+        {
+            return false;
+        }
+
+        zoneRect = ZoneRect.FromZone(zone);
+        return true;
+    }
+
+    /// <summary>
+    /// Converts an absolute window configuration into a percentage-based zone.
+    /// </summary>
+    public static ZoneRect CreateZoneFromWindow(WindowConfig window, MonitorInfo monitor)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        if (window.FullScreen)
+        {
+            return ZoneRect.Full;
+        }
+
+        var monitorWidth = Math.Max(1, monitor.Width);
+        var monitorHeight = Math.Max(1, monitor.Height);
+
+        var width = Math.Clamp(window.Width ?? monitorWidth, 1, monitorWidth);
+        var height = Math.Clamp(window.Height ?? monitorHeight, 1, monitorHeight);
+        var x = Math.Clamp(window.X ?? 0, 0, Math.Max(0, monitorWidth - width));
+        var y = Math.Clamp(window.Y ?? 0, 0, Math.Max(0, monitorHeight - height));
+
+        var leftPercent = x / (double)monitorWidth * 100d;
+        var topPercent = y / (double)monitorHeight * 100d;
+        var widthPercent = width / (double)monitorWidth * 100d;
+        var heightPercent = height / (double)monitorHeight * 100d;
+
+        return new ZoneRect(leftPercent, topPercent, widthPercent, heightPercent, ZoneAnchor.TopLeft);
+    }
+
+    /// <summary>
+    /// Calculates device coordinates for the supplied zone.
+    /// </summary>
+    public static Rectangle CalculateZoneBounds(MonitorInfo monitor, ZoneRect zone)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+
+        if (!TryGetMonitorAreas(monitor, out var monitorBounds, out var workArea))
+        {
+            monitorBounds = GetMonitorBounds(monitor);
+            workArea = monitorBounds;
+        }
+
+        var target = CalculateZoneRectangle(zone, monitorBounds);
+        return ClampToWorkArea(target, workArea);
+    }
+
+    /// <summary>
+    /// Positions a window handle inside the provided monitor zone.
+    /// </summary>
+    public static bool PlaceWindow(nint hWnd, MonitorInfo monitor, ZoneRect zone, bool topMost, TimeSpan? timeout = null)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        if (hWnd == 0)
+        {
+            return false;
+        }
+
+        var bounds = CalculateZoneBounds(monitor, zone);
+        var effectiveTimeout = timeout ?? DefaultPlacementTimeout;
+        var stopwatch = Stopwatch.StartNew();
+        var handle = (IntPtr)hWnd;
+
+        while (stopwatch.Elapsed < effectiveTimeout)
+        {
+            if (!IsWindow(handle))
+            {
+                Thread.Sleep(120);
+                continue;
+            }
+
+            try
+            {
+                WindowMover.MoveTo(handle, bounds, topMost, restoreIfMinimized: true);
+                return true;
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
+            {
+                Thread.Sleep(120);
+            }
+            catch (ArgumentException)
+            {
+                Thread.Sleep(120);
+            }
+        }
+
+        return false;
+    }
+
     private static Rectangle CalculateBounds(WindowConfig window, MonitorInfo monitor, Rectangle monitorBounds)
     {
         var scale = monitor.Scale > 0 ? monitor.Scale : 1.0;
@@ -139,6 +357,123 @@ internal static class WindowPlacementHelper
         }
 
         return NormalizeBounds(new Rectangle(left, top, width, height), monitor);
+    }
+
+    private static Rectangle CalculateZoneRectangle(ZoneRect zone, Rectangle monitorBounds)
+    {
+        var width = Math.Max(1, (int)Math.Round(monitorBounds.Width * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
+        var height = Math.Max(1, (int)Math.Round(monitorBounds.Height * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));
+        var x = monitorBounds.Left + (int)Math.Round(monitorBounds.Width * (zone.LeftPercentage / 100d), MidpointRounding.AwayFromZero);
+        var y = monitorBounds.Top + (int)Math.Round(monitorBounds.Height * (zone.TopPercentage / 100d), MidpointRounding.AwayFromZero);
+
+        switch (zone.Anchor)
+        {
+            case ZoneAnchor.TopCenter:
+                x -= width / 2;
+                break;
+            case ZoneAnchor.TopRight:
+                x -= width;
+                break;
+            case ZoneAnchor.CenterLeft:
+                y -= height / 2;
+                break;
+            case ZoneAnchor.Center:
+                x -= width / 2;
+                y -= height / 2;
+                break;
+            case ZoneAnchor.CenterRight:
+                x -= width;
+                y -= height / 2;
+                break;
+            case ZoneAnchor.BottomLeft:
+                y -= height;
+                break;
+            case ZoneAnchor.BottomCenter:
+                x -= width / 2;
+                y -= height;
+                break;
+            case ZoneAnchor.BottomRight:
+                x -= width;
+                y -= height;
+                break;
+            case ZoneAnchor.TopLeft:
+            default:
+                break;
+        }
+
+        return new Rectangle(x, y, width, height);
+    }
+
+    private static Rectangle ClampToWorkArea(Rectangle target, Rectangle workArea)
+    {
+        if (workArea.Width <= 0 || workArea.Height <= 0)
+        {
+            return target;
+        }
+
+        var width = Math.Min(target.Width, workArea.Width);
+        var height = Math.Min(target.Height, workArea.Height);
+
+        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
+        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
+
+        var x = Math.Clamp(target.Left, workArea.Left, maxLeft);
+        var y = Math.Clamp(target.Top, workArea.Top, maxTop);
+
+        return new Rectangle(x, y, width, height);
+    }
+
+    private static bool TryGetMonitorAreas(MonitorInfo monitor, out Rectangle bounds, out Rectangle workArea)
+    {
+        bounds = Rectangle.Empty;
+        workArea = Rectangle.Empty;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        var baseBounds = GetMonitorBounds(monitor);
+        if (baseBounds.Width <= 0 || baseBounds.Height <= 0)
+        {
+            return false;
+        }
+
+        var point = new POINT
+        {
+            X = baseBounds.Left + (baseBounds.Width / 2),
+            Y = baseBounds.Top + (baseBounds.Height / 2),
+        };
+
+        var handle = MonitorFromPoint(point, MonitorDefaultToNearest);
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var info = MONITORINFOEX.Create();
+        if (!GetMonitorInfo(handle, ref info))
+        {
+            return false;
+        }
+
+        bounds = Rectangle.FromLTRB(info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom);
+        workArea = Rectangle.FromLTRB(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom);
+        return true;
+    }
+
+    private static (string PresetId, string? ZoneId) ParseZoneKey(string key)
+    {
+        var separatorIndex = key.IndexOf(':');
+        if (separatorIndex < 0)
+        {
+            return (key.Trim(), null);
+        }
+
+        var presetId = key[..separatorIndex].Trim();
+        var zoneIdPart = separatorIndex < key.Length - 1 ? key[(separatorIndex + 1)..] : string.Empty;
+        var zoneId = string.IsNullOrWhiteSpace(zoneIdPart) ? null : zoneIdPart.Trim();
+        return (presetId, zoneId);
     }
 
     private static bool MonitorKeysEqual(MonitorKey left, MonitorKey right)
@@ -190,6 +525,15 @@ internal static class WindowPlacementHelper
         ref DEVMODE lpDevMode,
         int dwFlags);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX info);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct DEVMODE
     {
@@ -198,15 +542,15 @@ internal static class WindowPlacementHelper
 
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchDeviceName)]
         public string dmDeviceName;
-        public short dmSpecVersion;
-        public short dmDriverVersion;
-        public short dmSize;
-        public short dmDriverExtra;
-        public int dmFields;
+        public ushort dmSpecVersion;
+        public ushort dmDriverVersion;
+        public ushort dmSize;
+        public ushort dmDriverExtra;
+        public uint dmFields;
         public int dmPositionX;
         public int dmPositionY;
-        public int dmDisplayOrientation;
-        public int dmDisplayFixedOutput;
+        public uint dmDisplayOrientation;
+        public uint dmDisplayFixedOutput;
         public short dmColor;
         public short dmDuplex;
         public short dmYResolution;
@@ -214,19 +558,58 @@ internal static class WindowPlacementHelper
         public short dmCollate;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchFormName)]
         public string dmFormName;
-        public short dmLogPixels;
-        public int dmBitsPerPel;
-        public int dmPelsWidth;
-        public int dmPelsHeight;
-        public int dmDisplayFlags;
-        public int dmDisplayFrequency;
-        public int dmICMMethod;
-        public int dmICMIntent;
-        public int dmMediaType;
-        public int dmDitherType;
-        public int dmReserved1;
-        public int dmReserved2;
-        public int dmPanningWidth;
-        public int dmPanningHeight;
+        public ushort dmLogPixels;
+        public uint dmBitsPerPel;
+        public uint dmPelsWidth;
+        public uint dmPelsHeight;
+        public uint dmDisplayFlags;
+        public uint dmDisplayFrequency;
+        public uint dmICMMethod;
+        public uint dmICMIntent;
+        public uint dmMediaType;
+        public uint dmDitherType;
+        public uint dmReserved1;
+        public uint dmReserved2;
+        public uint dmPanningWidth;
+        public uint dmPanningHeight;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MONITORINFOEX
+    {
+        private const int CchDevicename = 32;
+
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchDevicename)]
+        public string szDevice;
+
+        public static MONITORINFOEX Create()
+        {
+            return new MONITORINFOEX
+            {
+                cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>(),
+                szDevice = string.Empty,
+            };
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
     }
 }

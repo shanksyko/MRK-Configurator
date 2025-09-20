@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 
 namespace Mieruka.App.Config;
@@ -45,6 +46,11 @@ internal sealed class ConfiguratorWorkspace
     /// Gets the global browser arguments configured for the environment.
     /// </summary>
     public BrowserArgumentsSettings BrowserArguments => _baseConfig.BrowserArguments;
+
+    /// <summary>
+    /// Gets the zone presets available in the workspace.
+    /// </summary>
+    public IList<ZonePreset> ZonePresets => _baseConfig.ZonePresets;
 
     /// <summary>
     /// Gets the monitors available in the workspace.
@@ -179,6 +185,7 @@ internal sealed class ConfiguratorWorkspace
             Monitors = _monitors.ToList(),
             Applications = Applications.ToList(),
             Sites = Sites.ToList(),
+            ZonePresets = ZonePresets.ToList(),
         };
     }
 
