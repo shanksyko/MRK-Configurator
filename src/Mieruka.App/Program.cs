@@ -84,6 +84,7 @@ internal static class Program
 
                 void ApplyConfiguration(GeneralConfig candidate)
                 {
+                    bindingService?.ApplyConfiguration(candidate);
                     cycleManager?.ApplyConfiguration(candidate);
                     watchdogService?.ApplyConfiguration(candidate);
                     updaterService.ApplyConfiguration(candidate.AutoUpdate);

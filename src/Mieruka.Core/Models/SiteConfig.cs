@@ -81,4 +81,14 @@ public sealed record class SiteConfig
     /// Desired window placement.
     /// </summary>
     public WindowConfig Window { get; init; } = new();
+
+    /// <summary>
+    /// Stable identifier of the monitor that should host the site window.
+    /// </summary>
+    public string TargetMonitorStableId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Identifier of the zone preset applied when positioning the site window.
+    /// </summary>
+    public string? TargetZonePresetId { get; init; }
 }

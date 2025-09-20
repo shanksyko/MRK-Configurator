@@ -18,7 +18,6 @@ using Mieruka.Automation.Tabs;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
-using Mieruka.Core.Interop;
 using OpenQA.Selenium;
 using Serilog;
 
@@ -1771,6 +1770,16 @@ internal sealed class ConfigForm : Form
         return $"{width}x{height}@{x},{y}";
     }
 
+    private static string DescribeZone(AppConfig app)
+        => !string.IsNullOrWhiteSpace(app.TargetZonePresetId)
+            ? app.TargetZonePresetId!
+            : DescribeZone(app.Window);
+
+    private static string DescribeZone(SiteConfig site)
+        => !string.IsNullOrWhiteSpace(site.TargetZonePresetId)
+            ? site.TargetZonePresetId!
+            : DescribeZone(site.Window);
+
     private static string ResolveMonitorStableId(MonitorInfo monitor)
     {
         if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId))
@@ -1812,7 +1821,8 @@ internal sealed class ConfigForm : Form
 
     private void OnAddApplicationClicked(object? sender, EventArgs e)
     {
-        using var dialog = new AppEditorDialog(_workspace.Monitors);
+        using var dialog = new AppEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList());
+        dialog.TestHandler = config => RunApplicationTestAsync(config, dialog, updateStatus: false);
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
         {
             return;
@@ -1841,7 +1851,8 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        using var dialog = new AppEditorDialog(_workspace.Monitors, current);
+        using var dialog = new AppEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList(), current);
+        dialog.TestHandler = config => RunApplicationTestAsync(config, dialog, updateStatus: false);
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
         {
             return;
@@ -1930,19 +1941,7 @@ internal sealed class ConfigForm : Form
 
         try
         {
-            UpdateStatus($"Testando aplicativo '{app.Id}'...");
-            Log.Information("Apps:Test -> {Name}", app.Id);
-            var success = await Task.Run(() => TestApplication(app)).ConfigureAwait(true);
-            var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, app.Window);
-            var result = success ? "ok" : "fail";
-            Log.Information(
-                "Test(App) -> monitor={Monitor}, zone={Zone}, result={Result}",
-                ResolveMonitorStableId(monitor),
-                DescribeZone(app.Window),
-                result);
-            UpdateStatus(success
-                ? $"Aplicativo '{app.Id}' iniciado com sucesso."
-                : $"Falha ao testar '{app.Id}'. Verifique o log para mais detalhes.");
+            await RunApplicationTestAsync(app, this, updateStatus: true).ConfigureAwait(true);
         }
         finally
         {
@@ -1950,12 +1949,40 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private bool TestApplication(AppConfig app)
+    private async Task<bool> RunApplicationTestAsync(AppConfig app, Control owner, bool updateStatus)
+    {
+        if (updateStatus)
+        {
+            UpdateStatus($"Testando aplicativo '{app.Id}'...");
+        }
+
+        Log.Information("Apps:Test -> {Name}", app.Id);
+        var success = await Task.Run(() => TestApplication(app, owner)).ConfigureAwait(true);
+
+        var monitor = ResolveTargetMonitor(app.TargetMonitorStableId, app.Window);
+        var result = success ? "ok" : "fail";
+        Log.Information(
+            "Test(App) -> monitor={Monitor}, zone={Zone}, result={Result}",
+            ResolveMonitorStableId(monitor),
+            DescribeZone(app),
+            result);
+
+        if (updateStatus)
+        {
+            UpdateStatus(success
+                ? $"Aplicativo '{app.Id}' iniciado com sucesso."
+                : $"Falha ao testar '{app.Id}'. Verifique o log para mais detalhes.");
+        }
+
+        return success;
+    }
+
+    private bool TestApplication(AppConfig app, Control owner)
     {
         if (!File.Exists(app.ExecutablePath))
         {
-            BeginInvoke(new Action(() =>
-                MessageBox.Show(this, $"O executável '{app.ExecutablePath}' não foi encontrado.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            owner.BeginInvoke(new Action(() =>
+                MessageBox.Show(owner, $"O executável '{app.ExecutablePath}' não foi encontrado.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
             return false;
         }
 
@@ -1976,20 +2003,20 @@ internal sealed class ConfigForm : Form
             using var process = Process.Start(startInfo);
             if (process is null)
             {
-                BeginInvoke(new Action(() =>
-                    MessageBox.Show(this, "Process.Start retornou nulo ao iniciar o aplicativo.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                owner.BeginInvoke(new Action(() =>
+                    MessageBox.Show(owner, "Process.Start retornou nulo ao iniciar o aplicativo.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
                 return false;
             }
 
             var handle = WaitForMainWindowAsync(process, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
             if (handle == IntPtr.Zero)
             {
-                BeginInvoke(new Action(() =>
-                    MessageBox.Show(this, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+                owner.BeginInvoke(new Action(() =>
+                    MessageBox.Show(owner, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
             }
             else
             {
-                TryPositionWindow(app.Window, handle);
+                TryPositionWindow(app, handle);
             }
 
             return true;
@@ -1997,8 +2024,8 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao testar aplicativo {AppId}.", app.Id);
-            BeginInvoke(new Action(() =>
-                MessageBox.Show(this, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            owner.BeginInvoke(new Action(() =>
+                MessageBox.Show(owner, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
             return false;
         }
     }
@@ -2030,7 +2057,36 @@ internal sealed class ConfigForm : Form
         return process.MainWindowHandle;
     }
 
-    private bool TryPositionWindow(WindowConfig window, IntPtr handle)
+    private MonitorInfo ResolveTargetMonitor(string? stableId, WindowConfig window)
+    {
+        var monitor = WindowPlacementHelper.GetMonitorByStableId(_workspace.Monitors, stableId);
+        return monitor ?? WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, window);
+    }
+
+    private WindowPlacementHelper.ZoneRect ResolveZoneRect(MonitorInfo monitor, string? zoneIdentifier, WindowConfig window)
+    {
+        if (!string.IsNullOrWhiteSpace(zoneIdentifier) &&
+            WindowPlacementHelper.TryGetZoneRect(_workspace.ZonePresets, zoneIdentifier, out var zone))
+        {
+            return zone;
+        }
+
+        return WindowPlacementHelper.CreateZoneFromWindow(window, monitor);
+    }
+
+    private bool TryPositionWindow(AppConfig app, IntPtr handle)
+    {
+        var monitor = ResolveTargetMonitor(app.TargetMonitorStableId, app.Window);
+        return TryPositionWindowInternal(monitor, app.TargetZonePresetId, app.Window, handle);
+    }
+
+    private bool TryPositionWindow(SiteConfig site, IntPtr handle)
+    {
+        var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+        return TryPositionWindowInternal(monitor, site.TargetZonePresetId, site.Window, handle);
+    }
+
+    private bool TryPositionWindowInternal(MonitorInfo monitor, string? zoneIdentifier, WindowConfig window, IntPtr handle)
     {
         if (handle == IntPtr.Zero || !OperatingSystem.IsWindows())
         {
@@ -2039,11 +2095,9 @@ internal sealed class ConfigForm : Form
 
         try
         {
-            var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, window);
-            var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
-            var topMost = window.AlwaysOnTop || window.FullScreen;
-            WindowMover.MoveTo(handle, bounds, topMost, restoreIfMinimized: true);
-            return true;
+            var zoneRect = ResolveZoneRect(monitor, zoneIdentifier, window);
+            var topMost = window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
+            return WindowPlacementHelper.PlaceWindow(handle, monitor, zoneRect, topMost);
         }
         catch (Exception ex)
         {
@@ -2055,7 +2109,8 @@ internal sealed class ConfigForm : Form
 
     private void OnAddSiteClicked(object? sender, EventArgs e)
     {
-        using var dialog = new SiteEditorDialog(_workspace.Monitors);
+        using var dialog = new SiteEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList());
+        dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
         {
             return;
@@ -2090,7 +2145,8 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        using var dialog = new SiteEditorDialog(_workspace.Monitors, current);
+        using var dialog = new SiteEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList(), current);
+        dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
         {
             return;
@@ -2187,19 +2243,7 @@ internal sealed class ConfigForm : Form
 
         try
         {
-            UpdateStatus($"Testando site '{site.Id}'...");
-            Log.Information("Sites:Test -> {Name}", $"{site.Id}|{site.Url}");
-            var success = await Task.Run(() => TestSite(site)).ConfigureAwait(true);
-            var monitor = WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, site.Window);
-            var result = success ? "ok" : "fail";
-            Log.Information(
-                "Test(Site) -> monitor={Monitor}, zone={Zone}, result={Result}",
-                ResolveMonitorStableId(monitor),
-                DescribeZone(site.Window),
-                result);
-            UpdateStatus(success
-                ? $"Site '{site.Id}' iniciado com sucesso."
-                : $"Falha ao testar '{site.Id}'. Consulte os logs para mais detalhes.");
+            await RunSiteTestAsync(site, this, updateStatus: true).ConfigureAwait(true);
         }
         finally
         {
@@ -2207,21 +2251,49 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private bool TestSite(SiteConfig site)
+    private bool TestSite(SiteConfig site, Control owner)
     {
         try
         {
             return RequiresSelenium(site)
-                ? TestSiteWithSelenium(site)
-                : TestSiteWithProcess(site);
+                ? TestSiteWithSelenium(site, owner)
+                : TestSiteWithProcess(site, owner);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao testar site {SiteId}.", site.Id);
-            BeginInvoke(new Action(() =>
-                MessageBox.Show(this, $"Falha ao testar o site: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            owner.BeginInvoke(new Action(() =>
+                MessageBox.Show(owner, $"Falha ao testar o site: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
             return false;
         }
+    }
+
+    private async Task<bool> RunSiteTestAsync(SiteConfig site, Control owner, bool updateStatus)
+    {
+        if (updateStatus)
+        {
+            UpdateStatus($"Testando site '{site.Id}'...");
+        }
+
+        Log.Information("Sites:Test -> {Name}", $"{site.Id}|{site.Url}");
+        var success = await Task.Run(() => TestSite(site, owner)).ConfigureAwait(true);
+
+        var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+        var result = success ? "ok" : "fail";
+        Log.Information(
+            "Test(Site) -> monitor={Monitor}, zone={Zone}, result={Result}",
+            ResolveMonitorStableId(monitor),
+            DescribeZone(site),
+            result);
+
+        if (updateStatus)
+        {
+            UpdateStatus(success
+                ? $"Site '{site.Id}' iniciado com sucesso."
+                : $"Falha ao testar '{site.Id}'. Consulte os logs para mais detalhes.");
+        }
+
+        return success;
     }
 
     private static bool RequiresSelenium(SiteConfig site)
@@ -2242,7 +2314,7 @@ internal sealed class ConfigForm : Form
         return site.AllowedTabHosts?.Any(host => !string.IsNullOrWhiteSpace(host)) == true;
     }
 
-    private bool TestSiteWithProcess(SiteConfig site)
+    private bool TestSiteWithProcess(SiteConfig site, Control owner)
     {
         var executable = ResolveBrowserExecutable(site.Browser);
         var arguments = BuildBrowserArgumentString(site);
@@ -2257,26 +2329,26 @@ internal sealed class ConfigForm : Form
         using var process = Process.Start(startInfo);
         if (process is null)
         {
-            BeginInvoke(new Action(() =>
-                MessageBox.Show(this, "Falha ao iniciar o navegador.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            owner.BeginInvoke(new Action(() =>
+                MessageBox.Show(owner, "Falha ao iniciar o navegador.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
             return false;
         }
 
         var handle = WaitForMainWindowAsync(process, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
         if (handle == IntPtr.Zero)
         {
-            BeginInvoke(new Action(() =>
-                MessageBox.Show(this, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+            owner.BeginInvoke(new Action(() =>
+                MessageBox.Show(owner, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
         }
         else
         {
-            TryPositionWindow(site.Window, handle);
+            TryPositionWindow(site, handle);
         }
 
         return true;
     }
 
-    private bool TestSiteWithSelenium(SiteConfig site)
+    private bool TestSiteWithSelenium(SiteConfig site, Control owner)
     {
         IWebDriver? driver = null;
 
@@ -2287,14 +2359,28 @@ internal sealed class ConfigForm : Form
             ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
             ExecuteLoginAsync(driver, site.Login).GetAwaiter().GetResult();
 
+            var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+            var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
+            var bounds = WindowPlacementHelper.CalculateZoneBounds(monitor, zoneRect);
+
             if (OperatingSystem.IsWindows())
             {
                 var handleString = driver.CurrentWindowHandle;
                 if (long.TryParse(handleString, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handleValue))
                 {
                     var handle = new IntPtr(handleValue);
-                    TryPositionWindow(site.Window, handle);
+                    TryPositionWindow(site, handle);
                 }
+                else
+                {
+                    driver.Manage().Window.Position = new System.Drawing.Point(bounds.Left, bounds.Top);
+                    driver.Manage().Window.Size = new System.Drawing.Size(bounds.Width, bounds.Height);
+                }
+            }
+            else
+            {
+                driver.Manage().Window.Position = new System.Drawing.Point(bounds.Left, bounds.Top);
+                driver.Manage().Window.Size = new System.Drawing.Size(bounds.Width, bounds.Height);
             }
 
             return true;
@@ -2302,9 +2388,13 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Erro ao testar site via Selenium {SiteId}.", site.Id);
-            BeginInvoke(new Action(() =>
-                MessageBox.Show(this, $"Falha ao iniciar o Selenium: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+            owner.BeginInvoke(new Action(() =>
+                MessageBox.Show(owner, $"Falha ao iniciar o Selenium: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
             return false;
+        }
+        finally
+        {
+            driver?.Quit();
         }
     }
 

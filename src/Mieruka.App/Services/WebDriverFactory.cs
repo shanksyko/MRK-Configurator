@@ -48,10 +48,7 @@ internal static class WebDriverFactory
         var options = new ChromeOptions();
         ApplyArguments(options, arguments);
 
-        var service = ChromeDriverService.CreateDefaultService();
-        service.HideCommandPromptWindow = true;
-
-        var driver = new ChromeDriver(service, options);
+        var driver = new ChromeDriver(options);
         NavigateIfNeeded(driver, site);
         return driver;
     }
@@ -62,10 +59,7 @@ internal static class WebDriverFactory
         options.AddAdditionalOption("useChromium", true);
         ApplyArguments(options, arguments);
 
-        var service = EdgeDriverService.CreateDefaultService();
-        service.HideCommandPromptWindow = true;
-
-        var driver = new EdgeDriver(service, options);
+        var driver = new EdgeDriver(options);
         NavigateIfNeeded(driver, site);
         return driver;
     }
