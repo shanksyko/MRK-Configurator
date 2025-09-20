@@ -1788,19 +1788,7 @@ internal sealed class ConfigForm : Form
             : DescribeZone(site.Window);
 
     private static string ResolveMonitorStableId(MonitorInfo monitor)
-    {
-        if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId))
-        {
-            return monitor.Key.DeviceId;
-        }
-
-        if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
-        {
-            return monitor.DeviceName;
-        }
-
-        return monitor.Key.DisplayIndex.ToString(CultureInfo.InvariantCulture);
-    }
+        => WindowPlacementHelper.ResolveStableId(monitor);
 
     private static string BuildMonitorToolTip(MonitorInfo monitor)
     {
@@ -1943,6 +1931,7 @@ internal sealed class ConfigForm : Form
         var id = EnsureUniqueApplicationId(dialog.Result.Id);
         var app = dialog.Result with { Id = id, Window = window };
 
+        UpdateSelectedMonitor(app.TargetMonitorStableId);
         _selectedEntry = EntryReference.Create(EntryKind.Application, app.Id);
         _workspace.Applications.Add(app);
         Log.Information("Apps:Add -> {Name}", app.Id);
@@ -1985,6 +1974,7 @@ internal sealed class ConfigForm : Form
         var id = EnsureUniqueApplicationId(dialog.Result.Id, current.Id);
         var updated = dialog.Result with { Id = id, Window = window };
 
+        UpdateSelectedMonitor(updated.TargetMonitorStableId);
         ApplyApplicationUpdate(current.Id, updated);
         _selectedEntry = EntryReference.Create(EntryKind.Application, updated.Id);
         Log.Information("Apps:Edit -> {Name}", updated.Id);
@@ -2038,6 +2028,7 @@ internal sealed class ConfigForm : Form
             Window = window,
         };
 
+        UpdateSelectedMonitor(duplicate.TargetMonitorStableId);
         _selectedEntry = EntryReference.Create(EntryKind.Application, duplicate.Id);
         _workspace.Applications.Add(duplicate);
         Log.Information("Apps:Duplicate -> {Name}", duplicate.Id);
@@ -2082,7 +2073,7 @@ internal sealed class ConfigForm : Form
         Log.Information("Apps:Test -> {Name}", app.Id);
         var success = await Task.Run(() => TestApplication(app, owner)).ConfigureAwait(true);
 
-        var monitor = ResolveTargetMonitor(app.TargetMonitorStableId, app.Window);
+        var monitor = ResolveTargetMonitor(app);
         var result = success ? "ok" : "fail";
         Log.Information(
             "Test(App) -> monitor={Monitor}, zone={Zone}, result={Result}",
@@ -2131,7 +2122,7 @@ internal sealed class ConfigForm : Form
                 return false;
             }
 
-            var monitor = ResolveTargetMonitor(app.TargetMonitorStableId, app.Window);
+            var monitor = ResolveTargetMonitor(app);
             var zoneRect = ResolveZoneRect(monitor, app.TargetZonePresetId, app.Window);
             var topMost = app.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
 
@@ -2160,32 +2151,32 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private MonitorInfo ResolveTargetMonitor(string? stableId, WindowConfig window)
-    {
-        var monitor = WindowPlacementHelper.GetMonitorByStableId(_workspace.Monitors, stableId);
-        return monitor ?? WindowPlacementHelper.ResolveMonitor(_displayService, _workspace.Monitors, window);
-    }
+    private MonitorInfo ResolveTargetMonitor(AppConfig app)
+        => WindowPlacementHelper.ResolveTargetMonitor(
+            app,
+            _selectedMonitorStableId,
+            _workspace.Monitors,
+            _displayService);
+
+    private MonitorInfo ResolveTargetMonitor(SiteConfig site)
+        => WindowPlacementHelper.ResolveTargetMonitor(
+            site,
+            _selectedMonitorStableId,
+            _workspace.Monitors,
+            _displayService);
 
     private WindowPlacementHelper.ZoneRect ResolveZoneRect(MonitorInfo monitor, string? zoneIdentifier, WindowConfig window)
-    {
-        if (!string.IsNullOrWhiteSpace(zoneIdentifier) &&
-            WindowPlacementHelper.TryGetZoneRect(_workspace.ZonePresets, zoneIdentifier, out var zone))
-        {
-            return zone;
-        }
-
-        return WindowPlacementHelper.CreateZoneFromWindow(window, monitor);
-    }
+        => WindowPlacementHelper.ResolveTargetZone(monitor, zoneIdentifier, window, _workspace.ZonePresets);
 
     private bool TryPositionWindow(AppConfig app, IntPtr handle)
     {
-        var monitor = ResolveTargetMonitor(app.TargetMonitorStableId, app.Window);
+        var monitor = ResolveTargetMonitor(app);
         return TryPositionWindowInternal(monitor, app.TargetZonePresetId, app.Window, handle);
     }
 
     private bool TryPositionWindow(SiteConfig site, IntPtr handle)
     {
-        var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+        var monitor = ResolveTargetMonitor(site);
         return TryPositionWindowInternal(monitor, site.TargetZonePresetId, site.Window, handle);
     }
 
@@ -2241,6 +2232,7 @@ internal sealed class ConfigForm : Form
             AllowedTabHosts = dialog.Result.AllowedTabHosts?.ToList() ?? new List<string>(),
         };
 
+        UpdateSelectedMonitor(site.TargetMonitorStableId);
         _selectedEntry = EntryReference.Create(EntryKind.Site, site.Id);
         _workspace.Sites.Add(site);
         Log.Information("Sites:Add -> {Name}", $"{site.Id}|{site.Url}");
@@ -2289,6 +2281,7 @@ internal sealed class ConfigForm : Form
             AllowedTabHosts = dialog.Result.AllowedTabHosts?.ToList() ?? new List<string>(),
         };
 
+        UpdateSelectedMonitor(updated.TargetMonitorStableId);
         ApplySiteUpdate(current.Id, updated);
         _selectedEntry = EntryReference.Create(EntryKind.Site, updated.Id);
         Log.Information("Sites:Edit -> {Name}", $"{updated.Id}|{updated.Url}");
@@ -2344,6 +2337,7 @@ internal sealed class ConfigForm : Form
             AllowedTabHosts = current.AllowedTabHosts?.ToList() ?? new List<string>(),
         };
 
+        UpdateSelectedMonitor(duplicate.TargetMonitorStableId);
         _selectedEntry = EntryReference.Create(EntryKind.Site, duplicate.Id);
         _workspace.Sites.Add(duplicate);
         Log.Information("Sites:Duplicate -> {Name}", $"{duplicate.Id}|{duplicate.Url}");
@@ -2405,7 +2399,7 @@ internal sealed class ConfigForm : Form
         Log.Information("Sites:Test -> {Name}", $"{site.Id}|{site.Url}");
         var success = await Task.Run(() => TestSite(site, owner)).ConfigureAwait(true);
 
-        var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+        var monitor = ResolveTargetMonitor(site);
         var result = success ? "ok" : "fail";
         Log.Information(
             "Test(Site) -> monitor={Monitor}, zone={Zone}, result={Result}",
@@ -2461,7 +2455,7 @@ internal sealed class ConfigForm : Form
             return false;
         }
 
-        var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+        var monitor = ResolveTargetMonitor(site);
         var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
         var topMost = site.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
 
@@ -2493,7 +2487,7 @@ internal sealed class ConfigForm : Form
             ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
             ExecuteLoginAsync(driver, site.Login).GetAwaiter().GetResult();
 
-            var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+            var monitor = ResolveTargetMonitor(site);
             var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
             var bounds = WindowPlacementHelper.CalculateZoneBounds(monitor, zoneRect);
 
