@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Config;
-using Mieruka.App.Controls;
+using Mieruka.App.Ui;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using Serilog;
@@ -189,8 +189,8 @@ internal sealed class ConfigForm : Form
         _statusStrip = new StatusStrip();
         _statusStrip.Items.Add(_statusLabel);
 
-        SplitContainerGuards.WireSplitterGuards(_contentContainer);
-        SplitContainerGuards.WireSplitterGuards(_layoutContainer);
+        SplitterGuards.WireSplitterGuards(_contentContainer);
+        SplitterGuards.WireSplitterGuards(_layoutContainer);
 
         Controls.Add(_layoutContainer);
         Controls.Add(_statusStrip);
@@ -804,7 +804,7 @@ internal sealed class ConfigForm : Form
         }
 
         var before = container.SplitterDistance;
-        SplitContainerGuards.ForceSafeSplitter(container, distance);
+        SplitterGuards.ForceSafeSplitter(container, distance);
 
         if (container.SplitterDistance != before)
         {
