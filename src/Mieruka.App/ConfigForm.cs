@@ -30,8 +30,12 @@ internal sealed class ConfigForm : Form
     private readonly ListView _sitesList;
     private readonly ListView _issuesList;
     private const double ContentSplitterRatio = 0.35;
-
     private const double LayoutSplitterRatio = 0.35;
+    private static readonly Size DefaultMinimumSizeLogical = new(960, 600);
+    private const int ContentPanel1MinLogical = 120;
+    private const int ContentPanel2MinLogical = 160;
+    private const int LayoutPanel1MinLogical = 140;
+    private const int LayoutPanel2MinLogical = 200;
 
     private readonly FlowLayoutPanel _monitorPanel;
     private readonly SplitContainer _layoutContainer;
@@ -61,9 +65,13 @@ internal sealed class ConfigForm : Form
         _validator = new ConfigValidator();
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
 
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         Text = "MRK Configurator";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(960, 600);
+        var minimumWidth = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Width);
+        var minimumHeight = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Height);
+        MinimumSize = new Size(minimumWidth, minimumHeight);
 
         var menuStrip = BuildMenu();
 
@@ -136,8 +144,6 @@ internal sealed class ConfigForm : Form
         {
             Name = "ContentSplitContainer",
             Dock = DockStyle.Fill,
-            Panel1MinSize = 120,
-            Panel2MinSize = 160,
         };
 
         _contentContainer.Panel1.Controls.Add(tabControl);
@@ -178,8 +184,6 @@ internal sealed class ConfigForm : Form
             Name = "LayoutSplitContainer",
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            Panel1MinSize = 140,
-            Panel2MinSize = 200,
         };
 
         _layoutContainer.Panel1.Controls.Add(issuesPanel);
@@ -190,8 +194,10 @@ internal sealed class ConfigForm : Form
         _statusStrip = new StatusStrip();
         _statusStrip.Items.Add(_statusLabel);
 
-        SplitterGuards.WireSplitterGuards(_contentContainer);
-        SplitterGuards.WireSplitterGuards(_layoutContainer);
+        ApplyScaledLayoutMetrics();
+
+        LayoutGuards.WireSplitterGuards(_contentContainer);
+        LayoutGuards.WireSplitterGuards(_layoutContainer);
 
         Controls.Add(_layoutContainer);
         Controls.Add(_statusStrip);
@@ -231,13 +237,11 @@ internal sealed class ConfigForm : Form
     }
 
     /// <inheritdoc />
-    protected override void OnShown(EventArgs e)
+    protected override void OnLoad(EventArgs e)
     {
-        base.OnShown(e);
-        SafeInitSplitter(_layoutContainer, LayoutSplitterRatio);
-        SafeInitSplitter(_contentContainer, ContentSplitterRatio);
-        ClampSplitter(_layoutContainer);
-        ClampSplitter(_contentContainer);
+        base.OnLoad(e);
+        ApplyScaledLayoutMetrics();
+        ApplyInitialSplitters();
         UpdateStatus();
     }
 
@@ -245,10 +249,8 @@ internal sealed class ConfigForm : Form
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
         base.OnDpiChanged(e);
-        SafeInitSplitter(_layoutContainer, LayoutSplitterRatio);
-        SafeInitSplitter(_contentContainer, ContentSplitterRatio);
-        ClampSplitter(_layoutContainer);
-        ClampSplitter(_contentContainer);
+        ApplyScaledLayoutMetrics();
+        ApplyInitialSplitters();
     }
 
     /// <inheritdoc />
@@ -737,81 +739,65 @@ internal sealed class ConfigForm : Form
         _statusLabel.Text = $"{_selectedEntry.Id}: {monitor.Name} ({rectangle.X},{rectangle.Y}) {rectangle.Width}x{rectangle.Height}.";
     }
 
-    private void SafeInitSplitter(SplitContainer container, double ratio)
+    private void ApplyInitialSplitters()
     {
-        if (container is null)
+        ApplySplitterRatio(_layoutContainer, LayoutSplitterRatio);
+        ApplySplitterRatio(_contentContainer, ContentSplitterRatio);
+    }
+
+    private void ApplyScaledLayoutMetrics()
+    {
+        var minWidth = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Width);
+        var minHeight = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Height);
+        MinimumSize = new Size(minWidth, minHeight);
+
+        if (_contentContainer is not null)
+        {
+            _contentContainer.Panel1MinSize = Math.Max(100, LogicalToDeviceUnits(ContentPanel1MinLogical));
+            _contentContainer.Panel2MinSize = Math.Max(100, LogicalToDeviceUnits(ContentPanel2MinLogical));
+        }
+
+        if (_layoutContainer is not null)
+        {
+            _layoutContainer.Panel1MinSize = Math.Max(100, LogicalToDeviceUnits(LayoutPanel1MinLogical));
+            _layoutContainer.Panel2MinSize = Math.Max(100, LogicalToDeviceUnits(LayoutPanel2MinLogical));
+        }
+    }
+
+    private void ApplySplitterRatio(SplitContainer? container, double ratio)
+    {
+        if (container is null || container.IsDisposed)
         {
             return;
         }
 
         ratio = Math.Clamp(ratio, 0d, 1d);
 
-        if (!TryGetSplitterBounds(container, out var availableLength, out var minDistance, out var maxDistance))
+        if (!TryGetAvailableLength(container, out var length))
         {
+            container.BeginInvoke(new Action(() => ApplySplitterRatio(container, ratio)));
             return;
         }
 
-        var target = (int)Math.Round(availableLength * ratio);
-        target = Math.Clamp(target, minDistance, maxDistance);
-
-        ApplySplitterDistance(container, target);
-    }
-
-    private void ClampSplitter(SplitContainer container)
-    {
-        if (container is null)
-        {
-            return;
-        }
-
-        var previous = container.SplitterDistance;
-        ApplySplitterDistance(container, previous);
-
-        if (!TryGetSplitterBounds(container, out _, out var minDistance, out var maxDistance))
-        {
-            return;
-        }
-
-        if (container.SplitterDistance != previous)
-        {
-            var context = GetContainerContext(container);
-            _telemetry.Warn($"Splitter distance for {context} adjusted from {previous} to {container.SplitterDistance} (bounds {minDistance}-{maxDistance}).");
-        }
-    }
-
-    private static bool TryGetSplitterBounds(SplitContainer container, out int availableLength, out int minDistance, out int maxDistance)
-    {
-        availableLength = container.Orientation == Orientation.Horizontal
-            ? container.ClientSize.Height
-            : container.ClientSize.Width;
-
-        minDistance = container.Panel1MinSize;
-        maxDistance = Math.Max(minDistance, availableLength - container.Panel2MinSize);
-
-        if (availableLength <= 0)
-        {
-            maxDistance = minDistance;
-            return false;
-        }
-
-        return true;
-    }
-
-    private void ApplySplitterDistance(SplitContainer container, int distance)
-    {
-        if (container is null)
-        {
-            return;
-        }
-
+        var desired = (int)Math.Round(length * ratio);
         var before = container.SplitterDistance;
-        SplitterGuards.ForceSafeSplitter(container, distance);
+
+        LayoutGuards.SafeApplySplitter(container, desired);
 
         if (container.SplitterDistance != before)
         {
             var context = GetContainerContext(container);
             _telemetry.Info($"Splitter distance for {context} updated from {before} to {container.SplitterDistance}.");
         }
+    }
+
+    private static bool TryGetAvailableLength(SplitContainer container, out int length)
+    {
+        length = container.Orientation == Orientation.Horizontal
+            ? container.ClientSize.Height
+            : container.ClientSize.Width;
+
+        return length > 0;
     }
 
     private string GetContainerContext(SplitContainer container)
