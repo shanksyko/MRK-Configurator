@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Forms;
+using Serilog;
 
 namespace Mieruka.App.Ui;
 
@@ -65,7 +66,21 @@ internal static class LayoutGuards
         }
 
         var fallback = Math.Clamp(available / 2, panel1Min, max);
-        var target = desired ?? fallback;
+        var target = desired ?? (container.IsHandleCreated ? container.SplitterDistance : fallback);
+
+        if (!desired.HasValue && container.IsHandleCreated)
+        {
+            if (target < panel1Min || target > max)
+            {
+                Log.Warning(
+                    "Detected invalid SplitterDistance {SplitterDistance} for {Context}; resetting to fallback {Fallback}.",
+                    container.SplitterDistance,
+                    GetContext(container),
+                    fallback);
+                target = fallback;
+            }
+        }
+
         var clamped = Math.Clamp(target, panel1Min, max);
 
         if (container.SplitterDistance == clamped)
@@ -77,16 +92,73 @@ internal static class LayoutGuards
         {
             container.SplitterDistance = clamped;
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
-            // If the container cannot satisfy the layout constraints at the current size,
-            // keep the existing SplitterDistance. The SizeChanged guard will run again
-            // after layout and attempt to apply the clamp with updated bounds.
+            Log.Warning(
+                ex,
+                "Failed to apply splitter distance {SplitterDistance} to {Context}. Current bounds will be retried on resize.",
+                clamped,
+                GetContext(container));
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            container.BeginInvoke(new Action(() => SafeApplySplitter(container, desired)));
+            Log.Debug(
+                ex,
+                "Deferring splitter update for {Context} until handle is ready.",
+                GetContext(container));
+
+            try
+            {
+                container.BeginInvoke(new Action(() => SafeApplySplitter(container, desired)));
+            }
+            catch (ObjectDisposedException)
+            {
+                // Control disposed between attempts; nothing more to do.
+            }
+            catch (InvalidOperationException)
+            {
+                // Control not ready for invoke yet; a subsequent layout cycle will trigger another attempt.
+            }
         }
+    }
+
+    public static void SetSafeMinSizes(SplitContainer? container, int panel1Min, int panel2Min)
+    {
+        if (container is null || container.IsDisposed)
+        {
+            return;
+        }
+
+        panel1Min = Math.Max(0, panel1Min);
+        panel2Min = Math.Max(0, panel2Min);
+
+        var orientation = container.Orientation;
+        var extent = orientation == Orientation.Horizontal
+            ? container.ClientSize.Height
+            : container.ClientSize.Width;
+        var splitterWidth = Math.Max(0, container.SplitterWidth);
+        var available = Math.Max(0, extent - splitterWidth);
+
+        if (available > 0)
+        {
+            var total = panel1Min + panel2Min;
+            if (total > available && total > 0)
+            {
+                var scale = available / (double)total;
+                var scaledPanel1 = (int)Math.Round(panel1Min * scale, MidpointRounding.AwayFromZero);
+                scaledPanel1 = Math.Clamp(scaledPanel1, 0, available);
+                var scaledPanel2 = available - scaledPanel1;
+
+                panel1Min = scaledPanel1;
+                panel2Min = Math.Max(0, scaledPanel2);
+            }
+        }
+
+        container.Panel1MinSize = panel1Min;
+        container.Panel2MinSize = panel2Min;
+
+        var desired = container.IsHandleCreated ? container.SplitterDistance : (int?)null;
+        SafeApplySplitter(container, desired);
     }
 
     public static void WireSplitterGuards(SplitContainer container, int? desired = null)
@@ -111,11 +183,17 @@ internal static class LayoutGuards
         }
 
         container.SplitterMoved += (_, _) => ApplyClampOnly();
+        container.SizeChanged += (_, _) => ApplySafeSplitter();
 
         Form? trackedForm = null;
         EventHandler formCreatedHandler = (_, _) => ApplySafeSplitter();
         EventHandler formSizedHandler = (_, _) => ApplySafeSplitter();
-        DpiChangedEventHandler dpiHandler = (_, _) => ApplySafeSplitter();
+        DpiChangedEventHandler? dpiHandler = null;
+        var supportsPerMonitorDpi = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763);
+        if (supportsPerMonitorDpi)
+        {
+            dpiHandler = (_, _) => ApplySafeSplitter();
+        }
 
         void AttachFormHandler()
         {
@@ -129,7 +207,10 @@ internal static class LayoutGuards
             {
                 trackedForm.HandleCreated -= formCreatedHandler;
                 trackedForm.SizeChanged -= formSizedHandler;
-                trackedForm.DpiChanged -= dpiHandler;
+                if (dpiHandler is not null)
+                {
+                    trackedForm.DpiChanged -= dpiHandler;
+                }
             }
 
             trackedForm = form;
@@ -137,7 +218,10 @@ internal static class LayoutGuards
             {
                 trackedForm.HandleCreated += formCreatedHandler;
                 trackedForm.SizeChanged += formSizedHandler;
-                trackedForm.DpiChanged += dpiHandler;
+                if (dpiHandler is not null)
+                {
+                    trackedForm.DpiChanged += dpiHandler;
+                }
 
                 if (trackedForm.IsHandleCreated)
                 {
@@ -153,7 +237,10 @@ internal static class LayoutGuards
             {
                 trackedForm.HandleCreated -= formCreatedHandler;
                 trackedForm.SizeChanged -= formSizedHandler;
-                trackedForm.DpiChanged -= dpiHandler;
+                if (dpiHandler is not null)
+                {
+                    trackedForm.DpiChanged -= dpiHandler;
+                }
                 trackedForm = null;
             }
         };
@@ -164,5 +251,21 @@ internal static class LayoutGuards
         {
             ApplySafeSplitter();
         }
+    }
+
+    private static string GetContext(SplitContainer container)
+    {
+        if (!string.IsNullOrWhiteSpace(container.Name))
+        {
+            return container.Name;
+        }
+
+        var accessibleName = container.AccessibleName;
+        if (!string.IsNullOrWhiteSpace(accessibleName))
+        {
+            return accessibleName;
+        }
+
+        return container.GetType().Name;
     }
 }
