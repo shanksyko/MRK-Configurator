@@ -74,6 +74,8 @@ internal sealed class ConfigForm : Form
     private readonly ToolTip _toolTip;
     private readonly FlowLayoutPanel _footerPanel;
     private MonitorPreviewControl? _activePreview;
+    private string? _selectedMonitorStableId;
+    private readonly List<MonitorSelectionBinding> _monitorSelectionBindings = new();
 
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
@@ -1101,6 +1103,7 @@ internal sealed class ConfigForm : Form
         {
             _activePreview = preview;
         }
+        UpdateSelectedMonitor(ResolveMonitorStableId(e.Monitor), updatePreview: false);
         SelectEntryInList(e.Entry);
         UpdateMonitorPreviews();
         RefreshValidation();
@@ -1139,7 +1142,9 @@ internal sealed class ConfigForm : Form
         }
 
         _activePreview = preview;
-        Log.Information("Preview: selected monitor={StableId}", ResolveMonitorStableId(preview.Monitor));
+        var stableId = ResolveMonitorStableId(preview.Monitor);
+        Log.Information("Preview selected monitor={StableId}", stableId);
+        UpdateSelectedMonitor(stableId, updatePreview: false);
 
         if (_selectedEntry is null)
         {
@@ -1251,6 +1256,8 @@ internal sealed class ConfigForm : Form
         }
 
         _activePreview = active;
+        var stableId = active?.Monitor is { } monitor ? ResolveMonitorStableId(monitor) : null;
+        UpdateSelectedMonitor(stableId, updatePreview: false);
     }
 
     private void SelectEntryInList(EntryReference entry)
@@ -1818,12 +1825,116 @@ internal sealed class ConfigForm : Form
         return string.Join(Environment.NewLine, lines);
     }
 
+    private void UpdateSelectedMonitor(string? stableId, bool updatePreview = true)
+    {
+        var normalized = string.IsNullOrWhiteSpace(stableId) ? null : stableId;
+        if (string.Equals(_selectedMonitorStableId, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyMonitorSelectionToBindings(normalized);
+            return;
+        }
+
+        _selectedMonitorStableId = normalized;
+
+        if (updatePreview)
+        {
+            HighlightMonitorByStableId(normalized);
+        }
+
+        ApplyMonitorSelectionToBindings(normalized);
+    }
+
+    private void HighlightMonitorByStableId(string? stableId)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+        {
+            return;
+        }
+
+        MonitorPreviewControl? matched = null;
+
+        foreach (var preview in _monitorPreviews)
+        {
+            var monitor = preview.Monitor;
+            if (monitor is null)
+            {
+                preview.IsSelected = false;
+                continue;
+            }
+
+            var isMatch = string.Equals(ResolveMonitorStableId(monitor), stableId, StringComparison.OrdinalIgnoreCase);
+            preview.IsSelected = isMatch;
+            if (isMatch)
+            {
+                matched = preview;
+            }
+        }
+
+        if (matched is not null)
+        {
+            _activePreview = matched;
+        }
+    }
+
+    private void ApplyMonitorSelectionToBindings(string? stableId)
+    {
+        for (var i = _monitorSelectionBindings.Count - 1; i >= 0; i--)
+        {
+            var binding = _monitorSelectionBindings[i];
+            if (binding.Dialog.IsDisposed)
+            {
+                _monitorSelectionBindings.RemoveAt(i);
+                continue;
+            }
+
+            binding.Apply(stableId);
+        }
+    }
+
+    private void RegisterMonitorBinding(Form dialog, Action<string?> applySelection)
+    {
+        if (dialog is null || applySelection is null)
+        {
+            return;
+        }
+
+        _monitorSelectionBindings.Add(new MonitorSelectionBinding(dialog, applySelection));
+    }
+
+    private void UnregisterMonitorBinding(Form dialog)
+    {
+        for (var i = _monitorSelectionBindings.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_monitorSelectionBindings[i].Dialog, dialog))
+            {
+                _monitorSelectionBindings.RemoveAt(i);
+            }
+        }
+    }
+
+    private void OnDialogMonitorSelectionChanged(object? sender, string? stableId)
+        => UpdateSelectedMonitor(stableId);
+
+    private sealed record class MonitorSelectionBinding(Form Dialog, Action<string?> Apply);
+
 
     private void OnAddApplicationClicked(object? sender, EventArgs e)
     {
-        using var dialog = new AppEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList());
+        using var dialog = new AppEditorDialog(
+            _workspace.Monitors,
+            _workspace.ZonePresets.ToList(),
+            template: null,
+            selectedMonitorStableId: _selectedMonitorStableId);
         dialog.TestHandler = config => RunApplicationTestAsync(config, dialog, updateStatus: false);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
+        dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
+        dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
+
+        var result = dialog.ShowDialog(this);
+        dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
+        UnregisterMonitorBinding(dialog);
+
+        if (result != DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -1851,9 +1962,21 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        using var dialog = new AppEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList(), current);
+        using var dialog = new AppEditorDialog(
+            _workspace.Monitors,
+            _workspace.ZonePresets.ToList(),
+            current,
+            _selectedMonitorStableId);
         dialog.TestHandler = config => RunApplicationTestAsync(config, dialog, updateStatus: false);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
+        dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
+        dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
+
+        var result = dialog.ShowDialog(this);
+        dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
+        UnregisterMonitorBinding(dialog);
+
+        if (result != DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2008,15 +2131,22 @@ internal sealed class ConfigForm : Form
                 return false;
             }
 
-            var handle = WaitForMainWindowAsync(process, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
-            if (handle == IntPtr.Zero)
+            var monitor = ResolveTargetMonitor(app.TargetMonitorStableId, app.Window);
+            var zoneRect = ResolveZoneRect(monitor, app.TargetZonePresetId, app.Window);
+            var topMost = app.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
+
+            WindowPlacementHelper.ForcePlaceProcessWindowAsync(
+                process,
+                monitor,
+                zoneRect,
+                topMost,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            process.Refresh();
+            if (process.MainWindowHandle == IntPtr.Zero)
             {
                 owner.BeginInvoke(new Action(() =>
                     MessageBox.Show(owner, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
-            }
-            else
-            {
-                TryPositionWindow(app, handle);
             }
 
             return true;
@@ -2028,33 +2158,6 @@ internal sealed class ConfigForm : Form
                 MessageBox.Show(owner, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
             return false;
         }
-    }
-
-    private static async Task<IntPtr> WaitForMainWindowAsync(Process process, TimeSpan timeout)
-    {
-        var stopwatch = Stopwatch.StartNew();
-
-        try
-        {
-            process.WaitForInputIdle((int)timeout.TotalMilliseconds);
-        }
-        catch
-        {
-        }
-
-        while (!process.HasExited && stopwatch.Elapsed < timeout)
-        {
-            process.Refresh();
-            if (process.MainWindowHandle != IntPtr.Zero)
-            {
-                return process.MainWindowHandle;
-            }
-
-            await Task.Delay(200).ConfigureAwait(false);
-        }
-
-        process.Refresh();
-        return process.MainWindowHandle;
     }
 
     private MonitorInfo ResolveTargetMonitor(string? stableId, WindowConfig window)
@@ -2109,9 +2212,21 @@ internal sealed class ConfigForm : Form
 
     private void OnAddSiteClicked(object? sender, EventArgs e)
     {
-        using var dialog = new SiteEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList());
+        using var dialog = new SiteEditorDialog(
+            _workspace.Monitors,
+            _workspace.ZonePresets.ToList(),
+            template: null,
+            selectedMonitorStableId: _selectedMonitorStableId);
         dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
+        dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
+        dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
+
+        var result = dialog.ShowDialog(this);
+        dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
+        UnregisterMonitorBinding(dialog);
+
+        if (result != DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2145,9 +2260,21 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        using var dialog = new SiteEditorDialog(_workspace.Monitors, _workspace.ZonePresets.ToList(), current);
+        using var dialog = new SiteEditorDialog(
+            _workspace.Monitors,
+            _workspace.ZonePresets.ToList(),
+            current,
+            _selectedMonitorStableId);
         dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result is null)
+        RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
+        dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
+        dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
+
+        var result = dialog.ShowDialog(this);
+        dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
+        UnregisterMonitorBinding(dialog);
+
+        if (result != DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2334,15 +2461,22 @@ internal sealed class ConfigForm : Form
             return false;
         }
 
-        var handle = WaitForMainWindowAsync(process, TimeSpan.FromSeconds(20)).GetAwaiter().GetResult();
-        if (handle == IntPtr.Zero)
+        var monitor = ResolveTargetMonitor(site.TargetMonitorStableId, site.Window);
+        var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
+        var topMost = site.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
+
+        WindowPlacementHelper.ForcePlaceProcessWindowAsync(
+            process,
+            monitor,
+            zoneRect,
+            topMost,
+            CancellationToken.None).GetAwaiter().GetResult();
+
+        process.Refresh();
+        if (process.MainWindowHandle == IntPtr.Zero)
         {
             owner.BeginInvoke(new Action(() =>
                 MessageBox.Show(owner, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
-        }
-        else
-        {
-            TryPositionWindow(site, handle);
         }
 
         return true;
