@@ -1233,12 +1233,12 @@ internal sealed class ConfigForm : Form
 
         foreach (var preview in _monitorPreviews)
         {
-            var monitor = preview.Monitor;
-            var matchesWindow = window is not null && monitor is not null && KeysEqual(window.Monitor, monitor.Key);
+            var selMonitor = preview.Monitor;
+            var matchesWindow = window is not null && selMonitor is not null && KeysEqual(window.Monitor, selMonitor.Key);
 
             preview.DisplayWindow(matchesWindow ? window : null);
 
-            var shouldSelect = activeMonitor is not null && monitor is not null && KeysEqual(activeMonitor.Key, monitor.Key);
+            var shouldSelect = activeMonitor is not null && selMonitor is not null && KeysEqual(activeMonitor.Key, selMonitor.Key);
             preview.IsSelected = shouldSelect;
 
             if (shouldSelect)
@@ -1246,7 +1246,7 @@ internal sealed class ConfigForm : Form
                 active = preview;
             }
 
-            _toolTip.SetToolTip(preview, monitor is not null ? BuildMonitorToolTip(monitor) : null);
+            _toolTip.SetToolTip(preview, selMonitor is not null ? BuildMonitorToolTip(selMonitor) : null);
         }
 
         if (active is null && _monitorPreviews.Count > 0)
