@@ -286,6 +286,8 @@ internal static class WindowPlacementHelper
         }
 
         var bounds = CalculateZoneBounds(monitor, zone);
+        var (normalizedX, normalizedY, normalizedWidth, normalizedHeight) = NormalizeBounds(bounds);
+        var normalizedBounds = new Rectangle(normalizedX, normalizedY, normalizedWidth, normalizedHeight);
         var effectiveTimeout = timeout ?? DefaultPlacementTimeout;
         var stopwatch = Stopwatch.StartNew();
         var handle = (IntPtr)hWnd;
@@ -300,7 +302,7 @@ internal static class WindowPlacementHelper
 
             try
             {
-                WindowMover.MoveTo(handle, bounds, topMost, restoreIfMinimized: true);
+                WindowMover.MoveTo(handle, normalizedBounds, topMost, restoreIfMinimized: true);
                 return true;
             }
             catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
@@ -492,6 +494,28 @@ internal static class WindowPlacementHelper
         return new Rectangle(bounds.Left, bounds.Top, width, height);
     }
 
+    private static (int x, int y, int w, int h) NormalizeBounds(Rectangle bounds)
+    {
+        var width = Math.Max(1, bounds.Width);
+        var height = Math.Max(1, bounds.Height);
+        return (bounds.X, bounds.Y, width, height);
+    }
+
+    private static int ClampToInt(uint value)
+    {
+        return value > int.MaxValue ? int.MaxValue : (int)value;
+    }
+
+    private static ushort ToUShort(int value)
+    {
+        return unchecked((ushort)value);
+    }
+
+    private static ushort ToUShort(short value)
+    {
+        return unchecked((ushort)value);
+    }
+
     private static int ScaleValue(int value, double scale)
         => (int)Math.Round(value * scale, MidpointRounding.AwayFromZero);
 
@@ -506,7 +530,7 @@ internal static class WindowPlacementHelper
 
         var devMode = new DEVMODE
         {
-            dmSize = (short)Marshal.SizeOf<DEVMODE>(),
+            dmSize = ToUShort(Marshal.SizeOf<DEVMODE>()),
         };
 
         if (!EnumDisplaySettingsEx(deviceName, EnumCurrentSettings, ref devMode, 0))
@@ -514,8 +538,10 @@ internal static class WindowPlacementHelper
             return false;
         }
 
-        bounds = new Rectangle(devMode.dmPositionX, devMode.dmPositionY, devMode.dmPelsWidth, devMode.dmPelsHeight);
-        return bounds.Width > 0 && bounds.Height > 0;
+        var width = ClampToInt(devMode.dmPelsWidth);
+        var height = ClampToInt(devMode.dmPelsHeight);
+        bounds = new Rectangle(devMode.dmPositionX, devMode.dmPositionY, width, height);
+        return width > 0 && height > 0;
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
