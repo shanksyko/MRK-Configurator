@@ -101,11 +101,19 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         return Task.CompletedTask;
     }
 
+#if WINDOWS10_0_19041_0_OR_GREATER
     [SupportedOSPlatform("windows10.0.19041")]
     private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
     {
         session.IsCursorCaptureEnabled = true;
     }
+#else
+    [SupportedOSPlatform("windows10.0.19041")]
+    private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
+    {
+        // Cursor capture is not available on this target contract.
+    }
+#endif
 
     /// <inheritdoc />
     [SupportedOSPlatform("windows10.0.17763")]
