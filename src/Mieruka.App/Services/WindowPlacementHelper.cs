@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
@@ -23,6 +24,14 @@ internal static class WindowPlacementHelper
     private const int ErrorInvalidWindowHandle = 1400;
     private const uint MonitorDefaultToNearest = 0x00000002;
     private static readonly TimeSpan DefaultPlacementTimeout = TimeSpan.FromSeconds(5);
+    private const int SwRestore = 9;
+    private const uint SwpShowWindow = 0x0040;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpNoOwnerZOrder = 0x0200;
+    private const byte VkMenu = 0x12;
+    private const uint KeyeventfKeyup = 0x0002;
+    private static readonly IntPtr HwndTopMost = new(-1);
+    private static readonly IntPtr HwndNoTopMost = new(-2);
 
     /// <summary>
     /// Represents a rectangular region defined as percentages of a monitor surface.
@@ -270,6 +279,40 @@ internal static class WindowPlacementHelper
         return ClampToWorkArea(target, workArea);
     }
 
+    public static async Task ForcePlaceProcessWindowAsync(
+        Process proc,
+        MonitorInfo mon,
+        ZoneRect zone,
+        bool topMost,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(proc);
+        ArgumentNullException.ThrowIfNull(mon);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        ShowWindowSafe(proc, SwRestore);
+
+        var handle = await WaitForMainWindowAsync(proc, TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
+        if (handle == IntPtr.Zero || !IsWindow(handle))
+        {
+            return;
+        }
+
+        var targetRect = ComputeTargetRect(mon, zone);
+        await ApplyPlacementWithRetryAsync(handle, targetRect, topMost, ct).ConfigureAwait(false);
+
+        if (!topMost)
+        {
+            TryBringToFront(handle);
+        }
+    }
+
     /// <summary>
     /// Positions a window handle inside the provided monitor zone.
     /// </summary>
@@ -404,6 +447,108 @@ internal static class WindowPlacementHelper
         }
 
         return new Rectangle(x, y, width, height);
+    }
+
+    private static Rectangle ComputeTargetRect(MonitorInfo monitor, ZoneRect zone)
+    {
+        var bounds = CalculateZoneBounds(monitor, zone);
+        return new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+    }
+
+    private static async Task ApplyPlacementWithRetryAsync(IntPtr handle, Rectangle target, bool topMost, CancellationToken ct)
+    {
+        var (x, y, width, height) = NormalizeBounds(target);
+        var insertAfter = topMost ? HwndTopMost : HwndNoTopMost;
+        const int attempts = 5;
+        var flags = SwpShowWindow | SwpNoActivate | SwpNoOwnerZOrder;
+
+        for (var i = 0; i < attempts; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (!IsWindow(handle))
+            {
+                return;
+            }
+
+            if (SetWindowPos(handle, insertAfter, x, y, width, height, flags))
+            {
+                return;
+            }
+
+            await Task.Delay(120, ct).ConfigureAwait(false);
+        }
+    }
+
+    private static bool ShowWindowSafe(Process process, int command)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            process.Refresh();
+            var handle = process.MainWindowHandle;
+            return handle != IntPtr.Zero && ShowWindow(handle, command);
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static async Task<IntPtr> WaitForMainWindowAsync(Process process, TimeSpan timeout, CancellationToken ct)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            process.WaitForInputIdle((int)timeout.TotalMilliseconds);
+        }
+        catch
+        {
+        }
+
+        while (!process.HasExited && stopwatch.Elapsed < timeout)
+        {
+            ct.ThrowIfCancellationRequested();
+            process.Refresh();
+            var handle = process.MainWindowHandle;
+            if (handle != IntPtr.Zero && IsWindow(handle))
+            {
+                return handle;
+            }
+
+            await Task.Delay(120, ct).ConfigureAwait(false);
+        }
+
+        process.Refresh();
+        var finalHandle = process.MainWindowHandle;
+        return finalHandle != IntPtr.Zero && IsWindow(finalHandle) ? finalHandle : IntPtr.Zero;
+    }
+
+    private static void TryBringToFront(IntPtr handle)
+    {
+        if (!OperatingSystem.IsWindows() || handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (handle == GetForegroundWindow())
+        {
+            return;
+        }
+
+        if (SetForegroundWindow(handle))
+        {
+            return;
+        }
+
+        keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
+        keybd_event(VkMenu, 0, KeyeventfKeyup, UIntPtr.Zero);
+        SetForegroundWindow(handle);
     }
 
     private static Rectangle ClampToWorkArea(Rectangle target, Rectangle workArea)
@@ -559,6 +704,28 @@ internal static class WindowPlacementHelper
 
     [DllImport("user32.dll")]
     private static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int X,
+        int Y,
+        int cx,
+        int cy,
+        uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct DEVMODE

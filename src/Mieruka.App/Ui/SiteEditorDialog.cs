@@ -15,6 +15,7 @@ internal sealed class SiteEditorDialog : Form
 {
     private readonly IReadOnlyList<MonitorInfo> _monitors;
     private readonly IReadOnlyList<ZonePreset> _zonePresets;
+    private readonly List<MonitorOption> _monitorOptions = new();
     private readonly List<ZoneOption> _zoneOptions = new();
     private readonly TextBox _nameBox;
     private readonly TextBox _titleBox;
@@ -42,7 +43,13 @@ internal sealed class SiteEditorDialog : Form
 
     private readonly Button _testButton;
 
-    public SiteEditorDialog(IReadOnlyList<MonitorInfo> monitors, IReadOnlyList<ZonePreset> zonePresets, SiteConfig? template = null)
+    private bool _suppressMonitorEvents;
+
+    public SiteEditorDialog(
+        IReadOnlyList<MonitorInfo> monitors,
+        IReadOnlyList<ZonePreset> zonePresets,
+        SiteConfig? template = null,
+        string? selectedMonitorStableId = null)
     {
         _monitors = monitors ?? Array.Empty<MonitorInfo>();
         _zonePresets = zonePresets ?? Array.Empty<ZonePreset>();
@@ -124,7 +131,10 @@ internal sealed class SiteEditorDialog : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
+        _monitorBox.DisplayMember = nameof(MonitorOption.DisplayName);
+        _monitorBox.ValueMember = nameof(MonitorOption.StableId);
         _monitorBox.SelectedIndexChanged += (_, _) => PopulateZones(GetSelectedZoneIdentifier());
+        _monitorBox.SelectedValueChanged += OnMonitorSelectionChanged;
 
         _zoneBox = new ComboBox
         {
@@ -243,7 +253,7 @@ internal sealed class SiteEditorDialog : Form
         AcceptButton = okButton;
         CancelButton = cancelButton;
 
-        PopulateMonitors(template?.TargetMonitorStableId, template?.Window.Monitor);
+        PopulateMonitors(template?.TargetMonitorStableId, template?.Window.Monitor, selectedMonitorStableId);
         PopulateZones(template?.TargetZonePresetId);
         LoadTemplate(template);
         UpdateReloadState();
@@ -252,6 +262,35 @@ internal sealed class SiteEditorDialog : Form
     public Func<SiteConfig, Task<bool>>? TestHandler { get; set; }
 
     public SiteConfig? Result { get; private set; }
+
+    public event EventHandler<string?>? MonitorSelectionChanged;
+
+    public string? SelectedMonitorStableId => GetSelectedMonitorStableId();
+
+    public void SetSelectedMonitorStableId(string? stableId)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+        {
+            return;
+        }
+
+        var match = _monitorOptions.FirstOrDefault(option =>
+            !option.IsPlaceholder && string.Equals(option.StableId, stableId, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _suppressMonitorEvents = true;
+            _monitorBox.SelectedItem = match;
+        }
+        finally
+        {
+            _suppressMonitorEvents = false;
+        }
+    }
 
     private static TextBox CreateTextBox(Font font)
     {
@@ -299,54 +338,46 @@ internal sealed class SiteEditorDialog : Form
         panel.Controls.Add(control, 1, row);
     }
 
-    private void PopulateMonitors(string? stableId, MonitorKey? fallback)
+    private void PopulateMonitors(string? stableId, MonitorKey? fallback, string? preferredStableId)
     {
-        _monitorBox.Items.Clear();
+        _monitorOptions.Clear();
         foreach (var monitor in _monitors)
         {
             var name = string.IsNullOrWhiteSpace(monitor.Name)
                 ? $"Monitor {monitor.Key.DisplayIndex + 1}"
                 : monitor.Name;
             var displayName = $"{name} ({monitor.Width}x{monitor.Height} - {(monitor.Scale > 0 ? monitor.Scale : 1):P0})";
-            _monitorBox.Items.Add(new MonitorOption(displayName, monitor));
+            var stable = WindowPlacementHelper.ResolveStableId(monitor);
+            _monitorOptions.Add(new MonitorOption(stable, displayName, monitor, false));
         }
 
-        if (_monitorBox.Items.Count == 0)
+        if (_monitorOptions.Count == 0)
         {
-            _monitorBox.Items.Add(new MonitorOption("Sem monitores disponíveis", new MonitorInfo()));
-            _monitorBox.SelectedIndex = 0;
+            _monitorOptions.Add(MonitorOption.Placeholder());
             _monitorBox.Enabled = false;
-            return;
+        }
+        else
+        {
+            _monitorBox.Enabled = true;
         }
 
-        _monitorBox.Enabled = true;
-
-        if (!string.IsNullOrWhiteSpace(stableId))
+        try
         {
-            for (var i = 0; i < _monitorBox.Items.Count; i++)
+            _suppressMonitorEvents = true;
+            _monitorBox.DataSource = null;
+            _monitorBox.DataSource = _monitorOptions;
+
+            if (!SelectMonitorByStableId(preferredStableId) &&
+                !SelectMonitorByStableId(stableId) &&
+                !SelectMonitorByKey(fallback))
             {
-                if (_monitorBox.Items[i] is MonitorOption option &&
-                    string.Equals(WindowPlacementHelper.ResolveStableId(option.Monitor), stableId, StringComparison.OrdinalIgnoreCase))
-                {
-                    _monitorBox.SelectedIndex = i;
-                    return;
-                }
+                SelectFirstMonitor();
             }
         }
-
-        if (fallback is not null)
+        finally
         {
-            for (var i = 0; i < _monitorBox.Items.Count; i++)
-            {
-                if (_monitorBox.Items[i] is MonitorOption option && MonitorKeysEqual(option.Monitor.Key, fallback))
-                {
-                    _monitorBox.SelectedIndex = i;
-                    return;
-                }
-            }
+            _suppressMonitorEvents = false;
         }
-
-        _monitorBox.SelectedIndex = 0;
     }
 
     private void PopulateZones(string? selectedIdentifier)
@@ -503,6 +534,16 @@ internal sealed class SiteEditorDialog : Form
         }
 
         Result = CreateConfigFromInputs();
+    }
+
+    private void OnMonitorSelectionChanged(object? sender, EventArgs e)
+    {
+        if (_suppressMonitorEvents)
+        {
+            return;
+        }
+
+        MonitorSelectionChanged?.Invoke(this, GetSelectedMonitorStableId());
     }
 
     private SiteConfig CreateConfigFromInputs()
@@ -722,9 +763,65 @@ internal sealed class SiteEditorDialog : Form
             && left.TargetId == right.TargetId;
     }
 
-    private sealed record class MonitorOption(string DisplayName, MonitorInfo Monitor)
+    private bool SelectMonitorByStableId(string? stableId)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+        {
+            return false;
+        }
+
+        var match = _monitorOptions.FirstOrDefault(option =>
+            !option.IsPlaceholder && string.Equals(option.StableId, stableId, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            return false;
+        }
+
+        _monitorBox.SelectedItem = match;
+        return true;
+    }
+
+    private bool SelectMonitorByKey(MonitorKey? key)
+    {
+        if (key is null)
+        {
+            return false;
+        }
+
+        var match = _monitorOptions.FirstOrDefault(option =>
+            !option.IsPlaceholder && MonitorKeysEqual(option.Monitor.Key, key));
+        if (match is null)
+        {
+            return false;
+        }
+
+        _monitorBox.SelectedItem = match;
+        return true;
+    }
+
+    private void SelectFirstMonitor()
+    {
+        if (_monitorOptions.Count == 0)
+        {
+            return;
+        }
+
+        _monitorBox.SelectedItem = _monitorOptions[0];
+    }
+
+    private string? GetSelectedMonitorStableId()
+    {
+        return _monitorBox.SelectedItem is MonitorOption option && !option.IsPlaceholder
+            ? option.StableId
+            : null;
+    }
+
+    private sealed record class MonitorOption(string StableId, string DisplayName, MonitorInfo Monitor, bool IsPlaceholder)
     {
         public override string ToString() => DisplayName;
+
+        public static MonitorOption Placeholder()
+            => new(string.Empty, "Sem monitores disponíveis", new MonitorInfo(), true);
     }
 
     private sealed record class ZoneOption(string Identifier, string DisplayName, string PresetId, ZonePreset.Zone Zone, bool IsFull)
