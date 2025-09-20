@@ -24,6 +24,27 @@ internal static class Program
             .MinimumLevel.Information()
             .CreateLogger();
 
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, args) =>
+        {
+            if (args.Exception is not null)
+            {
+                Log.Fatal(args.Exception, "Unhandled UI thread exception.");
+            }
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+            {
+                Log.Fatal(ex, "Unhandled non-UI exception.");
+            }
+            else
+            {
+                Log.Fatal("Unhandled non-UI exception: {ExceptionObject}", args.ExceptionObject);
+            }
+        };
+
         try
         {
             ApplicationConfiguration.Initialize();
