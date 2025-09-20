@@ -182,28 +182,37 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             return;
         }
 
-            var creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport;
-            var featureLevels = new[]
-            {
-                Vortice.Direct3D.FeatureLevel.Level_12_1,
-                Vortice.Direct3D.FeatureLevel.Level_12_0,
-                Vortice.Direct3D.FeatureLevel.Level_11_1,
-                Vortice.Direct3D.FeatureLevel.Level_11_0,
-                Vortice.Direct3D.FeatureLevel.Level_10_1,
-                Vortice.Direct3D.FeatureLevel.Level_10_0,
-            };
+        var creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport;
+        var featureLevels = new[]
+        {
+            Vortice.Direct3D.FeatureLevel.Level_12_1,
+            Vortice.Direct3D.FeatureLevel.Level_12_0,
+            Vortice.Direct3D.FeatureLevel.Level_11_1,
+            Vortice.Direct3D.FeatureLevel.Level_11_0,
+            Vortice.Direct3D.FeatureLevel.Level_10_1,
+            Vortice.Direct3D.FeatureLevel.Level_10_0,
+        };
 
-            var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-                IntPtr.Zero,
-                Vortice.Direct3D.DriverType.Hardware,
-                IntPtr.Zero,
-                (int)creationFlags,
-                featureLevels,
-                featureLevels.Length,
-                Vortice.Direct3D11.D3D11.SdkVersion,
-                out var device,
-                out var featureLevel,
-                out var context);
+        var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+            adapter: null,
+            driverType: Vortice.Direct3D.DriverType.Hardware,
+            flags: creationFlags,
+            featureLevels: featureLevels,
+            device: out var device,
+            featureLevel: out var featureLevel,
+            immediateContext: out var context);
+
+        if (result.Failure)
+        {
+            result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+                adapter: null,
+                driverType: Vortice.Direct3D.DriverType.Warp,
+                flags: creationFlags,
+                featureLevels: featureLevels,
+                device: out device,
+                featureLevel: out featureLevel,
+                immediateContext: out context);
+        }
 
         result.CheckError();
 
