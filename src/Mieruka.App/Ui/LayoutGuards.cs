@@ -12,6 +12,11 @@ internal static class LayoutGuards
             return;
         }
 
+        if (container.Panel1Collapsed || container.Panel2Collapsed)
+        {
+            return;
+        }
+
         if (!container.IsHandleCreated)
         {
             try
@@ -31,11 +36,11 @@ internal static class LayoutGuards
             return;
         }
 
-        var displaySize = container.Orientation == Orientation.Horizontal
+        var extent = container.Orientation == Orientation.Horizontal
             ? container.ClientSize.Height
             : container.ClientSize.Width;
 
-        if (displaySize <= 0)
+        if (extent <= 0)
         {
             return;
         }
@@ -43,7 +48,7 @@ internal static class LayoutGuards
         var splitterWidth = Math.Max(0, container.SplitterWidth);
         var panel1Min = Math.Max(0, container.Panel1MinSize);
         var panel2Min = Math.Max(0, container.Panel2MinSize);
-        var available = displaySize - splitterWidth;
+        var available = Math.Max(0, extent - splitterWidth);
 
         if (available <= 0)
         {
@@ -56,9 +61,14 @@ internal static class LayoutGuards
             return;
         }
 
-        var fallback = displaySize / 2;
+        var fallback = extent / 2;
         var target = desired ?? fallback;
         var clamped = Math.Clamp(target, panel1Min, max);
+
+        if (container.SplitterDistance == clamped)
+        {
+            return;
+        }
 
         try
         {
@@ -83,15 +93,26 @@ internal static class LayoutGuards
             return;
         }
 
-        void ApplySafeSplitter() => SafeApplySplitter(container, desired);
-        void ApplyClampOnly() => SafeApplySplitter(container);
+        int? preferred = desired;
+
+        void ApplySafeSplitter()
+        {
+            SafeApplySplitter(container, preferred);
+            preferred = container.IsHandleCreated ? container.SplitterDistance : preferred;
+        }
+
+        void ApplyClampOnly()
+        {
+            preferred = container.IsHandleCreated ? container.SplitterDistance : preferred;
+            SafeApplySplitter(container, preferred);
+        }
 
         container.HandleCreated += (_, _) => ApplySafeSplitter();
         container.SizeChanged += (_, _) => ApplySafeSplitter();
         container.SplitterMoved += (_, _) => ApplyClampOnly();
 
         Form? trackedForm = null;
-        DpiChangedEventHandler dpiHandler = (_, _) => SafeApplySplitter(container, desired);
+        DpiChangedEventHandler dpiHandler = (_, _) => ApplySafeSplitter();
 
         void AttachFormHandler()
         {
