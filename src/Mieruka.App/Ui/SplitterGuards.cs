@@ -8,7 +8,17 @@ namespace Mieruka.App.Ui
         public static void ForceSafeSplitter(SplitContainer s, int? desired = null)
         {
             if (s == null || s.IsDisposed) return;
-            if (!s.IsHandleCreated || s.Width <= 0)
+
+            bool NeedsRetry()
+            {
+                if (!s.IsHandleCreated) return true;
+
+                return s.Orientation == Orientation.Horizontal
+                    ? s.ClientSize.Height <= 0
+                    : s.ClientSize.Width <= 0;
+            }
+
+            if (NeedsRetry())
             {
                 s.BeginInvoke(new Action(() => ForceSafeSplitter(s, desired)));
                 return;
@@ -24,10 +34,14 @@ namespace Mieruka.App.Ui
                 s.Panel1MinSize = 0;
                 s.Panel2MinSize = 0;
 
-                int min = 0;
-                int max = Math.Max(0, s.Width - s.SplitterWidth);
+                int length = s.Orientation == Orientation.Horizontal
+                    ? s.ClientSize.Height
+                    : s.ClientSize.Width;
 
-                int target = desired ?? (int)Math.Round(s.Width * 0.35);
+                int min = 0;
+                int max = Math.Max(0, length - s.SplitterWidth);
+
+                int target = desired ?? (int)Math.Round(length * 0.35);
                 target = Math.Clamp(target, min, max);
 
                 try
@@ -36,7 +50,7 @@ namespace Mieruka.App.Ui
                 }
                 catch
                 {
-                    s.SplitterDistance = Math.Max(0, s.Width / 2);
+                    s.SplitterDistance = Math.Max(0, length / 2);
                 }
 
                 // restaura minSizes e clamp final no range real
@@ -44,13 +58,10 @@ namespace Mieruka.App.Ui
                 s.Panel2MinSize = origMin2;
 
                 int hardMin = s.Panel1MinSize;
-                int hardMax = s.Width - s.Panel2MinSize - s.SplitterWidth;
-                if (hardMax > hardMin)
-                {
-                    int cur = s.SplitterDistance;
-                    int clamp = Math.Clamp(cur, hardMin, hardMax);
-                    if (clamp != cur) s.SplitterDistance = clamp;
-                }
+                int hardMax = Math.Max(hardMin, length - s.Panel2MinSize - s.SplitterWidth);
+                int cur = s.SplitterDistance;
+                int clamp = Math.Clamp(cur, hardMin, hardMax);
+                if (clamp != cur) s.SplitterDistance = clamp;
             }
             finally
             {
