@@ -196,8 +196,8 @@ internal sealed class ConfigForm : Form
 
         ApplyScaledLayoutMetrics();
 
-        LayoutGuards.WireSplitterGuards(_contentContainer);
-        LayoutGuards.WireSplitterGuards(_layoutContainer);
+        LayoutGuards.WireSplitterGuards(_contentContainer, null);
+        LayoutGuards.WireSplitterGuards(_layoutContainer, null);
 
         Controls.Add(_layoutContainer);
         Controls.Add(_statusStrip);
@@ -404,15 +404,16 @@ internal sealed class ConfigForm : Form
 
         var hasIssues = _issuesList.Items.Count > 0;
         _layoutContainer.Panel1Collapsed = !hasIssues;
-        if (hasIssues && TryGetSplitterBounds(_layoutContainer, out _, out var minDistance, out var maxDistance))
+        if (hasIssues)
         {
             var desiredHeight = Math.Max(140, Height / 4);
             var available = Math.Max(140, Height - 200);
-            var target = Math.Clamp(Math.Min(desiredHeight, available), minDistance, maxDistance);
-            if (target != _layoutContainer.SplitterDistance)
-            {
-                ApplySplitterDistance(_layoutContainer, target);
-            }
+            var target = Math.Min(desiredHeight, available);
+            LayoutGuards.SafeApplySplitter(_layoutContainer, target);
+        }
+        else
+        {
+            LayoutGuards.SafeApplySplitter(_layoutContainer);
         }
 
         UpdateStatus();

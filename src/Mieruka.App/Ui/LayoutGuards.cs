@@ -1,10 +1,8 @@
 using System;
-using System.Runtime.Versioning;
 using System.Windows.Forms;
 
 namespace Mieruka.App.Ui;
 
-[SupportedOSPlatform("windows10.0.17763")]
 internal static class LayoutGuards
 {
     public static void SafeApplySplitter(SplitContainer container, int? desired = null)
@@ -21,9 +19,12 @@ internal static class LayoutGuards
         }
 
         var clientSize = container.ClientSize;
-        var availableLength = container.Orientation == Orientation.Horizontal
+        var orientation = container.Orientation;
+        var totalLength = orientation == Orientation.Horizontal
             ? clientSize.Height
             : clientSize.Width;
+        var splitterThickness = Math.Max(0, container.SplitterWidth);
+        var availableLength = Math.Max(0, totalLength - splitterThickness);
 
         if (availableLength <= 0)
         {
@@ -33,10 +34,13 @@ internal static class LayoutGuards
 
         var panel1Min = Math.Max(0, container.Panel1MinSize);
         var panel2Min = Math.Max(0, container.Panel2MinSize);
-        var maxDistance = Math.Max(panel1Min, availableLength - panel2Min);
+
+        var minDistance = Math.Min(panel1Min, availableLength);
+        var maxDistance = Math.Max(availableLength - panel2Min, minDistance);
+        maxDistance = Math.Clamp(maxDistance, minDistance, availableLength);
 
         var current = desired ?? container.SplitterDistance;
-        var clamped = Math.Clamp(current, panel1Min, maxDistance);
+        var clamped = Math.Clamp(current, minDistance, maxDistance);
 
         if (clamped == container.SplitterDistance)
         {
@@ -49,10 +53,17 @@ internal static class LayoutGuards
         }
         catch (ArgumentException)
         {
-            var fallback = Math.Clamp(availableLength / 2, panel1Min, maxDistance);
+            var fallback = Math.Clamp(availableLength / 2, minDistance, maxDistance);
             if (fallback != container.SplitterDistance)
             {
-                container.SplitterDistance = fallback;
+                try
+                {
+                    container.SplitterDistance = fallback;
+                }
+                catch (ArgumentException)
+                {
+                    // If both panels enforce incompatible minimum sizes, keep the previous distance.
+                }
             }
         }
         catch (InvalidOperationException)
@@ -75,10 +86,8 @@ internal static class LayoutGuards
         container.SizeChanged += (_, _) => ApplySafeSplitter();
         container.SplitterMoved += (_, _) => ApplyClampOnly();
 
-        DpiChangedEventHandler dpiHandler = (_, _) => ApplySafeSplitter();
-        container.DpiChanged += dpiHandler;
-
         Form? trackedForm = null;
+        DpiChangedEventHandler dpiHandler = (_, _) => SafeApplySplitter(container, desired);
 
         void AttachFormHandler()
         {
