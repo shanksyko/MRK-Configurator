@@ -13,7 +13,6 @@ using Mieruka.App.Config;
 using Mieruka.App.Controls;
 using Mieruka.App.Services;
 using Mieruka.App.Ui;
-using Mieruka.Automation.Drivers;
 using Mieruka.Automation.Login;
 using Mieruka.Automation.Tabs;
 using Mieruka.Core.Layouts;
@@ -42,16 +41,18 @@ internal sealed class ConfigForm : Form
     private readonly ListView _sitesList;
     private readonly BindingSource _appsBinding;
     private readonly BindingSource _sitesBinding;
-    private readonly Button _appAddButton;
-    private readonly Button _appEditButton;
-    private readonly Button _appRemoveButton;
-    private readonly Button _appDuplicateButton;
-    private readonly Button _appTestButton;
-    private readonly Button _siteAddButton;
-    private readonly Button _siteEditButton;
-    private readonly Button _siteRemoveButton;
-    private readonly Button _siteDuplicateButton;
-    private readonly Button _siteTestButton;
+    private Button? _appAddButton;
+    private Button? _appEditButton;
+    private Button? _appRemoveButton;
+    private Button? _appDuplicateButton;
+    private Button? _appTestButton;
+    private Button? _siteAddButton;
+    private Button? _siteEditButton;
+    private Button? _siteRemoveButton;
+    private Button? _siteDuplicateButton;
+    private Button? _siteTestButton;
+    private readonly FlowLayoutPanel _applicationButtonPanel;
+    private readonly FlowLayoutPanel _siteButtonPanel;
     private readonly ListView _issuesList;
     private const double ContentSplitterRatio = 0.35;
     private const double LayoutSplitterRatio = 0.35;
@@ -155,6 +156,26 @@ internal sealed class ConfigForm : Form
         _sitesBinding = new BindingSource { DataSource = _workspace.Sites };
         _appsBinding.ListChanged += (_, _) => RefreshApplicationsList();
         _sitesBinding.ListChanged += (_, _) => RefreshSitesList();
+
+        _applicationButtonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Padding = new Padding(0, 6, 0, 0),
+        };
+
+        _siteButtonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Padding = new Padding(0, 6, 0, 0),
+        };
 
         var appsTab = new TabPage("Aplicativos")
         {
@@ -291,6 +312,7 @@ internal sealed class ConfigForm : Form
 
         LayoutGuards.WireSplitterGuards(_contentContainer, null);
         LayoutGuards.WireSplitterGuards(_layoutContainer, null);
+        BuildFooterButtons();
         ApplyInitialSplitters();
 
         Controls.Add(_layoutContainer);
@@ -899,29 +921,7 @@ internal sealed class ConfigForm : Form
         _applicationsList.Dock = DockStyle.Fill;
         container.Controls.Add(_applicationsList, 0, 0);
 
-        var buttonPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            WrapContents = false,
-            Padding = new Padding(0, 6, 0, 0),
-        };
-
-        _appAddButton = CreateActionButton("Adicionar", OnAddApplicationClicked);
-        _appEditButton = CreateActionButton("Editar", OnEditApplicationClicked, enabled: false);
-        _appRemoveButton = CreateActionButton("Remover", OnRemoveApplicationClicked, enabled: false);
-        _appDuplicateButton = CreateActionButton("Duplicar", OnDuplicateApplicationClicked, enabled: false);
-        _appTestButton = CreateActionButton("Testar", OnTestApplicationClicked, enabled: false);
-
-        buttonPanel.Controls.Add(_appAddButton);
-        buttonPanel.Controls.Add(_appEditButton);
-        buttonPanel.Controls.Add(_appRemoveButton);
-        buttonPanel.Controls.Add(_appDuplicateButton);
-        buttonPanel.Controls.Add(_appTestButton);
-
-        container.Controls.Add(buttonPanel, 0, 1);
+        container.Controls.Add(_applicationButtonPanel, 0, 1);
         return container;
     }
 
@@ -941,30 +941,43 @@ internal sealed class ConfigForm : Form
         _sitesList.Dock = DockStyle.Fill;
         container.Controls.Add(_sitesList, 0, 0);
 
-        var buttonPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            WrapContents = false,
-            Padding = new Padding(0, 6, 0, 0),
-        };
-
-        _siteAddButton = CreateActionButton("Adicionar", OnAddSiteClicked);
-        _siteEditButton = CreateActionButton("Editar", OnEditSiteClicked, enabled: false);
-        _siteRemoveButton = CreateActionButton("Remover", OnRemoveSiteClicked, enabled: false);
-        _siteDuplicateButton = CreateActionButton("Duplicar", OnDuplicateSiteClicked, enabled: false);
-        _siteTestButton = CreateActionButton("Testar", OnTestSiteClicked, enabled: false);
-
-        buttonPanel.Controls.Add(_siteAddButton);
-        buttonPanel.Controls.Add(_siteEditButton);
-        buttonPanel.Controls.Add(_siteRemoveButton);
-        buttonPanel.Controls.Add(_siteDuplicateButton);
-        buttonPanel.Controls.Add(_siteTestButton);
-
-        container.Controls.Add(buttonPanel, 0, 1);
+        container.Controls.Add(_siteButtonPanel, 0, 1);
         return container;
+    }
+
+    private void BuildFooterButtons()
+    {
+        _applicationButtonPanel.SuspendLayout();
+        _applicationButtonPanel.Controls.Clear();
+
+        _appAddButton ??= CreateActionButton("Adicionar", OnAddApplicationClicked);
+        _appEditButton ??= CreateActionButton("Editar", OnEditApplicationClicked, enabled: false);
+        _appRemoveButton ??= CreateActionButton("Remover", OnRemoveApplicationClicked, enabled: false);
+        _appDuplicateButton ??= CreateActionButton("Duplicar", OnDuplicateApplicationClicked, enabled: false);
+        _appTestButton ??= CreateActionButton("Testar", OnTestApplicationClicked, enabled: false);
+
+        _applicationButtonPanel.Controls.Add(_appAddButton!);
+        _applicationButtonPanel.Controls.Add(_appEditButton!);
+        _applicationButtonPanel.Controls.Add(_appRemoveButton!);
+        _applicationButtonPanel.Controls.Add(_appDuplicateButton!);
+        _applicationButtonPanel.Controls.Add(_appTestButton!);
+        _applicationButtonPanel.ResumeLayout();
+
+        _siteButtonPanel.SuspendLayout();
+        _siteButtonPanel.Controls.Clear();
+
+        _siteAddButton ??= CreateActionButton("Adicionar", OnAddSiteClicked);
+        _siteEditButton ??= CreateActionButton("Editar", OnEditSiteClicked, enabled: false);
+        _siteRemoveButton ??= CreateActionButton("Remover", OnRemoveSiteClicked, enabled: false);
+        _siteDuplicateButton ??= CreateActionButton("Duplicar", OnDuplicateSiteClicked, enabled: false);
+        _siteTestButton ??= CreateActionButton("Testar", OnTestSiteClicked, enabled: false);
+
+        _siteButtonPanel.Controls.Add(_siteAddButton!);
+        _siteButtonPanel.Controls.Add(_siteEditButton!);
+        _siteButtonPanel.Controls.Add(_siteRemoveButton!);
+        _siteButtonPanel.Controls.Add(_siteDuplicateButton!);
+        _siteButtonPanel.Controls.Add(_siteTestButton!);
+        _siteButtonPanel.ResumeLayout();
     }
 
     private Button CreateActionButton(string text, EventHandler onClick, bool enabled = true)
@@ -1662,6 +1675,11 @@ internal sealed class ConfigForm : Form
 
     private void UpdateApplicationButtons()
     {
+        if (_appEditButton is null || _appRemoveButton is null || _appDuplicateButton is null || _appTestButton is null)
+        {
+            return;
+        }
+
         var hasSelection = _applicationsList.SelectedItems.Count > 0;
         _appEditButton.Enabled = hasSelection;
         _appRemoveButton.Enabled = hasSelection;
@@ -1671,6 +1689,11 @@ internal sealed class ConfigForm : Form
 
     private void UpdateSiteButtons()
     {
+        if (_siteEditButton is null || _siteRemoveButton is null || _siteDuplicateButton is null || _siteTestButton is null)
+        {
+            return;
+        }
+
         var hasSelection = _sitesList.SelectedItems.Count > 0;
         _siteEditButton.Enabled = hasSelection;
         _siteRemoveButton.Enabled = hasSelection;
@@ -1900,7 +1923,10 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        _appTestButton.Enabled = false;
+        if (_appTestButton is not null)
+        {
+            _appTestButton.Enabled = false;
+        }
 
         try
         {
@@ -2154,7 +2180,10 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        _siteTestButton.Enabled = false;
+        if (_siteTestButton is not null)
+        {
+            _siteTestButton.Enabled = false;
+        }
 
         try
         {
@@ -2249,12 +2278,12 @@ internal sealed class ConfigForm : Form
 
     private bool TestSiteWithSelenium(SiteConfig site)
     {
-        var launcher = new BrowserLauncher(new WebDriverFactory());
         IWebDriver? driver = null;
 
         try
         {
-            driver = launcher.Launch(site, _workspace.BrowserArguments);
+            var arguments = CollectBrowserArguments(site).ToList();
+            driver = WebDriverFactory.Create(site, arguments);
             ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
             ExecuteLoginAsync(driver, site.Login).GetAwaiter().GetResult();
 
