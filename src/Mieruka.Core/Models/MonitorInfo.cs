@@ -49,4 +49,9 @@ public sealed record class MonitorInfo
     /// Extended display identification data identifier associated with the monitor.
     /// </summary>
     public string Edid { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Stable identifier that should remain consistent across sessions.
+    /// </summary>
+    public string StableId { get; init; } = string.Empty;
 }

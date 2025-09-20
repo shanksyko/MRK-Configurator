@@ -25,13 +25,8 @@ internal static class WindowPlacementHelper
     private const uint MonitorDefaultToNearest = 0x00000002;
     private static readonly TimeSpan DefaultPlacementTimeout = TimeSpan.FromSeconds(5);
     private const int SwRestore = 9;
-    private const uint SwpShowWindow = 0x0040;
-    private const uint SwpNoActivate = 0x0010;
-    private const uint SwpNoOwnerZOrder = 0x0200;
     private const byte VkMenu = 0x12;
     private const uint KeyeventfKeyup = 0x0002;
-    private static readonly IntPtr HwndTopMost = new(-1);
-    private static readonly IntPtr HwndNoTopMost = new(-2);
 
     /// <summary>
     /// Represents a rectangular region defined as percentages of a monitor surface.
@@ -157,6 +152,11 @@ internal static class WindowPlacementHelper
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
+        if (!string.IsNullOrWhiteSpace(monitor.StableId))
+        {
+            return monitor.StableId;
+        }
+
         if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId))
         {
             return monitor.Key.DeviceId;
@@ -191,6 +191,74 @@ internal static class WindowPlacementHelper
         }
 
         return null;
+    }
+
+    public static MonitorInfo ResolveTargetMonitor(
+        AppConfig app,
+        string? selectedMonitorStableId,
+        IReadOnlyList<MonitorInfo> monitors,
+        IDisplayService? displayService)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(monitors);
+
+        var monitor = GetMonitorByStableId(monitors, NormalizeStableId(app.TargetMonitorStableId));
+        if (monitor is not null)
+        {
+            return monitor;
+        }
+
+        monitor = GetMonitorByStableId(monitors, NormalizeStableId(selectedMonitorStableId));
+        if (monitor is not null)
+        {
+            return monitor;
+        }
+
+        return ResolveMonitor(displayService, monitors, app.Window);
+    }
+
+    public static MonitorInfo ResolveTargetMonitor(
+        SiteConfig site,
+        string? selectedMonitorStableId,
+        IReadOnlyList<MonitorInfo> monitors,
+        IDisplayService? displayService)
+    {
+        ArgumentNullException.ThrowIfNull(site);
+        ArgumentNullException.ThrowIfNull(monitors);
+
+        var monitor = GetMonitorByStableId(monitors, NormalizeStableId(site.TargetMonitorStableId));
+        if (monitor is not null)
+        {
+            return monitor;
+        }
+
+        monitor = GetMonitorByStableId(monitors, NormalizeStableId(selectedMonitorStableId));
+        if (monitor is not null)
+        {
+            return monitor;
+        }
+
+        return ResolveMonitor(displayService, monitors, site.Window);
+    }
+
+    public static ZoneRect ResolveTargetZone(
+        MonitorInfo monitor,
+        string? zoneIdentifier,
+        WindowConfig window,
+        IEnumerable<ZonePreset>? presets)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(window);
+
+        var collection = presets ?? Array.Empty<ZonePreset>();
+
+        if (!string.IsNullOrWhiteSpace(zoneIdentifier) &&
+            TryGetZoneRect(collection, zoneIdentifier, out var zone))
+        {
+            return zone;
+        }
+
+        return CreateZoneFromWindow(window, monitor);
     }
 
     /// <summary>
@@ -457,10 +525,9 @@ internal static class WindowPlacementHelper
 
     private static async Task ApplyPlacementWithRetryAsync(IntPtr handle, Rectangle target, bool topMost, CancellationToken ct)
     {
-        var (x, y, width, height) = NormalizeBounds(target);
-        var insertAfter = topMost ? HwndTopMost : HwndNoTopMost;
         const int attempts = 5;
-        var flags = SwpShowWindow | SwpNoActivate | SwpNoOwnerZOrder;
+        var (x, y, width, height) = NormalizeBounds(target);
+        var normalizedBounds = new Rectangle(x, y, width, height);
 
         for (var i = 0; i < attempts; i++)
         {
@@ -471,9 +538,16 @@ internal static class WindowPlacementHelper
                 return;
             }
 
-            if (SetWindowPos(handle, insertAfter, x, y, width, height, flags))
+            try
             {
+                WindowMover.MoveTo(handle, normalizedBounds, topMost, restoreIfMinimized: true);
                 return;
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
+            {
+            }
+            catch (ArgumentException)
+            {
             }
 
             await Task.Delay(120, ct).ConfigureAwait(false);
@@ -663,6 +737,9 @@ internal static class WindowPlacementHelper
 
     private static int ScaleValue(int value, double scale)
         => (int)Math.Round(value * scale, MidpointRounding.AwayFromZero);
+
+    private static string? NormalizeStableId(string? stableId)
+        => string.IsNullOrWhiteSpace(stableId) ? null : stableId.Trim();
 
     private static bool TryGetDeviceBounds(string deviceName, out Rectangle bounds)
     {

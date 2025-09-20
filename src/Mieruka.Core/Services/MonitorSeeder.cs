@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
@@ -44,6 +45,7 @@ public sealed class MonitorSeeder
                 Height = bounds.Height,
                 Scale = probe.Scale <= 0 ? 1.0 : probe.Scale,
                 IsPrimary = probe.IsPrimary,
+                StableId = ResolveStableId(probe, index),
             });
         }
 
@@ -94,5 +96,20 @@ public sealed class MonitorSeeder
         }
 
         return $"Monitor {index + 1}";
+    }
+
+    private static string ResolveStableId(MonitorProbe probe, int index)
+    {
+        if (!string.IsNullOrWhiteSpace(probe.DeviceName))
+        {
+            return probe.DeviceName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(probe.FriendlyName))
+        {
+            return probe.FriendlyName.Trim();
+        }
+
+        return index.ToString(CultureInfo.InvariantCulture);
     }
 }

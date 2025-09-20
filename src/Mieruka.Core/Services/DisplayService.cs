@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -251,6 +252,7 @@ public sealed class DisplayService : IDisplayService
                 IsPrimary = adapterDevice?.StateFlags.HasFlag(DISPLAY_DEVICE_STATE_FLAGS.DISPLAY_DEVICE_PRIMARY_DEVICE) ?? false,
                 Connector = GetConnectorName(targetName.outputTechnology),
                 Edid = ExtractEdid(monitorDevice),
+                StableId = ResolveStableId(targetName, sourceName, index),
             };
 
             monitors.Add(monitorInfo);
@@ -321,6 +323,24 @@ public sealed class DisplayService : IDisplayService
         {
             return false;
         }
+    }
+
+    private static string ResolveStableId(
+        DISPLAYCONFIG_TARGET_DEVICE_NAME target,
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source,
+        int index)
+    {
+        if (!string.IsNullOrWhiteSpace(target.targetDeviceName))
+        {
+            return target.targetDeviceName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(source.viewGdiDeviceName))
+        {
+            return source.viewGdiDeviceName.Trim();
+        }
+
+        return index.ToString(CultureInfo.InvariantCulture);
     }
 
     private static bool TryGetTargetDeviceName(LUID adapterId, uint targetId, out DISPLAYCONFIG_TARGET_DEVICE_NAME targetName)
