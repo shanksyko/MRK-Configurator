@@ -1,14 +1,44 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
 namespace Mieruka.App.Ui
 {
     internal static class SplitterGuards
     {
+        private sealed class MinSizes
+        {
+            public MinSizes(int panel1, int panel2)
+            {
+                Panel1 = panel1;
+                Panel2 = panel2;
+            }
+
+            public int Panel1 { get; }
+            public int Panel2 { get; }
+        }
+
+        private static readonly ConditionalWeakTable<SplitContainer, MinSizes> OriginalMinSizes = new();
+
+        private static MinSizes GetOriginalMinSizes(SplitContainer container)
+        {
+            return OriginalMinSizes.GetValue(container, key => new MinSizes(key.Panel1MinSize, key.Panel2MinSize));
+        }
+
         public static void ForceSafeSplitter(SplitContainer s, int? desired = null)
         {
             if (s == null || s.IsDisposed) return;
-            if (!s.IsHandleCreated || s.Width <= 0)
+
+            bool NeedsRetry()
+            {
+                if (!s.IsHandleCreated) return true;
+
+                return s.Orientation == Orientation.Horizontal
+                    ? s.ClientSize.Height <= 0
+                    : s.ClientSize.Width <= 0;
+            }
+
+            if (NeedsRetry())
             {
                 s.BeginInvoke(new Action(() => ForceSafeSplitter(s, desired)));
                 return;
@@ -17,39 +47,78 @@ namespace Mieruka.App.Ui
             s.SuspendLayout();
             try
             {
-                int origMin1 = s.Panel1MinSize;
-                int origMin2 = s.Panel2MinSize;
+                var defaults = GetOriginalMinSizes(s);
 
-                // alivio temporário para evitar range inválido
-                s.Panel1MinSize = 0;
-                s.Panel2MinSize = 0;
+                int length = s.Orientation == Orientation.Horizontal
+                    ? s.ClientSize.Height
+                    : s.ClientSize.Width;
 
-                int min = 0;
-                int max = Math.Max(0, s.Width - s.SplitterWidth);
+                int span = Math.Max(0, length - s.SplitterWidth);
+                int target = desired ?? (int)Math.Round(length * 0.35);
+                target = Math.Clamp(target, 0, span);
 
-                int target = desired ?? (int)Math.Round(s.Width * 0.35);
-                target = Math.Clamp(target, min, max);
+                int effectiveMin1 = Math.Clamp(defaults.Panel1, 0, span);
+                int effectiveMin2 = Math.Clamp(defaults.Panel2, 0, span);
+
+                if (effectiveMin1 + effectiveMin2 > span)
+                {
+                    int overflow = effectiveMin1 + effectiveMin2 - span;
+                    if (effectiveMin2 >= effectiveMin1)
+                    {
+                        effectiveMin2 = Math.Max(0, effectiveMin2 - overflow);
+                    }
+                    else
+                    {
+                        effectiveMin1 = Math.Max(0, effectiveMin1 - overflow);
+                    }
+                }
+
+                int maxDistance = Math.Max(effectiveMin1, span - effectiveMin2);
+                int safeDistance = Math.Clamp(target, effectiveMin1, maxDistance);
+
+                s.Panel1MinSize = effectiveMin1;
+                s.Panel2MinSize = effectiveMin2;
 
                 try
                 {
-                    s.SplitterDistance = target;
+                    if (s.SplitterDistance != safeDistance)
+                    {
+                        s.SplitterDistance = safeDistance;
+                    }
                 }
                 catch
                 {
-                    s.SplitterDistance = Math.Max(0, s.Width / 2);
+                    int fallback = Math.Clamp(span / 2, effectiveMin1, maxDistance);
+                    s.SplitterDistance = fallback;
                 }
 
-                // restaura minSizes e clamp final no range real
-                s.Panel1MinSize = origMin1;
-                s.Panel2MinSize = origMin2;
-
-                int hardMin = s.Panel1MinSize;
-                int hardMax = s.Width - s.Panel2MinSize - s.SplitterWidth;
-                if (hardMax > hardMin)
+                if (span >= defaults.Panel1 + defaults.Panel2)
                 {
-                    int cur = s.SplitterDistance;
-                    int clamp = Math.Clamp(cur, hardMin, hardMax);
-                    if (clamp != cur) s.SplitterDistance = clamp;
+                    bool restored = false;
+
+                    if (s.Panel1MinSize != defaults.Panel1)
+                    {
+                        s.Panel1MinSize = defaults.Panel1;
+                        restored = true;
+                    }
+
+                    if (s.Panel2MinSize != defaults.Panel2)
+                    {
+                        s.Panel2MinSize = defaults.Panel2;
+                        restored = true;
+                    }
+
+                    if (restored)
+                    {
+                        int hardMin = s.Panel1MinSize;
+                        int hardMax = Math.Max(hardMin, span - s.Panel2MinSize);
+                        int current = s.SplitterDistance;
+                        int clamp = Math.Clamp(current, hardMin, hardMax);
+                        if (clamp != current)
+                        {
+                            s.SplitterDistance = clamp;
+                        }
+                    }
                 }
             }
             finally
