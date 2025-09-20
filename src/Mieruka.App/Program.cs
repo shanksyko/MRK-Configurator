@@ -62,7 +62,7 @@ internal static class Program
                 ApplyConfiguration(config);
 
                 using var diagnosticsService = InitializeDiagnosticsService(workspace, config);
-                using var configForm = new ConfigForm(workspace, store, displayService, migrator);
+                using var configForm = new ConfigForm(workspace, store, displayService, migrator, telemetry);
                 using var trayMenu = new TrayMenuManager(
                     orchestrator,
                     () => LoadConfigurationAsync(store, migrator),
