@@ -67,7 +67,15 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 throw new InvalidOperationException($"Unable to locate monitor '{monitor.DeviceName}'.");
             }
 
-            InitializeDirect3D();
+            try
+            {
+                InitializeDirect3D();
+            }
+            catch
+            {
+                ReleaseDirect3D();
+                throw;
+            }
             _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
             _currentSize = _captureItem.Size;
 
@@ -194,27 +202,32 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         };
 
         var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-            adapter: null,
-            driverType: Vortice.Direct3D.DriverType.Hardware,
-            flags: creationFlags,
-            featureLevels: featureLevels,
-            device: out var device,
-            featureLevel: out var featureLevel,
-            immediateContext: out var context);
+            IntPtr.Zero,
+            Vortice.Direct3D.DriverType.Hardware,
+            creationFlags,
+            featureLevels,
+            out var device,
+            out var featureLevel,
+            out var context);
 
         if (result.Failure)
         {
             result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-                adapter: null,
-                driverType: Vortice.Direct3D.DriverType.Warp,
-                flags: creationFlags,
-                featureLevels: featureLevels,
-                device: out device,
-                featureLevel: out featureLevel,
-                immediateContext: out context);
+                IntPtr.Zero,
+                Vortice.Direct3D.DriverType.Warp,
+                creationFlags,
+                featureLevels,
+                out device,
+                out featureLevel,
+                out context);
         }
 
         result.CheckError();
+
+        if (device is null || context is null)
+        {
+            throw new InvalidOperationException("Failed to create a Direct3D device context for capture.");
+        }
 
         _ = featureLevel;
 
@@ -228,7 +241,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         {
             throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
         }
-        _direct3DDevice = GraphicsCaptureInterop.CreateDirect3DDevice(graphicsDevice);
+        try
+        {
+            _direct3DDevice = GraphicsCaptureInterop.CreateDirect3DDevice(graphicsDevice);
+        }
+        finally
+        {
+            Marshal.Release(graphicsDevice);
+        }
     }
 
     [SupportedOSPlatform("windows10.0.17763")]

@@ -149,12 +149,12 @@ internal sealed class ConfigValidator
             }
         }
 
-        return lookup.Values.ToList();
+        return new ReadOnlyCollection<MonitorInfo>(lookup.Values.ToList());
     }
 
     private static string FormatMonitorKey(MonitorKey key)
     {
-        return string.Join('|',
+        return string.Join("|",
             key.DeviceId?.Trim() ?? string.Empty,
             key.DisplayIndex,
             key.AdapterLuidHigh,

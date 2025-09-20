@@ -109,7 +109,7 @@ internal sealed class ConfigForm : Form
         var tabControl = new TabControl
         {
             Dock = DockStyle.Fill,
-            Font = SystemFonts.MessageBoxFont,
+            Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
         };
         tabControl.TabPages.Add(appsTab);
         tabControl.TabPages.Add(sitesTab);
@@ -135,16 +135,12 @@ internal sealed class ConfigForm : Form
         {
             Name = "ContentSplitContainer",
             Dock = DockStyle.Fill,
-            FixedPanel = FixedPanel.Panel1,
             Panel1MinSize = 120,
             Panel2MinSize = 160,
         };
 
         _contentContainer.Panel1.Controls.Add(tabControl);
         _contentContainer.Panel2.Controls.Add(monitorContainer);
-        _contentContainer.SizeChanged += OnSplitContainerSizeChanged;
-        _contentContainer.SplitterMoved += OnSplitContainerSplitterMoved;
-        _contentContainer.DpiChangedAfterParent += OnSplitContainerDpiChanged;
 
         _issuesList = new ListView
         {
@@ -163,7 +159,7 @@ internal sealed class ConfigForm : Form
         {
             Dock = DockStyle.Top,
             Text = "Problemas detectados",
-            Font = SystemFonts.MessageBoxFont,
+            Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
             Padding = new Padding(0, 0, 0, 6),
         };
 
@@ -181,7 +177,6 @@ internal sealed class ConfigForm : Form
             Name = "LayoutSplitContainer",
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            FixedPanel = FixedPanel.Panel1,
             Panel1MinSize = 140,
             Panel2MinSize = 200,
         };
@@ -189,13 +184,13 @@ internal sealed class ConfigForm : Form
         _layoutContainer.Panel1.Controls.Add(issuesPanel);
         _layoutContainer.Panel2.Controls.Add(_contentContainer);
         _layoutContainer.Panel1Collapsed = true;
-        _layoutContainer.SizeChanged += OnLayoutContainerSizeChanged;
-        _layoutContainer.SplitterMoved += OnLayoutContainerSplitterMoved;
-        _layoutContainer.DpiChangedAfterParent += OnSplitContainerDpiChanged;
 
         _statusLabel = new ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
         _statusStrip = new StatusStrip();
         _statusStrip.Items.Add(_statusLabel);
+
+        SplitContainerGuards.WireSplitterGuards(_contentContainer);
+        SplitContainerGuards.WireSplitterGuards(_layoutContainer);
 
         Controls.Add(_layoutContainer);
         Controls.Add(_statusStrip);
@@ -216,7 +211,7 @@ internal sealed class ConfigForm : Form
     {
         var menuStrip = new MenuStrip
         {
-            Font = SystemFonts.MessageBoxFont,
+            Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
         };
 
         var fileMenu = new ToolStripMenuItem("Arquivo");
@@ -418,51 +413,6 @@ internal sealed class ConfigForm : Form
         }
 
         UpdateStatus();
-    }
-
-    private void OnSplitContainerSizeChanged(object? sender, EventArgs e)
-    {
-        if (sender is SplitContainer container)
-        {
-            ClampSplitter(container);
-        }
-    }
-
-    private void OnSplitContainerSplitterMoved(object? sender, SplitterEventArgs e)
-    {
-        if (sender is SplitContainer container)
-        {
-            ClampSplitter(container);
-        }
-    }
-
-    private void OnLayoutContainerSizeChanged(object? sender, EventArgs e)
-    {
-        ClampSplitter(_layoutContainer);
-    }
-
-    private void OnLayoutContainerSplitterMoved(object? sender, SplitterEventArgs e)
-    {
-        ClampSplitter(_layoutContainer);
-    }
-
-    private void OnSplitContainerDpiChanged(object? sender, EventArgs e)
-    {
-        if (sender is not SplitContainer container)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(container, _layoutContainer))
-        {
-            SafeInitSplitter(container, LayoutSplitterRatio);
-        }
-        else if (ReferenceEquals(container, _contentContainer))
-        {
-            SafeInitSplitter(container, ContentSplitterRatio);
-        }
-
-        ClampSplitter(container);
     }
 
     private void PopulateLists()
@@ -803,11 +753,6 @@ internal sealed class ConfigForm : Form
         var target = (int)Math.Round(availableLength * ratio);
         target = Math.Clamp(target, minDistance, maxDistance);
 
-        if (target == container.SplitterDistance)
-        {
-            return;
-        }
-
         ApplySplitterDistance(container, target);
     }
 
@@ -818,21 +763,19 @@ internal sealed class ConfigForm : Form
             return;
         }
 
+        var previous = container.SplitterDistance;
+        ApplySplitterDistance(container, previous);
+
         if (!TryGetSplitterBounds(container, out _, out var minDistance, out var maxDistance))
         {
             return;
         }
 
-        var current = container.SplitterDistance;
-        var target = Math.Clamp(current, minDistance, maxDistance);
-        if (target == current)
+        if (container.SplitterDistance != previous)
         {
-            return;
+            var context = GetContainerContext(container);
+            _telemetry.Warn($"Splitter distance for {context} adjusted from {previous} to {container.SplitterDistance} (bounds {minDistance}-{maxDistance}).");
         }
-
-        var context = GetContainerContext(container);
-        _telemetry.Warn($"Splitter distance for {context} adjusted from {current} to {target} (bounds {minDistance}-{maxDistance}).");
-        ApplySplitterDistance(container, target);
     }
 
     private static bool TryGetSplitterBounds(SplitContainer container, out int availableLength, out int minDistance, out int maxDistance)
@@ -860,40 +803,13 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        if (container.SplitterDistance == distance)
-        {
-            return;
-        }
+        var before = container.SplitterDistance;
+        SplitContainerGuards.ForceSafeSplitter(container, distance);
 
-        container.SuspendLayout();
-        try
-        {
-            container.SplitterDistance = distance;
-        }
-        catch (ArgumentOutOfRangeException ex)
+        if (container.SplitterDistance != before)
         {
             var context = GetContainerContext(container);
-            if (!TryGetSplitterBounds(container, out _, out var minDistance, out var maxDistance))
-            {
-                _telemetry.Warn($"Failed to adjust splitter distance for {context} to {distance}: bounds unavailable.", ex);
-                return;
-            }
-
-            var clamped = Math.Clamp(distance, minDistance, maxDistance);
-            _telemetry.Warn($"Splitter distance for {context} rejected value {distance}. Auto-correcting to {clamped} (bounds {minDistance}-{maxDistance}).", ex);
-
-            try
-            {
-                container.SplitterDistance = clamped;
-            }
-            catch (ArgumentOutOfRangeException retryEx)
-            {
-                _telemetry.Error($"Unable to recover splitter distance for {context}. Requested {clamped} within bounds {minDistance}-{maxDistance}.", retryEx);
-            }
-        }
-        finally
-        {
-            container.ResumeLayout();
+            _telemetry.Info($"Splitter distance for {context} updated from {before} to {container.SplitterDistance}.");
         }
     }
 
