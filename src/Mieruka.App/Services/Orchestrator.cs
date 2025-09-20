@@ -94,7 +94,7 @@ public sealed class Orchestrator
     private readonly ITelemetry _telemetry;
     private readonly SemaphoreSlim _stateGate = new(1, 1);
 
-    private OrchestratorState _state = OrchestratorState.Init;
+    private int _state = (int)OrchestratorState.Init;
 
     /// <summary>
     /// Occurs whenever the orchestrator transitions to a new state.
@@ -135,7 +135,7 @@ public sealed class Orchestrator
     /// <summary>
     /// Gets the current state of the orchestrator.
     /// </summary>
-    public OrchestratorState State => Volatile.Read(ref _state);
+    public OrchestratorState State => (OrchestratorState)Volatile.Read(ref _state);
 
     /// <summary>
     /// Prepares the orchestrated services and transitions the orchestrator to the running state.
@@ -146,7 +146,7 @@ public sealed class Orchestrator
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var current = Volatile.Read(ref _state);
+            var current = (OrchestratorState)Volatile.Read(ref _state);
             switch (current)
             {
                 case OrchestratorState.Init:
@@ -186,7 +186,7 @@ public sealed class Orchestrator
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var current = Volatile.Read(ref _state);
+            var current = (OrchestratorState)Volatile.Read(ref _state);
             if (current is OrchestratorState.Init)
             {
                 _telemetry.Info("Stop requested while orchestrator is in the initial state. No action taken.");
@@ -217,7 +217,7 @@ public sealed class Orchestrator
         await _stateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (Volatile.Read(ref _state) != OrchestratorState.Running)
+            if ((OrchestratorState)Volatile.Read(ref _state) != OrchestratorState.Running)
             {
                 _telemetry.Info("Recover requested while orchestrator is not running. Operation ignored.");
                 return;
@@ -397,14 +397,14 @@ public sealed class Orchestrator
 
     private void TransitionTo(OrchestratorState next)
     {
-        var previous = Volatile.Read(ref _state);
+        var previous = (OrchestratorState)Volatile.Read(ref _state);
         if (previous == next)
         {
             return;
         }
 
         _telemetry.Info($"Orchestrator state changed from {previous} to {next}.");
-        Volatile.Write(ref _state, next);
+        Volatile.Write(ref _state, (int)next);
 
         var handler = StateChanged;
         if (handler is not null)

@@ -399,8 +399,9 @@ public sealed class UpdaterService : IDisposable
 
     private static bool TryParseVersion(string? value, out Version version)
     {
-        if (!string.IsNullOrWhiteSpace(value) && Version.TryParse(value, out version))
+        if (!string.IsNullOrWhiteSpace(value) && Version.TryParse(value, out var parsed) && parsed is not null)
         {
+            version = parsed;
             return true;
         }
 

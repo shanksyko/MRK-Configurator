@@ -13,7 +13,7 @@ namespace Mieruka.Core.Services;
 /// Enumerates the monitors available in the system and observes topology changes.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class DisplayService : IDisplayService, IDisposable
+public sealed class DisplayService : IDisplayService
 {
     private const int ErrorSuccess = 0;
 

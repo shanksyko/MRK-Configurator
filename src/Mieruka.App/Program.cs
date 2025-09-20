@@ -33,10 +33,10 @@ internal static class Program
             using var watchdogService = bindingService is not null ? new WatchdogService(bindingService, telemetry) : null;
             using var updaterService = new UpdaterService(telemetry);
 
-            var monitorComponent = bindingService is not null
+            IOrchestrationComponent monitorComponent = bindingService is not null
                 ? new BindingOrchestrationComponent(bindingService, telemetry)
                 : NullOrchestrationComponent.Instance;
-            var rotationComponent = NullOrchestrationComponent.Instance;
+            IOrchestrationComponent rotationComponent = NullOrchestrationComponent.Instance;
             var cycleComponent = cycleManager as IOrchestrationComponent ?? NullOrchestrationComponent.Instance;
             var watchdogComponent = watchdogService as IOrchestrationComponent ?? NullOrchestrationComponent.Instance;
             var orchestrator = new Orchestrator(monitorComponent, rotationComponent, cycleComponent, watchdogComponent, telemetry);
@@ -121,7 +121,12 @@ internal static class Program
             }
         }
 
-        return config.Monitors;
+        if (config.Monitors.Count == 0)
+        {
+            return Array.Empty<MonitorInfo>();
+        }
+
+        return new List<MonitorInfo>(config.Monitors);
     }
 
     private static IDisplayService? CreateDisplayService(ITelemetry telemetry)

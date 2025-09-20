@@ -1,3 +1,5 @@
+using System;
+
 namespace Mieruka.Preview;
 
 /// <summary>
@@ -13,7 +15,7 @@ public static class MonitorCaptureFactory
     public static IMonitorCapture Create()
     {
 #if WINDOWS10_0_17763_0_OR_GREATER
-        if (GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
         {
             return new GraphicsCaptureProvider();
         }

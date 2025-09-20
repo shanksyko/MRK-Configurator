@@ -270,7 +270,7 @@ public sealed class DiagnosticsService : IDisposable
 
     private static string NormalizePrefix(string prefix)
     {
-        return prefix.EndsWith('/', StringComparison.Ordinal)
+        return prefix.EndsWith("/", StringComparison.Ordinal)
             ? prefix
             : prefix + "/";
     }
@@ -282,12 +282,12 @@ public sealed class DiagnosticsService : IDisposable
             return "/";
         }
 
-        if (!path.StartsWith('/', StringComparison.Ordinal))
+        if (!path.StartsWith("/", StringComparison.Ordinal))
         {
             path = "/" + path;
         }
 
-        if (path.Length > 1 && path.EndsWith('/', StringComparison.Ordinal))
+        if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
         {
             path = path.TrimEnd('/');
         }
