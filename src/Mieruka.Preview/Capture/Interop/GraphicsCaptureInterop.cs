@@ -20,7 +20,8 @@ internal static class GraphicsCaptureInterop
             throw new ArgumentNullException(nameof(monitorHandle));
         }
 
-        Marshal.ThrowExceptionForHR(RoGetActivationFactory(GraphicsCaptureItemClassId, ref GraphicsCaptureItemInteropGuid, out var factoryPtr));
+        var interopGuid = GraphicsCaptureItemInteropGuid;
+        Marshal.ThrowExceptionForHR(RoGetActivationFactory(GraphicsCaptureItemClassId, ref interopGuid, out var factoryPtr));
         try
         {
             var factory = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
@@ -75,7 +76,8 @@ internal static class GraphicsCaptureInterop
         var unknown = Marshal.GetIUnknownForObject(surface);
         try
         {
-            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, ref Direct3DDxgiInterfaceAccessGuid, out var accessPtr));
+            var accessGuid = Direct3DDxgiInterfaceAccessGuid;
+            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, ref accessGuid, out var accessPtr));
             IDirect3DDxgiInterfaceAccess access = null!;
             try
             {
