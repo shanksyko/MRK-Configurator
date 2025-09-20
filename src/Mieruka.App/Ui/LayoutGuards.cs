@@ -23,14 +23,14 @@ internal static class LayoutGuards
             {
                 container.BeginInvoke(new Action(() => SafeApplySplitter(container, desired)));
             }
+            catch (ObjectDisposedException)
+            {
+                // Control is disposing; nothing to apply.
+            }
             catch (InvalidOperationException)
             {
                 // Control is not ready to receive invoke requests. The guard will run
                 // again once the container is created or sized.
-            }
-            catch (ObjectDisposedException)
-            {
-                // Control is disposing; nothing to apply.
             }
 
             return;
