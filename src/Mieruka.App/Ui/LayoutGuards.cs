@@ -14,38 +14,51 @@ internal static class LayoutGuards
 
         if (!container.IsHandleCreated)
         {
-            container.BeginInvoke(new Action(() => SafeApplySplitter(container, desired)));
+            try
+            {
+                container.BeginInvoke(new Action(() => SafeApplySplitter(container, desired)));
+            }
+            catch (InvalidOperationException)
+            {
+                // Control is not ready to receive invoke requests. The guard will run
+                // again once the container is created or sized.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Control is disposing; nothing to apply.
+            }
+
             return;
         }
 
-        var clientSize = container.ClientSize;
-        var orientation = container.Orientation;
-        var totalLength = orientation == Orientation.Horizontal
-            ? clientSize.Height
-            : clientSize.Width;
-        var splitterThickness = Math.Max(0, container.SplitterWidth);
-        var availableLength = Math.Max(0, totalLength - splitterThickness);
+        var displaySize = container.Orientation == Orientation.Horizontal
+            ? container.ClientSize.Height
+            : container.ClientSize.Width;
 
-        if (availableLength <= 0)
+        if (displaySize <= 0)
         {
-            container.BeginInvoke(new Action(() => SafeApplySplitter(container, desired)));
             return;
         }
 
+        var splitterWidth = Math.Max(0, container.SplitterWidth);
         var panel1Min = Math.Max(0, container.Panel1MinSize);
         var panel2Min = Math.Max(0, container.Panel2MinSize);
+        var available = displaySize - splitterWidth;
 
-        var minDistance = Math.Min(panel1Min, availableLength);
-        var maxDistance = Math.Max(availableLength - panel2Min, minDistance);
-        maxDistance = Math.Clamp(maxDistance, minDistance, availableLength);
-
-        var current = desired ?? container.SplitterDistance;
-        var clamped = Math.Clamp(current, minDistance, maxDistance);
-
-        if (clamped == container.SplitterDistance)
+        if (available <= 0)
         {
             return;
         }
+
+        var max = available - panel2Min;
+        if (max < panel1Min)
+        {
+            return;
+        }
+
+        var fallback = displaySize / 2;
+        var target = desired ?? fallback;
+        var clamped = Math.Clamp(target, panel1Min, max);
 
         try
         {
@@ -53,18 +66,9 @@ internal static class LayoutGuards
         }
         catch (ArgumentException)
         {
-            var fallback = Math.Clamp(availableLength / 2, minDistance, maxDistance);
-            if (fallback != container.SplitterDistance)
-            {
-                try
-                {
-                    container.SplitterDistance = fallback;
-                }
-                catch (ArgumentException)
-                {
-                    // If both panels enforce incompatible minimum sizes, keep the previous distance.
-                }
-            }
+            // If the container cannot satisfy the layout constraints at the current size,
+            // keep the existing SplitterDistance. The SizeChanged guard will run again
+            // after layout and attempt to apply the clamp with updated bounds.
         }
         catch (InvalidOperationException)
         {
@@ -124,10 +128,6 @@ internal static class LayoutGuards
         if (container.IsHandleCreated)
         {
             ApplySafeSplitter();
-        }
-        else
-        {
-            container.BeginInvoke(new Action(ApplySafeSplitter));
         }
     }
 }
