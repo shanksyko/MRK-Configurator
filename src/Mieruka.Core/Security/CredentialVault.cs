@@ -16,6 +16,10 @@ public sealed class CredentialVault
 {
     private const int FileFormatVersion = 1;
     private const string FileExtension = ".vault";
+    private const string SiteKeyPrefix = "site";
+    private const string UsernameSuffix = "username";
+    private const string PasswordSuffix = "password";
+    private const string TotpSuffix = "totp";
 
     /// <summary>
     /// Represents the logical version of a stored secret. Incrementing the value triggers
@@ -90,6 +94,88 @@ public sealed class CredentialVault
         secure.MakeReadOnly();
         SaveSecret(key, secure, version);
     }
+
+    /// <summary>
+    /// Determines whether a secret exists in the vault.
+    /// </summary>
+    /// <param name="key">Logical name of the secret.</param>
+    public bool Exists(string key)
+    {
+        ValidateKey(key);
+        var path = ResolveStoragePath(key);
+        return File.Exists(path);
+    }
+
+    /// <summary>
+    /// Attempts to retrieve a secret from the vault.
+    /// </summary>
+    /// <param name="key">Logical name of the secret.</param>
+    /// <param name="secret">Secret value when found.</param>
+    /// <returns><c>true</c> when the secret exists; otherwise, <c>false</c>.</returns>
+    public bool TryGet(string key, out SecureString? secret)
+    {
+        try
+        {
+            secret = GetSecret(key);
+            return true;
+        }
+        catch (SecretNotFoundException)
+        {
+            secret = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Persists a username associated with the provided site identifier.
+    /// </summary>
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <param name="username">Username stored in the vault.</param>
+    public void SetUsername(string siteId, SecureString username)
+    {
+        ArgumentNullException.ThrowIfNull(username);
+        SaveSecret(BuildSiteCredentialKey(siteId, UsernameSuffix), username);
+    }
+
+    /// <summary>
+    /// Persists a password associated with the provided site identifier.
+    /// </summary>
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <param name="password">Password stored in the vault.</param>
+    public void SetPassword(string siteId, SecureString password)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        SaveSecret(BuildSiteCredentialKey(siteId, PasswordSuffix), password);
+    }
+
+    /// <summary>
+    /// Persists a TOTP secret associated with the provided site identifier.
+    /// </summary>
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <param name="totp">TOTP seed stored in the vault.</param>
+    public void SetTotp(string siteId, SecureString totp)
+    {
+        ArgumentNullException.ThrowIfNull(totp);
+        SaveSecret(BuildSiteCredentialKey(siteId, TotpSuffix), totp);
+    }
+
+    /// <summary>
+    /// Builds the username key associated with the provided site identifier.
+    /// </summary>
+    public static string BuildUsernameKey(string siteId)
+        => BuildSiteCredentialKey(siteId, UsernameSuffix);
+
+    /// <summary>
+    /// Builds the password key associated with the provided site identifier.
+    /// </summary>
+    public static string BuildPasswordKey(string siteId)
+        => BuildSiteCredentialKey(siteId, PasswordSuffix);
+
+    /// <summary>
+    /// Builds the TOTP key associated with the provided site identifier.
+    /// </summary>
+    public static string BuildTotpKey(string siteId)
+        => BuildSiteCredentialKey(siteId, TotpSuffix);
 
     /// <summary>
     /// Retrieves a secret from the vault.
@@ -256,6 +342,20 @@ public sealed class CredentialVault
         if (key.Length > 128)
         {
             throw new ArgumentException("Secret keys must not exceed 128 characters.", nameof(key));
+        }
+    }
+
+    private static string BuildSiteCredentialKey(string siteId, string suffix)
+    {
+        ValidateSiteId(siteId);
+        return $"{SiteKeyPrefix}:{siteId}:{suffix}";
+    }
+
+    private static void ValidateSiteId(string siteId)
+    {
+        if (string.IsNullOrWhiteSpace(siteId))
+        {
+            throw new ArgumentException("Site identifier is required.", nameof(siteId));
         }
     }
 
