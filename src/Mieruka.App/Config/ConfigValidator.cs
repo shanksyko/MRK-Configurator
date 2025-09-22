@@ -12,7 +12,7 @@ namespace Mieruka.App.Config;
 /// Performs validation on <see cref="GeneralConfig"/> instances, surfacing errors and warnings
 /// that could prevent the player from operating correctly.
 /// </summary>
-internal sealed class ConfigValidator
+internal sealed partial class ConfigValidator
 {
     private static readonly IReadOnlyList<string> ChromeDriverCandidates = new[]
     {
@@ -94,6 +94,7 @@ internal sealed class ConfigValidator
         ValidateSites(config.Sites, monitors, issues);
         ValidateCycle(config, issues);
         ValidateDriverAvailability(config.Sites, issues);
+        ValidateSecurity(config, issues);
 
         return new ConfigValidationReport(new ReadOnlyCollection<ConfigValidationIssue>(issues));
     }
