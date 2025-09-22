@@ -12,9 +12,17 @@ namespace Mieruka.Core.Security;
 /// </summary>
 public static class Redaction
 {
-    private static readonly Regex EmailRegex = new("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", RegexOptions.Compiled);
-    private static readonly Regex TokenRegex = new("(?:(?:bearer|token|api[_-]?key|password)\\s*[=:]\\s*)([A-Za-z0-9._-]{6,})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex GuidRegex = new("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", RegexOptions.Compiled);
+    private static readonly Regex EmailRegex = new(
+        @"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex TokenRegex = new(
+        @"(?:(?:bearer|token|api[_-]?key|password)\s*[=:]\s*)([A-Za-z0-9._-]{6,})",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex GuidRegex = new(
+        @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     /// <summary>
     /// Redacts sensitive information from the input string.

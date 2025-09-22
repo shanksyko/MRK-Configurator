@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using Serilog;
 
 namespace Mieruka.Core.Security;
 
@@ -10,8 +11,13 @@ namespace Mieruka.Core.Security;
 /// </summary>
 public static class InputSanitizer
 {
-    private static readonly Regex SelectorRegex = new("^[A-Za-z0-9_#:\\[\\].>+*\-\s]+$", RegexOptions.Compiled);
-    private static readonly Regex HostRegex = new("^[A-Za-z0-9.-]+$", RegexOptions.Compiled);
+    private static readonly Regex SelectorRegex = new(
+        @"^[A-Za-z0-9_#:\[\].>+*\-\s]+$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex HostRegex = new(
+        @"^[A-Za-z0-9.-]+$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     /// <summary>
     /// Normalizes a file system path ensuring that it does not escape the provided base directory.
@@ -26,6 +32,9 @@ public static class InputSanitizer
             throw new ArgumentException("Path must be provided.", nameof(path));
         }
 
+        path = path.Trim();
+        EnsureSafeAscii(path, 260, nameof(path));
+
         var root = string.IsNullOrWhiteSpace(baseDirectory) ? Directory.GetCurrentDirectory() : baseDirectory;
         var combined = Path.Combine(root, path);
         var normalized = Path.GetFullPath(combined);
@@ -33,6 +42,7 @@ public static class InputSanitizer
 
         if (!normalized.StartsWith(rootNormalized, StringComparison.OrdinalIgnoreCase))
         {
+            Log.Warning("Rejected path traversal attempt while sanitizing path (argument={Argument}).", nameof(path));
             throw new InvalidOperationException("Path traversal detected.");
         }
 
@@ -54,6 +64,7 @@ public static class InputSanitizer
         host = host.Trim().TrimEnd('.');
         if (host.Length > 255)
         {
+            Log.Warning("Rejected host due to excessive length (length={Length}).", host.Length);
             throw new ArgumentException("Host is too long.", nameof(host));
         }
 
@@ -61,6 +72,7 @@ public static class InputSanitizer
         var ascii = idn.GetAscii(host);
         if (!HostRegex.IsMatch(ascii))
         {
+            Log.Warning("Rejected host due to invalid characters (length={Length}).", host.Length);
             throw new ArgumentException("Host contains invalid characters.", nameof(host));
         }
 
@@ -73,7 +85,7 @@ public static class InputSanitizer
     /// <param name="value">Input value.</param>
     /// <param name="maxLength">Maximum allowed length.</param>
     /// <returns>Sanitized selector.</returns>
-    public static string SanitizeSelector(string value, int maxLength = 256)
+    public static string SanitizeSelector(string value, int maxLength = 512)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -83,11 +95,13 @@ public static class InputSanitizer
         value = value.Trim();
         if (value.Length > maxLength)
         {
+            Log.Warning("Rejected selector due to excessive length (length={Length}, max={Max}).", value.Length, maxLength);
             throw new ArgumentException("Selector is too long.", nameof(value));
         }
 
         if (!SelectorRegex.IsMatch(value))
         {
+            Log.Warning("Rejected selector due to invalid characters (length={Length}).", value.Length);
             throw new ArgumentException("Selector contains invalid characters.", nameof(value));
         }
 
@@ -106,6 +120,7 @@ public static class InputSanitizer
 
         if (value.Length > maxLength)
         {
+            Log.Warning("Rejected value due to excessive length (argument={Argument}, length={Length}, max={Max}).", argumentName, value.Length, maxLength);
             throw new ArgumentException($"Value exceeds maximum length of {maxLength} characters.", argumentName);
         }
 
@@ -113,6 +128,7 @@ public static class InputSanitizer
         {
             if (ch < 0x20 || ch > 0x7E)
             {
+                Log.Warning("Rejected value due to unsupported character (argument={Argument}).", argumentName);
                 throw new ArgumentException("Value contains unsupported characters.", argumentName);
             }
         }

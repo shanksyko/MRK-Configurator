@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Mieruka.Core.Security;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -70,13 +71,16 @@ public sealed class TelemetryService : ITelemetry, IDisposable
 
     private void Write(LogEventLevel level, string message, Exception? exception)
     {
+        var sanitizedMessage = Redaction.Redact(message);
+
         if (exception is null)
         {
-            _logger.Write(level, message);
+            _logger.Write(level, sanitizedMessage);
             return;
         }
 
-        _logger.Write(level, exception, message);
+        var sanitizedException = Redaction.Redact(exception.Message);
+        _logger.Write(level, "{Message} (detalhes: {ExceptionMessage})", sanitizedMessage, sanitizedException);
     }
 
     /// <summary>
