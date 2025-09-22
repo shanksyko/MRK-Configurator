@@ -1,0 +1,362 @@
+using System;
+using System.Buffers;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace Mieruka.Core.Security;
+
+/// <summary>
+/// Provides DPAPI backed storage for secrets that belong to the current user.
+/// </summary>
+public sealed class CredentialVault
+{
+    private const int FileFormatVersion = 1;
+    private const string FileExtension = ".vault";
+
+    /// <summary>
+    /// Represents the logical version of a stored secret. Incrementing the value triggers
+    /// an automatic re-encryption during the next read, allowing migrations of the payload format.
+    /// </summary>
+    public const int CurrentSecretVersion = 1;
+
+    private readonly string _vaultDirectory;
+    private readonly byte[] _entropy;
+    private readonly ConcurrentDictionary<string, object> _locks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CredentialVault"/> class.
+    /// </summary>
+    /// <param name="applicationEntropy">Entropy bound to the application used during encryption.</param>
+    /// <param name="vaultDirectory">Optional override for the storage directory.</param>
+    public CredentialVault(string? applicationEntropy = null, string? vaultDirectory = null)
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _vaultDirectory = vaultDirectory ?? Path.Combine(localAppData, "Mieruka", "secrets");
+
+        Directory.CreateDirectory(_vaultDirectory);
+
+        var entropySeed = string.IsNullOrWhiteSpace(applicationEntropy)
+            ? "Mieruka.CredentialVault"
+            : $"Mieruka.CredentialVault|{applicationEntropy.Trim()}";
+
+        _entropy = SHA256.HashData(Encoding.UTF8.GetBytes(entropySeed));
+    }
+
+    /// <summary>
+    /// Saves a secret to the vault.
+    /// </summary>
+    /// <param name="key">Logical name of the secret.</param>
+    /// <param name="secret">Secret that should be stored.</param>
+    /// <param name="version">Logical version of the secret payload.</param>
+    public void SaveSecret(string key, SecureString secret, int version = CurrentSecretVersion)
+    {
+        ArgumentNullException.ThrowIfNull(secret);
+        ValidateKey(key);
+
+        var chars = ExtractChars(secret);
+        try
+        {
+            SaveSecretCore(key, chars, version);
+        }
+        finally
+        {
+            if (chars.Length > 0)
+            {
+                CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(chars.AsSpan()));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Saves a plain text secret to the vault.
+    /// </summary>
+    /// <param name="key">Logical name of the secret.</param>
+    /// <param name="secret">Secret value in plain text.</param>
+    /// <param name="version">Logical version of the secret payload.</param>
+    public void SaveSecret(string key, string secret, int version = CurrentSecretVersion)
+    {
+        ArgumentNullException.ThrowIfNull(secret);
+
+        using var secure = new SecureString();
+        foreach (var ch in secret)
+        {
+            secure.AppendChar(ch);
+        }
+
+        secure.MakeReadOnly();
+        SaveSecret(key, secure, version);
+    }
+
+    /// <summary>
+    /// Retrieves a secret from the vault.
+    /// </summary>
+    /// <param name="key">Logical name of the secret.</param>
+    /// <returns>Secret value stored for the specified key.</returns>
+    /// <exception cref="SecretNotFoundException">Thrown when the secret could not be found.</exception>
+    /// <exception cref="CredentialVaultCorruptedException">Thrown when the stored value is corrupted.</exception>
+    public SecureString GetSecret(string key)
+    {
+        ValidateKey(key);
+
+        var path = ResolveStoragePath(key);
+        if (!File.Exists(path))
+        {
+            throw new SecretNotFoundException(key);
+        }
+
+        var sync = _locks.GetOrAdd(path, _ => new object());
+        lock (sync)
+        {
+            try
+            {
+                var raw = File.ReadAllBytes(path);
+                if (raw.Length == 0)
+                {
+                    throw new CredentialVaultCorruptedException(key);
+                }
+
+                using var stream = new MemoryStream(raw, writable: false);
+                using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+
+                var version = reader.ReadInt32();
+                if (version != FileFormatVersion)
+                {
+                    return ReadLegacySecret(key, raw);
+                }
+
+                var logicalVersion = reader.ReadInt32();
+                var updatedAtTicks = reader.ReadInt64();
+                var storedKeyHash = reader.ReadBytes(32);
+                var cipherLength = reader.ReadInt32();
+                var cipher = reader.ReadBytes(cipherLength);
+
+                var expectedHash = ComputeKeyHash(key);
+                if (!CryptographicOperations.FixedTimeEquals(expectedHash, storedKeyHash))
+                {
+                    throw new CredentialVaultCorruptedException(key);
+                }
+
+                var plain = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                try
+                {
+                    var secure = BuildSecureString(plain);
+                    if (logicalVersion < CurrentSecretVersion)
+                    {
+                        var copy = secure.Copy();
+                        copy.MakeReadOnly();
+                        SaveSecret(key, copy, CurrentSecretVersion);
+                    }
+
+                    return secure;
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(plain);
+                }
+            }
+            catch (EndOfStreamException ex)
+            {
+                DeleteSecret(key);
+                throw new CredentialVaultCorruptedException(key, ex);
+            }
+            catch (CryptographicException ex)
+            {
+                DeleteSecret(key);
+                throw new CredentialVaultCorruptedException(key, ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deletes a secret from the vault. The operation succeeds even if the secret does not exist.
+    /// </summary>
+    /// <param name="key">Logical name of the secret.</param>
+    public void DeleteSecret(string key)
+    {
+        ValidateKey(key);
+        var path = ResolveStoragePath(key);
+        var sync = _locks.GetOrAdd(path, _ => new object());
+
+        lock (sync)
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    internal string ResolveStoragePath(string key)
+    {
+        ValidateKey(key);
+        var fileName = $"{Convert.ToHexString(ComputeKeyHash(key))}{FileExtension}";
+        return Path.Combine(_vaultDirectory, fileName);
+    }
+
+    internal ReadOnlySpan<byte> EntropySpan => _entropy;
+
+    private void SaveSecretCore(string key, ReadOnlySpan<char> chars, int version)
+    {
+        var path = ResolveStoragePath(key);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        var sync = _locks.GetOrAdd(path, _ => new object());
+        lock (sync)
+        {
+            var plain = Encoding.UTF8.GetBytes(chars);
+            try
+            {
+                var cipher = ProtectedData.Protect(plain, _entropy, DataProtectionScope.CurrentUser);
+                using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
+
+                writer.Write(FileFormatVersion);
+                writer.Write(version);
+                writer.Write(DateTimeOffset.UtcNow.UtcTicks);
+                writer.Write(ComputeKeyHash(key));
+                writer.Write(cipher.Length);
+                writer.Write(cipher);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(plain);
+            }
+        }
+    }
+
+    private SecureString ReadLegacySecret(string key, byte[] raw)
+    {
+        var cipher = raw;
+        var plain = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+        try
+        {
+            var secure = BuildSecureString(plain);
+            var copy = secure.Copy();
+            copy.MakeReadOnly();
+            SaveSecret(key, copy, CurrentSecretVersion);
+            return secure;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plain);
+        }
+    }
+
+    private static void ValidateKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new ArgumentException("A key must be provided.", nameof(key));
+        }
+
+        if (key.Length > 128)
+        {
+            throw new ArgumentException("Secret keys must not exceed 128 characters.", nameof(key));
+        }
+    }
+
+    private static char[] ExtractChars(SecureString value)
+    {
+        if (value.Length == 0)
+        {
+            return Array.Empty<char>();
+        }
+
+        IntPtr pointer = IntPtr.Zero;
+        try
+        {
+            pointer = Marshal.SecureStringToGlobalAllocUnicode(value);
+            var buffer = new char[value.Length];
+            Marshal.Copy(pointer, buffer, 0, value.Length);
+            return buffer;
+        }
+        finally
+        {
+            if (pointer != IntPtr.Zero)
+            {
+                Marshal.ZeroFreeGlobalAllocUnicode(pointer);
+            }
+        }
+    }
+
+    private static SecureString BuildSecureString(byte[] plain)
+    {
+        var charCount = Encoding.UTF8.GetCharCount(plain);
+        if (charCount == 0)
+        {
+            var empty = new SecureString();
+            empty.MakeReadOnly();
+            return empty;
+        }
+
+        var buffer = ArrayPool<char>.Shared.Rent(charCount);
+        try
+        {
+            Encoding.UTF8.GetChars(plain, 0, plain.Length, buffer, 0);
+            var secure = new SecureString();
+            for (var i = 0; i < charCount; i++)
+            {
+                secure.AppendChar(buffer[i]);
+            }
+
+            secure.MakeReadOnly();
+            return secure;
+        }
+        finally
+        {
+            Array.Clear(buffer, 0, charCount);
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+    }
+
+    private static byte[] ComputeKeyHash(string key)
+    {
+        return SHA256.HashData(Encoding.UTF8.GetBytes(key));
+    }
+}
+
+/// <summary>
+/// Base exception for credential vault errors.
+/// </summary>
+public class CredentialVaultException : Exception
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CredentialVaultException"/> class.
+    /// </summary>
+    public CredentialVaultException(string message, Exception? inner = null)
+        : base(message, inner)
+    {
+    }
+}
+
+/// <summary>
+/// Exception thrown when a secret is not found.
+/// </summary>
+public sealed class SecretNotFoundException : CredentialVaultException
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SecretNotFoundException"/> class.
+    /// </summary>
+    public SecretNotFoundException(string key)
+        : base($"Secret '{key}' was not found.")
+    {
+    }
+}
+
+/// <summary>
+/// Exception thrown when the stored secret is corrupted and cannot be decrypted.
+/// </summary>
+public sealed class CredentialVaultCorruptedException : CredentialVaultException
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CredentialVaultCorruptedException"/> class.
+    /// </summary>
+    public CredentialVaultCorruptedException(string key, Exception? inner = null)
+        : base($"Stored secret '{key}' is corrupted and was removed.", inner)
+    {
+    }
+}
