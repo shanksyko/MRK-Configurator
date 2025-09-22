@@ -10,12 +10,14 @@ public sealed record class LoginProfile
     /// <summary>
     /// Username applied to the login form.
     /// </summary>
-    public string Username { get; init; } = string.Empty;
+#pragma warning disable CA1056 // Uri properties should not be strings - username is sensitive and stored securely
+    public string? Username { get; init; }
+#pragma warning restore CA1056
 
     /// <summary>
     /// Password applied to the login form.
     /// </summary>
-    public string Password { get; init; } = string.Empty;
+    public string? Password { get; init; }
 
     /// <summary>
     /// Optional CSS/XPath selector that targets the username field.

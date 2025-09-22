@@ -32,6 +32,14 @@ public sealed class SecurityTests : IDisposable
     }
 
     [Fact]
+    public void CredentialVault_SiteKeyConventions()
+    {
+        Assert.Equal("site:alpha:username", CredentialVault.BuildUsernameKey("alpha"));
+        Assert.Equal("site:alpha:password", CredentialVault.BuildPasswordKey("alpha"));
+        Assert.Equal("site:alpha:totp", CredentialVault.BuildTotpKey("alpha"));
+    }
+
+    [Fact]
     public void CredentialVault_MigratesLegacyEntries()
     {
         var vault = new CredentialVault("tests", Path.Combine(_tempDirectory, "vault"));
@@ -62,6 +70,31 @@ public sealed class SecurityTests : IDisposable
 
         Assert.Throws<CredentialVaultCorruptedException>(() => vault.GetSecret("broken"));
         Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void SecretsProvider_StoresAndRetrievesCredentials()
+    {
+        var vault = new CredentialVault("tests", Path.Combine(_tempDirectory, "vault"));
+        var cookies = new CookieSafeStore("tests", baseDirectory: Path.Combine(_tempDirectory, "cookies"));
+        var provider = new SecretsProvider(vault, cookies, TimeSpan.FromMinutes(5));
+
+        var username = CreateSecureString("user@example.com");
+        var password = CreateSecureString("p@ssw0rd");
+
+        provider.SaveCredentials("alpha", username, password);
+
+        var cachedUser = provider.GetUsernameFor("alpha");
+        var cachedPass = provider.GetPasswordFor("alpha");
+
+        Assert.NotNull(cachedUser);
+        Assert.NotNull(cachedPass);
+        Assert.Equal("user@example.com", ToUnsecureString(cachedUser!));
+        Assert.Equal("p@ssw0rd", ToUnsecureString(cachedPass!));
+
+        provider.DeleteCredentials("alpha");
+        Assert.Null(provider.GetUsernameFor("alpha"));
+        Assert.Null(provider.GetPasswordFor("alpha"));
     }
 
     [Fact]

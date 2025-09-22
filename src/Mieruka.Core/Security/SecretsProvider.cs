@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Security;
-using System.Threading;
 
 namespace Mieruka.Core.Security;
 
@@ -12,52 +11,96 @@ public sealed class SecretsProvider
 {
     private readonly CredentialVault _vault;
     private readonly CookieSafeStore _cookieStore;
-    private readonly ConcurrentDictionary<string, WeakReference<SecureString>> _secretCache = new(StringComparer.OrdinalIgnoreCase);
-    private long _hits;
-    private long _misses;
+    private readonly ConcurrentDictionary<string, CacheEntry> _secretCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TimeSpan _cacheDuration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SecretsProvider"/> class.
     /// </summary>
-    public SecretsProvider(CredentialVault vault, CookieSafeStore cookieStore)
+    /// <param name="vault">Vault used to persist credentials.</param>
+    /// <param name="cookieStore">Cookie store used to persist browser cookies.</param>
+    /// <param name="cacheDuration">Optional duration applied to cached secrets.</param>
+    public SecretsProvider(CredentialVault vault, CookieSafeStore cookieStore, TimeSpan? cacheDuration = null)
     {
         _vault = vault ?? throw new ArgumentNullException(nameof(vault));
         _cookieStore = cookieStore ?? throw new ArgumentNullException(nameof(cookieStore));
+        _cacheDuration = cacheDuration is { } duration && duration > TimeSpan.Zero
+            ? duration
+            : TimeSpan.FromSeconds(45);
     }
 
     /// <summary>
-    /// Saves the provided secret in the underlying vault and updates the cache.
+    /// Persists credentials for the provided site in the underlying vault.
     /// </summary>
-    public void SaveSecret(string key, SecureString secret, int version = CredentialVault.CurrentSecretVersion)
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <param name="username">Username stored in the vault.</param>
+    /// <param name="password">Password stored in the vault.</param>
+    public void SaveCredentials(string siteId, SecureString username, SecureString password)
     {
-        _vault.SaveSecret(key, secret, version);
-        _secretCache[key] = new WeakReference<SecureString>(secret.Copy());
+        ArgumentNullException.ThrowIfNull(username);
+        ArgumentNullException.ThrowIfNull(password);
+
+        SaveSecretInternal(CredentialVault.BuildUsernameKey(siteId), username);
+        SaveSecretInternal(CredentialVault.BuildPasswordKey(siteId), password);
     }
 
     /// <summary>
-    /// Retrieves a secret, leveraging the in-memory cache when possible.
+    /// Persists a TOTP secret for the provided site.
     /// </summary>
-    public SecureString GetSecret(string key)
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <param name="totp">TOTP seed stored in the vault.</param>
+    public void SaveTotp(string siteId, SecureString totp)
     {
-        if (_secretCache.TryGetValue(key, out var reference) && reference.TryGetTarget(out var cached))
-        {
-            Interlocked.Increment(ref _hits);
-            return cached.Copy();
-        }
+        ArgumentNullException.ThrowIfNull(totp);
 
-        Interlocked.Increment(ref _misses);
-        var secret = _vault.GetSecret(key);
-        _secretCache[key] = new WeakReference<SecureString>(secret.Copy());
-        return secret;
+        SaveSecretInternal(CredentialVault.BuildTotpKey(siteId), totp);
     }
 
     /// <summary>
-    /// Deletes the specified secret.
+    /// Retrieves the username stored for the provided site.
     /// </summary>
-    public void DeleteSecret(string key)
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <returns>The stored username when present; otherwise, <c>null</c>.</returns>
+    public SecureString? GetUsernameFor(string siteId)
     {
-        _vault.DeleteSecret(key);
-        _secretCache.TryRemove(key, out _);
+        return GetSecretInternal(CredentialVault.BuildUsernameKey(siteId));
+    }
+
+    /// <summary>
+    /// Retrieves the password stored for the provided site.
+    /// </summary>
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <returns>The stored password when present; otherwise, <c>null</c>.</returns>
+    public SecureString? GetPasswordFor(string siteId)
+    {
+        return GetSecretInternal(CredentialVault.BuildPasswordKey(siteId));
+    }
+
+    /// <summary>
+    /// Retrieves the TOTP seed stored for the provided site.
+    /// </summary>
+    /// <param name="siteId">Logical site identifier.</param>
+    /// <returns>The stored TOTP seed when present; otherwise, <c>null</c>.</returns>
+    public SecureString? GetTotpFor(string siteId)
+    {
+        return GetSecretInternal(CredentialVault.BuildTotpKey(siteId));
+    }
+
+    /// <summary>
+    /// Deletes credentials stored for the provided site.
+    /// </summary>
+    public void DeleteCredentials(string siteId)
+    {
+        DeleteSecretInternal(CredentialVault.BuildUsernameKey(siteId));
+        DeleteSecretInternal(CredentialVault.BuildPasswordKey(siteId));
+    }
+
+    /// <summary>
+    /// Deletes the stored TOTP seed for the provided site.
+    /// </summary>
+    public void DeleteTotp(string siteId)
+    {
+        DeleteSecretInternal(CredentialVault.BuildTotpKey(siteId));
     }
 
     /// <summary>
@@ -66,18 +109,70 @@ public sealed class SecretsProvider
     public CookieSafeStore Cookies => _cookieStore;
 
     /// <summary>
-    /// Returns the cache statistics.
-    /// </summary>
-    public (long hits, long misses) GetCacheStatistics()
-    {
-        return (Interlocked.Read(ref _hits), Interlocked.Read(ref _misses));
-    }
-
-    /// <summary>
     /// Clears the in-memory cache.
     /// </summary>
-    public void ClearCache()
+    public void ClearCache() => _secretCache.Clear();
+
+    /// <summary>
+    /// Signals that the editor lost focus, invalidating cached secrets.
+    /// </summary>
+    public void NotifyFocusLost() => ClearCache();
+
+    private SecureString? GetSecretInternal(string key)
     {
-        _secretCache.Clear();
+        if (_secretCache.TryGetValue(key, out var entry) && !entry.IsExpired)
+        {
+            return entry.CreateCopy();
+        }
+
+        if (!_vault.TryGet(key, out var secret) || secret is null)
+        {
+            _secretCache.TryRemove(key, out _);
+            return null;
+        }
+
+        var entry = CacheEntry.FromSecret(secret, _cacheDuration);
+        _secretCache[key] = entry;
+        return entry.CreateCopy();
+    }
+
+    private void SaveSecretInternal(string key, SecureString value)
+    {
+        _vault.SaveSecret(key, value);
+        _secretCache[key] = CacheEntry.FromSecret(value, _cacheDuration);
+    }
+
+    private void DeleteSecretInternal(string key)
+    {
+        _vault.DeleteSecret(key);
+        _secretCache.TryRemove(key, out _);
+    }
+
+    private sealed class CacheEntry
+    {
+        private readonly SecureString _secret;
+        private readonly DateTimeOffset _expiresAt;
+
+        private CacheEntry(SecureString secret, DateTimeOffset expiresAt)
+        {
+            _secret = secret;
+            _expiresAt = expiresAt;
+        }
+
+        public bool IsExpired => DateTimeOffset.UtcNow >= _expiresAt;
+
+        public SecureString CreateCopy()
+        {
+            var copy = _secret.Copy();
+            copy.MakeReadOnly();
+            return copy;
+        }
+
+        public static CacheEntry FromSecret(SecureString secret, TimeSpan duration)
+        {
+            var copy = secret.Copy();
+            copy.MakeReadOnly();
+            return new CacheEntry(copy, DateTimeOffset.UtcNow.Add(duration));
+        }
     }
 }
