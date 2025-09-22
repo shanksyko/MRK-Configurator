@@ -425,14 +425,14 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
                 if (!string.IsNullOrWhiteSpace(health.DomSelector) &&
                     payload.IndexOf(health.DomSelector, StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    _telemetry.Warn($"DOM selector '{health.DomSelector}' not located during health check for {context.DisplayName}.");
+                    _telemetry.Warn($"Seletor DOM configurado não foi localizado durante o health check para {context.DisplayName}.");
                     return false;
                 }
 
                 if (!string.IsNullOrWhiteSpace(health.ContainsText) &&
                     payload.IndexOf(health.ContainsText, StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    _telemetry.Warn($"Expected text '{health.ContainsText}' not found during health check for {context.DisplayName}.");
+                    _telemetry.Warn($"Texto esperado não foi encontrado durante o health check para {context.DisplayName}.");
                     return false;
                 }
             }

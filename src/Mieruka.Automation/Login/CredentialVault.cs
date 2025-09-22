@@ -103,6 +103,11 @@ public sealed class CredentialVault
 
         if (!requiresVault)
         {
+            if (!string.IsNullOrWhiteSpace(profile.Username) || !string.IsNullOrWhiteSpace(profile.Password))
+            {
+                throw new InvalidOperationException("Credenciais inline não são suportadas. Configure o Cofre de Credenciais.");
+            }
+
             return profile;
         }
 

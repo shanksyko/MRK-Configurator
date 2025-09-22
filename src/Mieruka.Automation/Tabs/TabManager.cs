@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Mieruka.Core.Security;
 using Mieruka.Core.Services;
 using OpenQA.Selenium;
 
@@ -45,7 +46,9 @@ public sealed class TabManager
         var whitelist = new HashSet<string>(
             allowedTabHosts
                 .Where(static host => !string.IsNullOrWhiteSpace(host))
-                .Select(static host => NormalizeHost(host!)),
+                .Select(host => TryNormalizeWhitelistHost(host!))
+                .Where(static host => host is not null)
+                .Select(static host => host!),
             StringComparer.OrdinalIgnoreCase);
 
         var observations = new Dictionary<string, WindowObservation>();
@@ -210,13 +213,45 @@ public sealed class TabManager
             return null;
         }
 
-        return NormalizeHost(host);
+        try
+        {
+            return InputSanitizer.SanitizeHost(host);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
-    private static string NormalizeHost(string host)
+    private string? TryNormalizeWhitelistHost(string host)
     {
         var trimmed = host.Trim();
-        return trimmed.TrimEnd('.');
+
+        if (trimmed.StartsWith("*.", StringComparison.Ordinal))
+        {
+            var tail = trimmed[2..];
+            try
+            {
+                var normalizedTail = InputSanitizer.SanitizeHost(tail);
+                return string.IsNullOrEmpty(normalizedTail) ? null : "*." + normalizedTail;
+            }
+            catch (Exception)
+            {
+                _telemetry.Warn("Entrada de whitelist rejeitada por conter host inválido. Valor descartado.");
+                return null;
+            }
+        }
+
+        try
+        {
+            var normalized = InputSanitizer.SanitizeHost(trimmed);
+            return string.IsNullOrEmpty(normalized) ? null : normalized;
+        }
+        catch (Exception)
+        {
+            _telemetry.Warn("Entrada de whitelist rejeitada por conter host inválido. Valor descartado.");
+            return null;
+        }
     }
 
     private static bool HostsEqual(string? left, string? right)

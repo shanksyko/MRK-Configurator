@@ -74,9 +74,14 @@ internal sealed partial class ConfigValidator
                 continue;
             }
 
+            if (!string.IsNullOrWhiteSpace(login.Username))
+            {
+                issues.Add(new ConfigValidationIssue(ConfigValidationSeverity.Error, $"O site '{site.Id}' contém um usuário armazenado no JSON. Migrar para o Cofre de Credenciais.", site.Id));
+            }
+
             if (!string.IsNullOrWhiteSpace(login.Password))
             {
-                issues.Add(new ConfigValidationIssue(ConfigValidationSeverity.Error, $"O site '{site.Id}' contém uma senha em texto claro. Utilize o cofre de credenciais.", site.Id));
+                issues.Add(new ConfigValidationIssue(ConfigValidationSeverity.Error, $"O site '{site.Id}' contém uma senha em texto claro. Migrar para o Cofre de Credenciais.", site.Id));
             }
 
             ValidateSelector(site.Id, login.UserSelector, nameof(login.UserSelector), issues);
@@ -103,7 +108,7 @@ internal sealed partial class ConfigValidator
 
         try
         {
-            InputSanitizer.SanitizeSelector(selector, 256);
+            InputSanitizer.SanitizeSelector(selector, 512);
         }
         catch (Exception ex)
         {

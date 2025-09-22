@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
+using Mieruka.Core.Security;
 using Mieruka.Core.Services;
 using OpenQA.Selenium;
 
@@ -188,13 +189,25 @@ public sealed class LoginService
     {
         if (!string.IsNullOrWhiteSpace(selector))
         {
-            var located = await WaitForElementAsync(driver, () => FindBySelector(driver, selector), timeout, cancellationToken);
+            string sanitizedSelector;
+
+            try
+            {
+                sanitizedSelector = InputSanitizer.SanitizeSelector(selector, 512);
+            }
+            catch (Exception)
+            {
+                _telemetry.Warn("Selector configurado rejeitado durante a automação de login. Valor foi descartado.");
+                return null;
+            }
+
+            var located = await WaitForElementAsync(driver, () => FindBySelector(driver, sanitizedSelector), timeout, cancellationToken);
             if (located is not null)
             {
                 return located;
             }
 
-            _telemetry.Warn($"Timeout while waiting for selector '{selector}'.");
+            _telemetry.Warn("Timeout ao aguardar o seletor configurado durante a automação de login.");
         }
 
         return await WaitForElementAsync(driver, heuristic, timeout, cancellationToken);

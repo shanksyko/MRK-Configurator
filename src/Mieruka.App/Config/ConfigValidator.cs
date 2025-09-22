@@ -358,6 +358,30 @@ internal sealed partial class ConfigValidator
             {
                 issues.Add(new ConfigValidationIssue(ConfigValidationSeverity.Error, $"{context} requer seletor ou texto esperado para o health check DOM.", context));
             }
+
+            if (!string.IsNullOrWhiteSpace(check.DomSelector))
+            {
+                try
+                {
+                    InputSanitizer.SanitizeSelector(check.DomSelector, 512);
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new ConfigValidationIssue(ConfigValidationSeverity.Error, $"{context} possui seletor DOM inválido: {ex.Message}.", context));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(check.ContainsText))
+            {
+                try
+                {
+                    InputSanitizer.EnsureSafeAscii(check.ContainsText, 512, nameof(check.ContainsText));
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new ConfigValidationIssue(ConfigValidationSeverity.Error, $"{context} possui texto esperado inválido: {ex.Message}.", context));
+                }
+            }
         }
     }
 
