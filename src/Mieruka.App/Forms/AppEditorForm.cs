@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows.Forms;
@@ -57,8 +58,8 @@ public partial class AppEditorForm : Form
             Url = current.Url,
             KioskMode = current.KioskMode,
             AppMode = current.AppMode,
-            AllowedTabHosts = current.AllowedTabHosts?.ToList(),
-            BrowserArguments = current.BrowserArguments?.ToList(),
+            AllowedTabHosts = current.AllowedTabHosts?.ToList() ?? new List<string>(),
+            BrowserArguments = current.BrowserArguments?.ToList() ?? new List<string>(),
         };
 
         _sites.Add(clone);
