@@ -104,7 +104,7 @@ internal sealed class WhitelistTab : UserControl
 
     private void AddHost()
     {
-        if (!_hostInput.ValidateChildren())
+        if (!ValidateChildren())
         {
             return;
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 
@@ -117,7 +118,8 @@ internal sealed class ArgsTab : UserControl
         Enabled = true;
         _kioskCheck.Checked = site.KioskMode;
         _appModeCheck.Checked = site.AppMode;
-        _incognitoCheck.Checked = site.BrowserArguments.Contains("--incognito", StringComparer.OrdinalIgnoreCase);
+        _incognitoCheck.Checked = site.BrowserArguments.Any(argument =>
+            string.Equals(argument, "--incognito", StringComparison.OrdinalIgnoreCase));
         _proxyBox.Text = string.Empty;
         _bypassBox.Text = string.Empty;
         _timeoutUpDown.Value = site.Login?.TimeoutSeconds ?? 30;
