@@ -15,4 +15,8 @@
     <ProjectReference Include="../Mieruka.Core/Mieruka.Core.csproj" />
     <ProjectReference Include="../Mieruka.Automation/Mieruka.Automation.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Mieruka.Preview/Mieruka.Preview.csproj" />
+  </ItemGroup>
 </Project>
