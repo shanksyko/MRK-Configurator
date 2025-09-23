@@ -1,102 +1,134 @@
 using System;
 using System.ComponentModel;
-using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
-using Mieruka.App.Forms.Controls;
 using Mieruka.Core.Models;
-using Mieruka.Core.Security;
 
 namespace Mieruka.App.Forms;
 
-public sealed class MainForm : Form
+public partial class MainForm : Form
 {
-    private readonly BindingList<SiteConfig> _programs = new();
-    private readonly BindingSource _programsSource = new();
-    private readonly DataGridView _programGrid;
-    private readonly SecretsProvider _secretsProvider;
+    private readonly BindingList<SiteConfig> _sites = new();
 
     public MainForm()
     {
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96F, 96F);
-        Text = "Mieruka Configurator";
-        MinimumSize = new Size(960, 600);
-        StartPosition = FormStartPosition.CenterScreen;
+        InitializeComponent();
 
-        var vault = new Mieruka.Core.Security.CredentialVault();
-        var cookies = new CookieSafeStore();
-        _secretsProvider = new SecretsProvider(vault, cookies);
+        bsSites.DataSource = _sites;
+        dgvSites.DataSource = bsSites;
+        dgvSites.SelectionChanged += (_, _) => UpdateButtons();
+        dgvSites.CellDoubleClick += (_, _) => btnEditar_Click(this, EventArgs.Empty);
+        dgvSites.KeyDown += dgvSites_KeyDown;
 
-        _programsSource.DataSource = _programs;
-
-        _programGrid = new DataGridView
-        {
-            Dock = DockStyle.Fill,
-            ReadOnly = true,
-            AllowUserToAddRows = false,
-            AllowUserToDeleteRows = false,
-            AutoGenerateColumns = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect = false,
-        };
-
-        _programGrid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(SiteConfig.Id),
-            HeaderText = "SiteId",
-            Width = 180,
-        });
-        _programGrid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(SiteConfig.Url),
-            HeaderText = "URL",
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-        });
-        _programGrid.DataSource = _programsSource;
-
-        var editButton = new Button
-        {
-            Text = "Editar…",
-            AutoSize = true,
-        };
-        editButton.Click += (_, _) => OpenEditor();
-
-        var programLayout = LayoutHelpers.CreateStandardTableLayout();
-        programLayout.RowCount = 2;
-        programLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        programLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        programLayout.Controls.Add(_programGrid, 0, 0);
-
-        var buttonsPanel = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-        };
-        buttonsPanel.Controls.Add(editButton);
-        programLayout.Controls.Add(buttonsPanel, 0, 1);
-        Controls.Add(programLayout);
-
-        SeedSampleProgram();
+        SeedSampleData();
+        UpdateButtons();
     }
 
-    private void OpenEditor()
+    private void btnAdicionar_Click(object? sender, EventArgs e)
     {
-        using var editor = new AppEditorForm(_secretsProvider);
+        var site = new SiteConfig
+        {
+            Id = $"site_{_sites.Count + 1}",
+            Url = "https://example.com",
+        };
+
+        _sites.Add(site);
+        SelectSite(site);
+    }
+
+    private void btnEditar_Click(object? sender, EventArgs e)
+    {
+        using var editor = new AppEditorForm();
         editor.ShowDialog(this);
     }
 
-    private void SeedSampleProgram()
+    private void btnClonar_Click(object? sender, EventArgs e)
     {
-        if (_programs.Count > 0)
+        if (bsSites.Current is not SiteConfig current)
         {
             return;
         }
 
-        _programs.Add(new SiteConfig
+        var clone = new SiteConfig
+        {
+            Id = $"{current.Id}_clone",
+            Url = current.Url,
+            KioskMode = current.KioskMode,
+            AppMode = current.AppMode,
+            AllowedTabHosts = current.AllowedTabHosts?.ToList(),
+            BrowserArguments = current.BrowserArguments?.ToList(),
+        };
+
+        _sites.Add(clone);
+        SelectSite(clone);
+    }
+
+    private void btnRemover_Click(object? sender, EventArgs e)
+    {
+        if (bsSites.Current is not SiteConfig current)
+        {
+            return;
+        }
+
+        _sites.Remove(current);
+    }
+
+    private void btnTestar_Click(object? sender, EventArgs e)
+    {
+        if (bsSites.Current is not SiteConfig current)
+        {
+            return;
+        }
+
+        MessageBox.Show(
+            this,
+            $"Teste de login para o site \"{current.Id}\" não está disponível nesta compilação.",
+            "Testar Login",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    private void dgvSites_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Delete)
+        {
+            btnRemover_Click(sender, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
+    private void SeedSampleData()
+    {
+        if (_sites.Count > 0)
+        {
+            return;
+        }
+
+        _sites.Add(new SiteConfig
         {
             Id = "sample",
             Url = "https://example.com",
         });
+    }
+
+    private void SelectSite(SiteConfig site)
+    {
+        var index = _sites.IndexOf(site);
+        if (index >= 0 && index < dgvSites.Rows.Count)
+        {
+            dgvSites.ClearSelection();
+            var row = dgvSites.Rows[index];
+            row.Selected = true;
+            dgvSites.CurrentCell = row.Cells[0];
+        }
+    }
+
+    private void UpdateButtons()
+    {
+        var hasSelection = bsSites.Current is SiteConfig;
+        btnEditar.Enabled = hasSelection;
+        btnClonar.Enabled = hasSelection;
+        btnRemover.Enabled = hasSelection;
+        btnTestar.Enabled = hasSelection;
     }
 }

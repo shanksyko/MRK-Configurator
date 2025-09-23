@@ -2,24 +2,46 @@ using System;
 using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Sites;
-using Mieruka.App.Services;
 using Mieruka.Core.Models;
-using Mieruka.Core.Security;
 
 namespace Mieruka.App.Forms.Controls;
 
-public sealed class SitesEditorControl : UserControl
+public partial class SitesEditorControl : UserControl
 {
-    private BindingList<SiteConfig> _sites;
-    private readonly BindingSource _source = new();
-    private readonly DataGridView _grid;
-    private readonly CredentialVaultPanel _vaultPanel;
-    private readonly SiteConfigTab _configTab;
-    private readonly LoginAutoTab _loginTab;
-    private readonly WhitelistTab _whitelistTab;
-    private readonly ArgsTab _argsTab;
-    private readonly SplitContainer _split;
     private SiteConfig? _selectedSite;
+
+    public SitesEditorControl()
+    {
+        InitializeComponent();
+        if (bsSites.DataSource is null)
+        {
+            bsSites.DataSource = new BindingList<SiteConfig>();
+        }
+
+        loginAutoTab.TestLoginRequested += (_, site) =>
+        {
+            if (!string.IsNullOrEmpty(site))
+            {
+                TestarLogin?.Invoke(this, site);
+            }
+        };
+        loginAutoTab.ApplyPositionRequested += (_, site) =>
+        {
+            if (!string.IsNullOrEmpty(site))
+            {
+                AplicarPosicao?.Invoke(this, site);
+            }
+        };
+        credentialVaultPanel.TestLoginRequested += (_, site) =>
+        {
+            if (!string.IsNullOrEmpty(site))
+            {
+                TestarLogin?.Invoke(this, site);
+            }
+        };
+
+        UpdateSelection();
+    }
 
     public event EventHandler? AddRequested;
     public event EventHandler? RemoveRequested;
@@ -27,110 +49,19 @@ public sealed class SitesEditorControl : UserControl
     public event EventHandler<string>? TestarLogin;
     public event EventHandler<string>? AplicarPosicao;
 
-    public SitesEditorControl(SecretsProvider secretsProvider)
-    {
-        LayoutHelpers.ApplyStandardLayout(this);
-
-        _sites = new BindingList<SiteConfig>();
-        _source.DataSource = _sites;
-
-        var bridge = new UiSecretsBridge(secretsProvider);
-        _vaultPanel = new CredentialVaultPanel(secretsProvider, bridge)
-        {
-            ScopeSiteId = null,
-        };
-        _vaultPanel.TestLoginRequested += (_, site) => TestarLogin?.Invoke(this, site);
-
-        _configTab = new SiteConfigTab();
-        _loginTab = new LoginAutoTab(secretsProvider);
-        _loginTab.TestLoginRequested += (_, site) => TestarLogin?.Invoke(this, site);
-        _loginTab.ApplyPositionRequested += (_, site) => AplicarPosicao?.Invoke(this, site);
-        _whitelistTab = new WhitelistTab();
-        _argsTab = new ArgsTab();
-
-        _grid = new DataGridView
-        {
-            Dock = DockStyle.Fill,
-            AutoGenerateColumns = false,
-            AllowUserToAddRows = false,
-            AllowUserToDeleteRows = false,
-            MultiSelect = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            ReadOnly = true,
-        };
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(SiteConfig.Id),
-            HeaderText = "SiteId",
-            Width = 160,
-        });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(SiteConfig.Url),
-            HeaderText = "URL",
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-        });
-        _grid.DataSource = _source;
-        _grid.SelectionChanged += (_, _) => UpdateSelectedSite();
-
-        var addButton = new Button { Text = "Adicionar", AutoSize = true };
-        addButton.Click += (_, _) => AddRequested?.Invoke(this, EventArgs.Empty);
-        var removeButton = new Button { Text = "Remover", AutoSize = true };
-        removeButton.Click += (_, _) => RemoveRequested?.Invoke(this, EventArgs.Empty);
-        var cloneButton = new Button { Text = "Clonar", AutoSize = true };
-        cloneButton.Click += (_, _) => CloneRequested?.Invoke(this, EventArgs.Empty);
-
-        var toolbar = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-        };
-        toolbar.Controls.Add(addButton);
-        toolbar.Controls.Add(removeButton);
-        toolbar.Controls.Add(cloneButton);
-
-        var group = new GroupBox
-        {
-            Text = "Sites do Programa",
-            Dock = DockStyle.Fill,
-        };
-        var groupLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-        };
-        groupLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        groupLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        groupLayout.Controls.Add(toolbar, 0, 0);
-        groupLayout.Controls.Add(_grid, 0, 1);
-        group.Controls.Add(groupLayout);
-
-        _split = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
-        };
-        _split.Panel1.Controls.Add(group);
-
-        var tabs = new TabControl
-        {
-            Dock = DockStyle.Fill,
-        };
-        tabs.TabPages.Add(CreateTab("Config", _configTab));
-        tabs.TabPages.Add(CreateTab("Login Automático", _loginTab));
-        tabs.TabPages.Add(CreateTab("Whitelist", _whitelistTab));
-        tabs.TabPages.Add(CreateTab("Args", _argsTab));
-        tabs.TabPages.Add(CreateTab("CredentialVault", _vaultPanel));
-
-        _split.Panel2.Controls.Add(tabs);
-        Controls.Add(_split);
-        UpdateSelectedSite();
-    }
-
     public BindingList<SiteConfig> Sites
     {
-        get => _sites;
+        get
+        {
+            if (bsSites.DataSource is BindingList<SiteConfig> list)
+            {
+                return list;
+            }
+
+            var fallback = new BindingList<SiteConfig>();
+            bsSites.DataSource = fallback;
+            return fallback;
+        }
         set
         {
             if (value is null)
@@ -138,32 +69,74 @@ public sealed class SitesEditorControl : UserControl
                 throw new ArgumentNullException(nameof(value));
             }
 
-            if (!ReferenceEquals(_sites, value))
+            if (!ReferenceEquals(bsSites.DataSource, value))
             {
-                _sites = value;
-                _source.DataSource = _sites;
+                bsSites.DataSource = value;
             }
 
-            UpdateSelectedSite();
+            UpdateSelection();
         }
     }
 
     public SiteConfig? SelectedSite => _selectedSite;
 
-    private static TabPage CreateTab(string title, Control control)
+    public void SelectSite(SiteConfig site)
     {
-        var tab = new TabPage(title)
+        var list = Sites;
+        var index = list.IndexOf(site);
+        if (index < 0)
         {
-            Padding = new Padding(8),
-        };
-        control.Dock = DockStyle.Fill;
-        tab.Controls.Add(control);
-        return tab;
+            return;
+        }
+
+        if (index < dgvSites.Rows.Count)
+        {
+            dgvSites.ClearSelection();
+            var row = dgvSites.Rows[index];
+            row.Selected = true;
+            dgvSites.CurrentCell = row.Cells[0];
+        }
     }
 
-    private void UpdateSelectedSite()
+    private void btnAdicionarSite_Click(object? sender, EventArgs e)
     {
-        if (_grid?.CurrentRow?.DataBoundItem is SiteConfig site)
+        AddRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void btnRemoverSite_Click(object? sender, EventArgs e)
+    {
+        RemoveRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void btnClonarSite_Click(object? sender, EventArgs e)
+    {
+        CloneRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void btnTestarSite_Click(object? sender, EventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_selectedSite?.Id))
+        {
+            TestarLogin?.Invoke(this, _selectedSite!.Id);
+        }
+    }
+
+    private void btnAplicarPosicao_Click(object? sender, EventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_selectedSite?.Id))
+        {
+            AplicarPosicao?.Invoke(this, _selectedSite!.Id);
+        }
+    }
+
+    private void dgvSites_SelectionChanged(object? sender, EventArgs e)
+    {
+        UpdateSelection();
+    }
+
+    private void UpdateSelection()
+    {
+        if (bsSites.Current is SiteConfig site)
         {
             _selectedSite = site;
         }
@@ -172,19 +145,16 @@ public sealed class SitesEditorControl : UserControl
             _selectedSite = null;
         }
 
-        _configTab.Bind(site: _selectedSite);
-        _loginTab.BindSite(_selectedSite);
-        _whitelistTab.BindSite(_selectedSite);
-        _argsTab.BindSite(_selectedSite);
-        _vaultPanel.ScopeSiteId = _selectedSite?.Id;
-    }
+        siteConfigTab.Bind(_selectedSite);
+        loginAutoTab.BindSite(_selectedSite);
+        whitelistTab.BindSite(_selectedSite);
+        argsTab.BindSite(_selectedSite);
+        credentialVaultPanel.ScopeSiteId = _selectedSite?.Id;
 
-    protected override void OnResize(EventArgs e)
-    {
-        base.OnResize(e);
-        if (_split.Width > 0)
-        {
-            _split.SplitterDistance = (int)Math.Max(200, _split.Width * 0.4);
-        }
+        var hasSelection = _selectedSite is not null;
+        btnRemoverSite.Enabled = hasSelection;
+        btnClonarSite.Enabled = hasSelection;
+        btnTestarSite.Enabled = hasSelection;
+        btnAplicarPosicao.Enabled = hasSelection;
     }
 }
