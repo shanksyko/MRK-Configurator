@@ -12,6 +12,8 @@ partial class MainForm
     internal ToolStripMenuItem menuExibir = null!;
     internal ToolStripMenuItem menuPreview = null!;
     internal TableLayoutPanel layoutPrincipal = null!;
+    internal GroupBox grpMonitores = null!;
+    internal TableLayoutPanel tlpMonitores = null!;
     internal DataGridView dgvProgramas = null!;
     internal BindingSource bsProgramas = null!;
     internal FlowLayoutPanel painelBotoes = null!;
@@ -42,6 +44,8 @@ partial class MainForm
         menuExibir = new ToolStripMenuItem();
         menuPreview = new ToolStripMenuItem();
         layoutPrincipal = new TableLayoutPanel();
+        grpMonitores = new GroupBox();
+        tlpMonitores = new TableLayoutPanel();
         dgvProgramas = new DataGridView();
         bsProgramas = new BindingSource(components);
         painelBotoes = new FlowLayoutPanel();
@@ -57,6 +61,8 @@ partial class MainForm
         var colAutoStart = new DataGridViewCheckBoxColumn();
         menuPrincipal.SuspendLayout();
         layoutPrincipal.SuspendLayout();
+        grpMonitores.SuspendLayout();
+        tlpMonitores.SuspendLayout();
         ((ISupportInitialize)dgvProgramas).BeginInit();
         ((ISupportInitialize)bsProgramas).BeginInit();
         painelBotoes.SuspendLayout();
@@ -96,14 +102,46 @@ partial class MainForm
         layoutPrincipal.Controls.Add(dgvProgramas, 0, 0);
         layoutPrincipal.Controls.Add(painelBotoes, 1, 0);
         layoutPrincipal.Dock = DockStyle.Fill;
-        layoutPrincipal.Location = new System.Drawing.Point(0, 30);
+        layoutPrincipal.Location = new System.Drawing.Point(0, 350);
         layoutPrincipal.Margin = new Padding(8);
         layoutPrincipal.Name = "layoutPrincipal";
         layoutPrincipal.Padding = new Padding(8);
         layoutPrincipal.RowCount = 1;
         layoutPrincipal.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        layoutPrincipal.Size = new System.Drawing.Size(1180, 670);
+        layoutPrincipal.Size = new System.Drawing.Size(1180, 350);
         layoutPrincipal.TabIndex = 1;
+        //
+        // grpMonitores
+        //
+        grpMonitores.Controls.Add(tlpMonitores);
+        grpMonitores.Dock = DockStyle.Top;
+        grpMonitores.Location = new System.Drawing.Point(0, 30);
+        grpMonitores.Margin = new Padding(8);
+        grpMonitores.Name = "grpMonitores";
+        grpMonitores.Padding = new Padding(8);
+        grpMonitores.Size = new System.Drawing.Size(1180, 320);
+        grpMonitores.TabIndex = 2;
+        grpMonitores.TabStop = false;
+        grpMonitores.Text = "Monitores";
+        //
+        // tlpMonitores
+        //
+        tlpMonitores.AutoScroll = true;
+        tlpMonitores.AutoSize = true;
+        tlpMonitores.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        tlpMonitores.ColumnCount = 2;
+        tlpMonitores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpMonitores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpMonitores.Dock = DockStyle.Fill;
+        tlpMonitores.Location = new System.Drawing.Point(8, 24);
+        tlpMonitores.Margin = new Padding(0);
+        tlpMonitores.Name = "tlpMonitores";
+        tlpMonitores.Padding = new Padding(0, 0, 0, 8);
+        tlpMonitores.RowCount = 1;
+        tlpMonitores.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpMonitores.Size = new System.Drawing.Size(1164, 288);
+        tlpMonitores.TabIndex = 0;
+        tlpMonitores.SizeChanged += tlpMonitores_SizeChanged;
         //
         // dgvProgramas
         //
@@ -258,6 +296,7 @@ partial class MainForm
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new System.Drawing.Size(1180, 700);
         Controls.Add(layoutPrincipal);
+        Controls.Add(grpMonitores);
         Controls.Add(menuPrincipal);
         MainMenuStrip = menuPrincipal;
         MinimumSize = new System.Drawing.Size(960, 640);
@@ -269,6 +308,10 @@ partial class MainForm
         menuPrincipal.PerformLayout();
         layoutPrincipal.ResumeLayout(false);
         layoutPrincipal.PerformLayout();
+        tlpMonitores.ResumeLayout(false);
+        tlpMonitores.PerformLayout();
+        grpMonitores.ResumeLayout(false);
+        grpMonitores.PerformLayout();
         ((ISupportInitialize)dgvProgramas).EndInit();
         ((ISupportInitialize)bsProgramas).EndInit();
         painelBotoes.ResumeLayout(false);
