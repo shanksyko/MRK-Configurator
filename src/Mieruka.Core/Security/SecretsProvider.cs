@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Security;
 
+#nullable enable
+
 namespace Mieruka.Core.Security;
 
 /// <summary>
@@ -120,9 +122,9 @@ public sealed class SecretsProvider
 
     private SecureString? GetSecretInternal(string key)
     {
-        if (_secretCache.TryGetValue(key, out var entry) && !entry.IsExpired)
+        if (_secretCache.TryGetValue(key, out var cachedEntry) && !cachedEntry.IsExpired)
         {
-            return entry.CreateCopy();
+            return cachedEntry.CreateCopy();
         }
 
         if (!_vault.TryGet(key, out var secret) || secret is null)
@@ -131,9 +133,9 @@ public sealed class SecretsProvider
             return null;
         }
 
-        var entry = CacheEntry.FromSecret(secret, _cacheDuration);
-        _secretCache[key] = entry;
-        return entry.CreateCopy();
+        var newEntry = CacheEntry.FromSecret(secret, _cacheDuration);
+        _secretCache[key] = newEntry;
+        return newEntry.CreateCopy();
     }
 
     private void SaveSecretInternal(string key, SecureString value)

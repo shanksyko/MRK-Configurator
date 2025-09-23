@@ -7,6 +7,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+#nullable enable
+
 namespace Mieruka.Core.Security;
 
 /// <summary>
@@ -104,18 +106,37 @@ public sealed class CookieSafeStore
         }
 
         var json = JsonSerializer.Serialize(payload, SerializerOptions);
-        var cipher = Protect(Encoding.UTF8.GetBytes(json));
-        var path = ResolvePath(normalizedHost);
-        var sync = _locks.GetOrAdd(path, _ => new object());
-
-        lock (sync)
+        var plainBytes = Encoding.UTF8.GetBytes(json);
+        byte[] cipher = Array.Empty<byte>();
+        try
         {
-            using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-            stream.Write(cipher, 0, cipher.Length);
+            cipher = Protect(plainBytes);
         }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plainBytes);
+        }
+        try
+        {
+            var path = ResolvePath(normalizedHost);
+            var sync = _locks.GetOrAdd(path, _ => new object());
 
-        _auditLog?.RecordCookieStored(normalizedHost, payload.Cookies.Count);
-        return true;
+            lock (sync)
+            {
+                using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                stream.Write(cipher, 0, cipher.Length);
+            }
+
+            _auditLog?.RecordCookieStored(normalizedHost, payload.Cookies.Count);
+            return true;
+        }
+        finally
+        {
+            if (cipher.Length > 0)
+            {
+                CryptographicOperations.ZeroMemory(cipher);
+            }
+        }
     }
 
     /// <summary>
@@ -153,43 +174,65 @@ public sealed class CookieSafeStore
         {
             try
             {
-                var cipher = File.ReadAllBytes(path);
-                var jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
-                var json = Encoding.UTF8.GetString(jsonBytes);
-                var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
-                if (payload is null)
+                byte[] cipher = Array.Empty<byte>();
+                try
                 {
-                    cookies = Array.Empty<Cookie>();
-                    return false;
-                }
-
-                if (payload.ExpiresAt <= DateTimeOffset.UtcNow)
-                {
-                    cookies = Array.Empty<Cookie>();
-                    Revoke(normalizedHost);
-                    return false;
-                }
-
-                var list = new List<Cookie>(payload.Cookies.Count);
-                foreach (var cookie in payload.Cookies)
-                {
-                    var restored = new Cookie(cookie.Name, cookie.Value, cookie.Path, cookie.Domain)
+                    cipher = File.ReadAllBytes(path);
+                    byte[] jsonBytes = Array.Empty<byte>();
+                    try
                     {
-                        Secure = cookie.Secure,
-                        HttpOnly = cookie.HttpOnly,
-                    };
+                        jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                        var json = Encoding.UTF8.GetString(jsonBytes);
+                        var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
+                        if (payload is null)
+                        {
+                            cookies = Array.Empty<Cookie>();
+                            return false;
+                        }
 
-                    if (cookie.Expires.HasValue)
-                    {
-                        restored.Expires = cookie.Expires.Value.UtcDateTime;
+                        if (payload.ExpiresAt <= DateTimeOffset.UtcNow)
+                        {
+                            cookies = Array.Empty<Cookie>();
+                            Revoke(normalizedHost);
+                            return false;
+                        }
+
+                        var list = new List<Cookie>(payload.Cookies.Count);
+                        foreach (var cookie in payload.Cookies)
+                        {
+                            var restored = new Cookie(cookie.Name, cookie.Value, cookie.Path, cookie.Domain)
+                            {
+                                Secure = cookie.Secure,
+                                HttpOnly = cookie.HttpOnly,
+                            };
+
+                            if (cookie.Expires.HasValue)
+                            {
+                                restored.Expires = cookie.Expires.Value.UtcDateTime;
+                            }
+
+                            list.Add(restored);
+                        }
+
+                        cookies = list;
+                        _auditLog?.RecordCookieRestored(normalizedHost, list.Count);
+                        return true;
                     }
-
-                    list.Add(restored);
+                    finally
+                    {
+                        if (jsonBytes.Length > 0)
+                        {
+                            CryptographicOperations.ZeroMemory(jsonBytes);
+                        }
+                    }
                 }
-
-                cookies = list;
-                _auditLog?.RecordCookieRestored(normalizedHost, list.Count);
-                return true;
+                finally
+                {
+                    if (cipher.Length > 0)
+                    {
+                        CryptographicOperations.ZeroMemory(cipher);
+                    }
+                }
             }
             catch (CryptographicException)
             {
@@ -242,13 +285,35 @@ public sealed class CookieSafeStore
             {
                 try
                 {
-                    var cipher = File.ReadAllBytes(file);
-                    var jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
-                    var json = Encoding.UTF8.GetString(jsonBytes);
-                    var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
-                    if (payload is null || payload.ExpiresAt <= DateTimeOffset.UtcNow)
+                    byte[] cipher = Array.Empty<byte>();
+                    try
                     {
-                        File.Delete(file);
+                        cipher = File.ReadAllBytes(file);
+                        byte[] jsonBytes = Array.Empty<byte>();
+                        try
+                        {
+                            jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                            var json = Encoding.UTF8.GetString(jsonBytes);
+                            var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
+                            if (payload is null || payload.ExpiresAt <= DateTimeOffset.UtcNow)
+                            {
+                                File.Delete(file);
+                            }
+                        }
+                        finally
+                        {
+                            if (jsonBytes.Length > 0)
+                            {
+                                CryptographicOperations.ZeroMemory(jsonBytes);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        if (cipher.Length > 0)
+                        {
+                            CryptographicOperations.ZeroMemory(cipher);
+                        }
                     }
                 }
                 catch (Exception)
@@ -273,13 +338,35 @@ public sealed class CookieSafeStore
             {
                 try
                 {
-                    var cipher = File.ReadAllBytes(file);
-                    var jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
-                    var json = Encoding.UTF8.GetString(jsonBytes);
-                    var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
-                    if (payload is not null && payload.ExpiresAt > DateTimeOffset.UtcNow)
+                    byte[] cipher = Array.Empty<byte>();
+                    try
                     {
-                        hosts.Add(payload.Host);
+                        cipher = File.ReadAllBytes(file);
+                        byte[] jsonBytes = Array.Empty<byte>();
+                        try
+                        {
+                            jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                            var json = Encoding.UTF8.GetString(jsonBytes);
+                            var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
+                            if (payload is not null && payload.ExpiresAt > DateTimeOffset.UtcNow)
+                            {
+                                hosts.Add(payload.Host);
+                            }
+                        }
+                        finally
+                        {
+                            if (jsonBytes.Length > 0)
+                            {
+                                CryptographicOperations.ZeroMemory(jsonBytes);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        if (cipher.Length > 0)
+                        {
+                            CryptographicOperations.ZeroMemory(cipher);
+                        }
                     }
                 }
                 catch
