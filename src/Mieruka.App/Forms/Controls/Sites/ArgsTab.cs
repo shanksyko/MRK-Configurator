@@ -20,6 +20,7 @@ internal sealed class ArgsTab : UserControl
     public ArgsTab()
     {
         LayoutHelpers.ApplyStandardLayout(this);
+        AutoScroll = true;
 
         var layout = LayoutHelpers.CreateStandardTableLayout();
         layout.RowCount = 4;

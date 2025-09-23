@@ -33,6 +33,7 @@ internal sealed class LoginAutoTab : UserControl
     {
         _ = secretsProvider ?? throw new ArgumentNullException(nameof(secretsProvider));
         LayoutHelpers.ApplyStandardLayout(this);
+        AutoScroll = true;
 
         var layout = LayoutHelpers.CreateStandardTableLayout();
         layout.RowCount = 5;

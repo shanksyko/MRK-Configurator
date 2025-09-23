@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Security;
@@ -12,20 +9,14 @@ public sealed class CredentialVaultPanel : UserControl
 {
     private readonly SecretsProvider _secretsProvider;
     private readonly UiSecretsBridge _secretsBridge;
-    private readonly BindingList<CredentialSummary> _entries = new();
-    private readonly DataGridView _grid;
-    private readonly TableLayoutPanel _rootLayout;
-    private readonly TableLayoutPanel _editorLayout;
+    private readonly Label _scopeLabel;
+    private readonly Label _statusLabel;
     private readonly TextBox _userBox;
     private readonly TextBox _passwordBox;
     private readonly TextBox _totpBox;
-    private readonly Label _scopeLabel;
-    private readonly Button _openGlobalButton;
     private string? _scopeSiteId;
-    private string? _currentEditorSiteId;
 
     public event EventHandler<string>? TestLoginRequested;
-    public event EventHandler? OpenGlobalVaultRequested;
 
     public CredentialVaultPanel(SecretsProvider secretsProvider, UiSecretsBridge secretsBridge)
     {
@@ -33,106 +24,57 @@ public sealed class CredentialVaultPanel : UserControl
         _secretsBridge = secretsBridge ?? throw new ArgumentNullException(nameof(secretsBridge));
 
         LayoutHelpers.ApplyStandardLayout(this);
+        AutoScroll = true;
 
-        _grid = new DataGridView
-        {
-            Dock = DockStyle.Fill,
-            AutoGenerateColumns = false,
-            AllowUserToAddRows = false,
-            AllowUserToDeleteRows = false,
-            ReadOnly = true,
-            MultiSelect = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            DataSource = _entries,
-        };
-
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(CredentialSummary.SiteId),
-            HeaderText = "SiteId",
-            Width = 160,
-        });
-        _grid.Columns.Add(new DataGridViewCheckBoxColumn
-        {
-            DataPropertyName = nameof(CredentialSummary.HasUser),
-            HeaderText = "HasUser",
-        });
-        _grid.Columns.Add(new DataGridViewCheckBoxColumn
-        {
-            DataPropertyName = nameof(CredentialSummary.HasPassword),
-            HeaderText = "HasPass",
-        });
-        _grid.Columns.Add(new DataGridViewCheckBoxColumn
-        {
-            DataPropertyName = nameof(CredentialSummary.HasTotp),
-            HeaderText = "HasTOTP",
-        });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            DataPropertyName = nameof(CredentialSummary.UpdatedAtDisplay),
-            HeaderText = "UpdatedAt",
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-        });
-        _grid.SelectionChanged += (_, _) => UpdateEditorFromSelection();
-
-        _editorLayout = LayoutHelpers.CreateStandardTableLayout();
-        _editorLayout.RowCount = 5;
-        _editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var layout = LayoutHelpers.CreateStandardTableLayout();
+        layout.RowCount = 6;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         _scopeLabel = new Label { AutoSize = true };
-        _editorLayout.Controls.Add(_scopeLabel, 0, 0);
+        layout.Controls.Add(_scopeLabel, 0, 0);
+
+        _statusLabel = new Label { AutoSize = true };
+        layout.Controls.Add(_statusLabel, 0, 1);
 
         _userBox = CreateSecretTextBox("Usuário");
-        _editorLayout.Controls.Add(_userBox, 0, 1);
+        layout.Controls.Add(_userBox, 0, 2);
 
         _passwordBox = CreateSecretTextBox("Senha");
-        _editorLayout.Controls.Add(_passwordBox, 0, 2);
+        layout.Controls.Add(_passwordBox, 0, 3);
 
         _totpBox = CreateSecretTextBox("TOTP");
-        _editorLayout.Controls.Add(_totpBox, 0, 3);
+        layout.Controls.Add(_totpBox, 0, 4);
 
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
         };
+
         var saveButton = new Button { Text = "Salvar no Cofre", AutoSize = true };
         saveButton.Click += (_, _) => SaveCurrent();
+        buttons.Controls.Add(saveButton);
+
         var deleteButton = new Button { Text = "Apagar", AutoSize = true };
         deleteButton.Click += (_, _) => DeleteCurrent();
+        buttons.Controls.Add(deleteButton);
+
         var testButton = new Button { Text = "Testar Login", AutoSize = true };
         testButton.Click += (_, _) => TriggerTestLogin();
-        _openGlobalButton = new Button { Text = "Abrir Cofre Global…", AutoSize = true };
-        _openGlobalButton.Click += (_, _) =>
-        {
-            ScopeSiteId = null;
-            OpenGlobalVaultRequested?.Invoke(this, EventArgs.Empty);
-        };
-
-        buttons.Controls.Add(saveButton);
-        buttons.Controls.Add(deleteButton);
         buttons.Controls.Add(testButton);
-        buttons.Controls.Add(_openGlobalButton);
-        _editorLayout.Controls.Add(buttons, 0, 4);
 
-        _rootLayout = new TableLayoutPanel
-        {
-            ColumnCount = 2,
-            Dock = DockStyle.Fill,
-        };
-        _rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45F));
-        _rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55F));
-        _rootLayout.Controls.Add(_grid, 0, 0);
-        _rootLayout.Controls.Add(_editorLayout, 1, 0);
+        layout.Controls.Add(buttons, 0, 5);
 
-        Controls.Add(_rootLayout);
+        Controls.Add(layout);
 
-        _secretsProvider.CredentialsChanged += OnCredentialsChanged;
+        Enabled = false;
         UpdateScope();
+        _secretsProvider.CredentialsChanged += OnCredentialsChanged;
     }
 
     public string? ScopeSiteId
@@ -140,7 +82,7 @@ public sealed class CredentialVaultPanel : UserControl
         get => _scopeSiteId;
         set
         {
-            if (_scopeSiteId == value)
+            if (string.Equals(_scopeSiteId, value, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -172,183 +114,93 @@ public sealed class CredentialVaultPanel : UserControl
 
     private void UpdateScope()
     {
-        var isScoped = !string.IsNullOrEmpty(_scopeSiteId);
-        _grid.Visible = !isScoped;
-        _grid.Enabled = !isScoped;
-        _openGlobalButton.Visible = isScoped;
+        var hasScope = !string.IsNullOrWhiteSpace(_scopeSiteId);
+        Enabled = hasScope;
+        _userBox.Enabled = hasScope;
+        _passwordBox.Enabled = hasScope;
+        _totpBox.Enabled = hasScope;
 
-        if (isScoped)
+        if (hasScope)
         {
-            SetEditorSite(_scopeSiteId);
+            _scopeLabel.Text = $"Credenciais para: {_scopeSiteId}";
+            UpdateStatus();
         }
         else
         {
-            UpdateEditorFromSelection();
+            _scopeLabel.Text = "Selecione um site";
+            _statusLabel.Text = string.Empty;
+            ClearInputs();
         }
     }
 
-    private void UpdateEditorFromSelection()
+    private void UpdateStatus()
     {
-        if (_scopeSiteId is not null)
+        if (string.IsNullOrEmpty(_scopeSiteId))
         {
+            _statusLabel.Text = string.Empty;
             return;
         }
 
-        var siteId = _grid.CurrentRow?.DataBoundItem is CredentialSummary summary ? summary.SiteId : null;
-        SetEditorSite(siteId);
-    }
+        using var username = _secretsBridge.LoadUser(_scopeSiteId);
+        using var password = _secretsBridge.LoadPass(_scopeSiteId);
+        using var totp = _secretsBridge.LoadTotp(_scopeSiteId);
 
-    private void SetEditorSite(string? siteId)
-    {
-        _currentEditorSiteId = siteId;
-        var hasSite = !string.IsNullOrEmpty(siteId);
-        _scopeLabel.Text = hasSite ? $"Escopo: {siteId}" : "Selecione um site";
-        _userBox.Enabled = hasSite;
-        _passwordBox.Enabled = hasSite;
-        _totpBox.Enabled = hasSite;
+        var hasUser = username is { Length: > 0 };
+        var hasPassword = password is { Length: > 0 };
+        var hasTotp = totp is { Length: > 0 };
 
-        if (hasSite)
-        {
-            UpdateSummaryFor(siteId!);
-        }
-        else
-        {
-            _userBox.Clear();
-            _passwordBox.Clear();
-            _totpBox.Clear();
-        }
+        _statusLabel.Text =
+            $"Usuário: {(hasUser ? "●" : "—")}, Senha: {(hasPassword ? "●" : "—")}, TOTP: {(hasTotp ? "●" : "—")}";
     }
 
     private void SaveCurrent()
     {
-        if (string.IsNullOrEmpty(_currentEditorSiteId))
+        if (string.IsNullOrEmpty(_scopeSiteId))
         {
             return;
         }
 
-        _secretsBridge.Save(_currentEditorSiteId, _userBox, _passwordBox, _totpBox);
-        UpdateSummaryFor(_currentEditorSiteId);
+        _secretsBridge.Save(_scopeSiteId, _userBox, _passwordBox, _totpBox);
+        UpdateStatus();
     }
 
     private void DeleteCurrent()
     {
-        if (string.IsNullOrEmpty(_currentEditorSiteId))
+        if (string.IsNullOrEmpty(_scopeSiteId))
         {
             return;
         }
 
-        _secretsBridge.Delete(_currentEditorSiteId);
-        UpdateSummaryFor(_currentEditorSiteId);
+        _secretsBridge.Delete(_scopeSiteId);
+        ClearInputs();
+        UpdateStatus();
     }
 
     private void TriggerTestLogin()
     {
-        if (!string.IsNullOrEmpty(_currentEditorSiteId))
+        if (!string.IsNullOrEmpty(_scopeSiteId))
         {
-            TestLoginRequested?.Invoke(this, _currentEditorSiteId);
+            TestLoginRequested?.Invoke(this, _scopeSiteId);
         }
     }
 
     private void OnCredentialsChanged(object? sender, CredentialChangedEventArgs e)
     {
-        UpdateSummaryFor(e.SiteId);
+        if (string.IsNullOrEmpty(_scopeSiteId))
+        {
+            return;
+        }
+
+        if (string.Equals(e.SiteId, _scopeSiteId, StringComparison.OrdinalIgnoreCase))
+        {
+            UpdateStatus();
+        }
     }
 
-    private void UpdateSummaryFor(string siteId)
+    private void ClearInputs()
     {
-        var summary = EnsureSummary(siteId);
-
-        using var username = _secretsBridge.LoadUser(siteId);
-        using var password = _secretsBridge.LoadPass(siteId);
-        using var totp = _secretsBridge.LoadTotp(siteId);
-
-        summary.Apply(
-            username is { Length: > 0 },
-            password is { Length: > 0 },
-            totp is { Length: > 0 });
-    }
-
-    private CredentialSummary EnsureSummary(string siteId)
-    {
-        var summary = _entries.FirstOrDefault(entry => string.Equals(entry.SiteId, siteId, StringComparison.OrdinalIgnoreCase));
-        if (summary is null)
-        {
-            summary = new CredentialSummary(siteId);
-            _entries.Add(summary);
-        }
-
-        return summary;
-    }
-
-    private sealed class CredentialSummary : INotifyPropertyChanged
-    {
-        private bool _hasUser;
-        private bool _hasPassword;
-        private bool _hasTotp;
-        private DateTime? _updatedAt;
-
-        public CredentialSummary(string siteId)
-        {
-            SiteId = siteId;
-        }
-
-        public string SiteId { get; }
-
-        public bool HasUser
-        {
-            get => _hasUser;
-            private set => SetField(ref _hasUser, value, nameof(HasUser));
-        }
-
-        public bool HasPassword
-        {
-            get => _hasPassword;
-            private set => SetField(ref _hasPassword, value, nameof(HasPassword));
-        }
-
-        public bool HasTotp
-        {
-            get => _hasTotp;
-            private set => SetField(ref _hasTotp, value, nameof(HasTotp));
-        }
-
-        public DateTime? UpdatedAt
-        {
-            get => _updatedAt;
-            private set
-            {
-                if (SetField(ref _updatedAt, value, nameof(UpdatedAt)))
-                {
-                    OnPropertyChanged(nameof(UpdatedAtDisplay));
-                }
-            }
-        }
-
-        public string UpdatedAtDisplay => UpdatedAt?.ToLocalTime().ToString("G") ?? string.Empty;
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        public void Apply(bool hasUser, bool hasPassword, bool hasTotp)
-        {
-            HasUser = hasUser;
-            HasPassword = hasPassword;
-            HasTotp = hasTotp;
-            UpdatedAt = DateTime.UtcNow;
-        }
-
-        private bool SetField<T>(ref T field, T value, string propertyName)
-        {
-            if (EqualityComparer<T>.Default.Equals(field, value))
-            {
-                return false;
-            }
-
-            field = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
-
-        private void OnPropertyChanged(string propertyName)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        _userBox.Clear();
+        _passwordBox.Clear();
+        _totpBox.Clear();
     }
 }

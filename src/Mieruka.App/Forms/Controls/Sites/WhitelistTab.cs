@@ -18,6 +18,7 @@ internal sealed class WhitelistTab : UserControl
     public WhitelistTab()
     {
         LayoutHelpers.ApplyStandardLayout(this);
+        AutoScroll = true;
 
         _errorProvider = new ErrorProvider
         {

@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
-using Mieruka.App.Services;
 using Mieruka.Core.Models;
 using Mieruka.Core.Security;
 
@@ -14,9 +13,7 @@ public sealed class MainForm : Form
     private readonly BindingList<SiteConfig> _programs = new();
     private readonly BindingSource _programsSource = new();
     private readonly DataGridView _programGrid;
-    private readonly CredentialVaultPanel _vaultPanel;
-    private readonly TabControl _tabs;
-    private readonly UiSecretsBridge _secretsBridge;
+    private readonly SecretsProvider _secretsProvider;
 
     public MainForm()
     {
@@ -26,10 +23,9 @@ public sealed class MainForm : Form
         MinimumSize = new Size(960, 600);
         StartPosition = FormStartPosition.CenterScreen;
 
-        var vault = new CredentialVault();
+        var vault = new Mieruka.Core.Security.CredentialVault();
         var cookies = new CookieSafeStore();
-        var secretsProvider = new SecretsProvider(vault, cookies);
-        _secretsBridge = new UiSecretsBridge(secretsProvider);
+        _secretsProvider = new SecretsProvider(vault, cookies);
 
         _programsSource.DataSource = _programs;
 
@@ -63,7 +59,7 @@ public sealed class MainForm : Form
             Text = "Editar…",
             AutoSize = true,
         };
-        editButton.Click += (_, _) => OpenEditor(secretsProvider);
+        editButton.Click += (_, _) => OpenEditor();
 
         var programLayout = LayoutHelpers.CreateStandardTableLayout();
         programLayout.RowCount = 2;
@@ -79,57 +75,14 @@ public sealed class MainForm : Form
         };
         buttonsPanel.Controls.Add(editButton);
         programLayout.Controls.Add(buttonsPanel, 0, 1);
-
-        var programsTab = new TabPage("Programas")
-        {
-            Padding = new Padding(8),
-        };
-        programsTab.Controls.Add(programLayout);
-
-        _vaultPanel = new CredentialVaultPanel(secretsProvider, _secretsBridge)
-        {
-            ScopeSiteId = null,
-        };
-        _vaultPanel.OpenGlobalVaultRequested += (_, _) =>
-        {
-            if (_tabs != null)
-            {
-                _tabs.SelectedTab = programsTab;
-            }
-        };
-
-        var vaultTab = new TabPage("CredentialVault")
-        {
-            Padding = new Padding(8),
-        };
-        vaultTab.Controls.Add(_vaultPanel);
-
-        _tabs = new TabControl
-        {
-            Dock = DockStyle.Fill,
-        };
-        _tabs.TabPages.Add(programsTab);
-        _tabs.TabPages.Add(vaultTab);
-
-        Controls.Add(_tabs);
+        Controls.Add(programLayout);
 
         SeedSampleProgram();
     }
 
-    public void OpenCredentialVault(string siteId)
+    private void OpenEditor()
     {
-        if (_vaultPanel is null || _tabs is null)
-        {
-            return;
-        }
-
-        _vaultPanel.ScopeSiteId = siteId;
-        _tabs.SelectedIndex = 1;
-    }
-
-    private void OpenEditor(SecretsProvider secretsProvider)
-    {
-        using var editor = new AppEditorForm(secretsProvider);
+        using var editor = new AppEditorForm(_secretsProvider);
         editor.ShowDialog(this);
     }
 

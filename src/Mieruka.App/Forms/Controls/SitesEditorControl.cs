@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Sites;
 using Mieruka.App.Services;
@@ -11,7 +10,7 @@ namespace Mieruka.App.Forms.Controls;
 
 public sealed class SitesEditorControl : UserControl
 {
-    private readonly BindingList<SiteConfig> _sites = new();
+    private BindingList<SiteConfig> _sites;
     private readonly BindingSource _source = new();
     private readonly DataGridView _grid;
     private readonly CredentialVaultPanel _vaultPanel;
@@ -32,13 +31,15 @@ public sealed class SitesEditorControl : UserControl
     {
         LayoutHelpers.ApplyStandardLayout(this);
 
+        _sites = new BindingList<SiteConfig>();
+        _source.DataSource = _sites;
+
         var bridge = new UiSecretsBridge(secretsProvider);
         _vaultPanel = new CredentialVaultPanel(secretsProvider, bridge)
         {
             ScopeSiteId = null,
         };
         _vaultPanel.TestLoginRequested += (_, site) => TestarLogin?.Invoke(this, site);
-        _vaultPanel.OpenGlobalVaultRequested += (_, _) => _vaultPanel.ScopeSiteId = null;
 
         _configTab = new SiteConfigTab();
         _loginTab = new LoginAutoTab(secretsProvider);
@@ -47,7 +48,6 @@ public sealed class SitesEditorControl : UserControl
         _whitelistTab = new WhitelistTab();
         _argsTab = new ArgsTab();
 
-        _source.DataSource = _sites;
         _grid = new DataGridView
         {
             Dock = DockStyle.Fill,
@@ -125,9 +125,28 @@ public sealed class SitesEditorControl : UserControl
 
         _split.Panel2.Controls.Add(tabs);
         Controls.Add(_split);
+        UpdateSelectedSite();
     }
 
-    public BindingList<SiteConfig> Sites => _sites;
+    public BindingList<SiteConfig> Sites
+    {
+        get => _sites;
+        set
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            if (!ReferenceEquals(_sites, value))
+            {
+                _sites = value;
+                _source.DataSource = _sites;
+            }
+
+            UpdateSelectedSite();
+        }
+    }
 
     public SiteConfig? SelectedSite => _selectedSite;
 
@@ -144,7 +163,7 @@ public sealed class SitesEditorControl : UserControl
 
     private void UpdateSelectedSite()
     {
-        if (_grid.CurrentRow?.DataBoundItem is SiteConfig site)
+        if (_grid?.CurrentRow?.DataBoundItem is SiteConfig site)
         {
             _selectedSite = site;
         }
