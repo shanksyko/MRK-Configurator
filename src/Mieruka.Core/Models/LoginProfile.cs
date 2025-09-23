@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Mieruka.Core.Models;
 
@@ -44,4 +45,9 @@ public sealed record class LoginProfile
     /// Maximum time, in seconds, spent looking for the login elements.
     /// </summary>
     public int TimeoutSeconds { get; init; } = 15;
+
+    /// <summary>
+    /// Hint identifiers used to detect single sign-on dialogs.
+    /// </summary>
+    public IList<string> SsoHints { get; init; } = new List<string>();
 }
