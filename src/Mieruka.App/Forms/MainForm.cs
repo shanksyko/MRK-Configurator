@@ -1,135 +1,354 @@
+#nullable enable
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using Mieruka.App.Ui;
 using Mieruka.Core.Models;
+using Mieruka.Core.Services;
+using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
 
 public partial class MainForm : Form
 {
-    private readonly BindingList<SiteConfig> _sites = new();
+    private readonly BindingList<ProgramaConfig> _programas = new();
+    private readonly ITelemetry _telemetry = new UiTelemetry();
+    private readonly Orchestrator _orchestrator;
+    private bool _busy;
 
     public MainForm()
     {
         InitializeComponent();
 
-        bsSites.DataSource = _sites;
-        dgvSites.DataSource = bsSites;
-        dgvSites.SelectionChanged += (_, _) => UpdateButtons();
-        dgvSites.CellDoubleClick += (_, _) => btnEditar_Click(this, EventArgs.Empty);
-        dgvSites.KeyDown += dgvSites_KeyDown;
+        var grid = dgvProgramas ?? throw new InvalidOperationException("O DataGridView de programas não foi criado pelo designer.");
+        var source = bsProgramas ?? throw new InvalidOperationException("A BindingSource de programas não foi inicializada.");
+        _ = menuPreview ?? throw new InvalidOperationException("O menu de preview não foi criado.");
+        _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi criado.");
 
-        SeedSampleData();
-        UpdateButtons();
+        source.DataSource = _programas;
+        grid.AutoGenerateColumns = false;
+        grid.DataSource = source;
+
+        grid.SelectionChanged += (_, _) => UpdateButtonStates();
+        grid.CellDoubleClick += (_, _) => btnEditar_Click(this, EventArgs.Empty);
+        grid.KeyDown += dgvProgramas_KeyDown;
+
+        _orchestrator = CreateOrchestrator();
+        _orchestrator.StateChanged += Orchestrator_StateChanged;
+
+        LoadInitialData();
+        UpdateButtonStates();
     }
 
-    private void btnAdicionar_Click(object? sender, EventArgs e)
+    private void LoadInitialData()
     {
-        var site = new SiteConfig
-        {
-            Id = $"site_{_sites.Count + 1}",
-            Url = "https://example.com",
-        };
-
-        _sites.Add(site);
-        SelectSite(site);
-    }
-
-    private void btnEditar_Click(object? sender, EventArgs e)
-    {
-        using var editor = new AppEditorForm();
-        editor.ShowDialog(this);
-    }
-
-    private void btnClonar_Click(object? sender, EventArgs e)
-    {
-        if (bsSites.Current is not SiteConfig current)
+        if (_programas.Count > 0)
         {
             return;
         }
 
-        var clone = new SiteConfig
+        _programas.Add(new ProgramaConfig
         {
-            Id = $"{current.Id}_clone",
-            Url = current.Url,
-            KioskMode = current.KioskMode,
-            AppMode = current.AppMode,
-            AllowedTabHosts = current.AllowedTabHosts?.ToList() ?? new List<string>(),
-            BrowserArguments = current.BrowserArguments?.ToList() ?? new List<string>(),
-        };
-
-        _sites.Add(clone);
-        SelectSite(clone);
+            Id = "app_principal",
+            ExecutablePath = @"C:\\Program Files\\Mieruka\\MierukaPlayer.exe",
+            AutoStart = true,
+            TargetMonitorStableId = string.Empty,
+        });
     }
 
-    private void btnRemover_Click(object? sender, EventArgs e)
+    private Orchestrator CreateOrchestrator()
     {
-        if (bsSites.Current is not SiteConfig current)
-        {
-            return;
-        }
-
-        _sites.Remove(current);
+        var component = new NoOpComponent();
+        return new Orchestrator(component, component, component, component, _telemetry);
     }
 
-    private void btnTestar_Click(object? sender, EventArgs e)
+    private void dgvProgramas_SelectionChanged(object? sender, EventArgs e)
     {
-        if (bsSites.Current is not SiteConfig current)
-        {
-            return;
-        }
-
-        MessageBox.Show(
-            this,
-            $"Teste de login para o site \"{current.Id}\" não está disponível nesta compilação.",
-            "Testar Login",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        UpdateButtonStates();
     }
 
-    private void dgvSites_KeyDown(object? sender, KeyEventArgs e)
+    private void dgvProgramas_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex >= 0)
+        {
+            btnEditar_Click(sender, EventArgs.Empty);
+        }
+    }
+
+    private void dgvProgramas_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.KeyCode == Keys.Delete)
         {
-            btnRemover_Click(sender, EventArgs.Empty);
+            btnExcluir_Click(sender, EventArgs.Empty);
             e.Handled = true;
         }
     }
 
-    private void SeedSampleData()
+    private void menuPreview_Click(object? sender, EventArgs e)
     {
-        if (_sites.Count > 0)
+        try
+        {
+            var preview = new PreviewForm();
+            preview.Show(this);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void btnAdicionar_Click(object? sender, EventArgs e)
+    {
+        AbrirEditor(null);
+    }
+
+    private void btnEditar_Click(object? sender, EventArgs e)
+    {
+        var selecionado = ObterProgramaSelecionado();
+        if (selecionado is null)
         {
             return;
         }
 
-        _sites.Add(new SiteConfig
-        {
-            Id = "sample",
-            Url = "https://example.com",
-        });
+        AbrirEditor(selecionado);
     }
 
-    private void SelectSite(SiteConfig site)
+    private void btnDuplicar_Click(object? sender, EventArgs e)
     {
-        var index = _sites.IndexOf(site);
-        if (index >= 0 && index < dgvSites.Rows.Count)
+        var selecionado = ObterProgramaSelecionado();
+        if (selecionado is null)
         {
-            dgvSites.ClearSelection();
-            var row = dgvSites.Rows[index];
-            row.Selected = true;
-            dgvSites.CurrentCell = row.Cells[0];
+            return;
+        }
+
+        var novoId = GerarIdentificadorUnico(selecionado.Id + "_copia");
+        var copia = selecionado with { Id = novoId };
+        _programas.Add(copia);
+        SelecionarPrograma(copia);
+    }
+
+    private void btnExcluir_Click(object? sender, EventArgs e)
+    {
+        var selecionado = ObterProgramaSelecionado();
+        if (selecionado is null)
+        {
+            return;
+        }
+
+        var confirmacao = MessageBox.Show(
+            this,
+            $"Deseja remover o programa '{selecionado.Id}'?",
+            "Excluir Programa",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (confirmacao != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _programas.Remove(selecionado);
+    }
+
+    private async void btnExecutar_Click(object? sender, EventArgs e)
+    {
+        await ExecutarOrchestratorAsync().ConfigureAwait(false);
+    }
+
+    private async void btnParar_Click(object? sender, EventArgs e)
+    {
+        await PararOrchestratorAsync().ConfigureAwait(false);
+    }
+
+    private async Task ExecutarOrchestratorAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        UpdateButtonStates();
+
+        try
+        {
+            await _orchestrator.StartAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao iniciar o orchestrator.", ex);
+            MessageBox.Show(this, $"Erro ao iniciar: {ex.Message}", "Orchestrator", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _busy = false;
+            UpdateButtonStates();
         }
     }
 
-    private void UpdateButtons()
+    private async Task PararOrchestratorAsync()
     {
-        var hasSelection = bsSites.Current is SiteConfig;
-        btnEditar.Enabled = hasSelection;
-        btnClonar.Enabled = hasSelection;
-        btnRemover.Enabled = hasSelection;
-        btnTestar.Enabled = hasSelection;
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        UpdateButtonStates();
+
+        try
+        {
+            await _orchestrator.StopAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao parar o orchestrator.", ex);
+            MessageBox.Show(this, $"Erro ao parar: {ex.Message}", "Orchestrator", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _busy = false;
+            UpdateButtonStates();
+        }
+    }
+
+    private void Orchestrator_StateChanged(object? sender, OrchestratorStateChangedEventArgs e)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(new MethodInvoker(UpdateButtonStates));
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignore because the form is closing.
+        }
+    }
+
+    private void UpdateButtonStates()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new MethodInvoker(UpdateButtonStates));
+            return;
+        }
+
+        var selecionado = ObterProgramaSelecionado();
+        var temSelecao = selecionado is not null;
+        var estado = _orchestrator.State;
+        var podeExecutar = !_busy && estado is not OrchestratorState.Running and not OrchestratorState.Recovering;
+        var podeParar = !_busy && estado is OrchestratorState.Running or OrchestratorState.Recovering;
+
+        btnEditar.Enabled = temSelecao;
+        btnDuplicar.Enabled = temSelecao;
+        btnExcluir.Enabled = temSelecao;
+        btnExecutar.Enabled = podeExecutar;
+        btnParar.Enabled = podeParar;
+    }
+
+    private ProgramaConfig? ObterProgramaSelecionado()
+    {
+        return bsProgramas?.Current as ProgramaConfig;
+    }
+
+    private void SelecionarPrograma(ProgramaConfig programa)
+    {
+        var grid = dgvProgramas;
+        if (grid is null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < grid.Rows.Count; i++)
+        {
+            var row = grid.Rows[i];
+            if (row.DataBoundItem is ProgramaConfig atual && ReferenceEquals(atual, programa))
+            {
+                grid.ClearSelection();
+                row.Selected = true;
+                grid.CurrentCell = row.Cells[0];
+                break;
+            }
+        }
+    }
+
+    private string GerarIdentificadorUnico(string baseId)
+    {
+        var id = baseId;
+        var contador = 1;
+        while (_programas.Any(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase)))
+        {
+            id = $"{baseId}_{contador++}";
+        }
+
+        return id;
+    }
+
+    private void AbrirEditor(ProgramaConfig? selected)
+    {
+        using var editor = new AppEditorForm(selected);
+        var resultado = editor.ShowDialog(this);
+        if (resultado != DialogResult.OK)
+        {
+            return;
+        }
+
+        var programa = editor.Resultado;
+        if (programa is null)
+        {
+            return;
+        }
+
+        if (selected is null)
+        {
+            _programas.Add(programa);
+            SelecionarPrograma(programa);
+            return;
+        }
+
+        var indice = _programas.IndexOf(selected);
+        if (indice >= 0)
+        {
+            _programas[indice] = programa;
+            bsProgramas.ResetBindings(false);
+            SelecionarPrograma(programa);
+        }
+    }
+
+    private sealed class NoOpComponent : IOrchestrationComponent
+    {
+        public Task StartAsync(System.Threading.CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task StopAsync(System.Threading.CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task RecoverAsync(System.Threading.CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class UiTelemetry : ITelemetry
+    {
+        public void Info(string message, Exception? exception = null)
+        {
+            Debug.WriteLine($"[INFO] {message} {exception?.Message}");
+        }
+
+        public void Warn(string message, Exception? exception = null)
+        {
+            Debug.WriteLine($"[WARN] {message} {exception?.Message}");
+        }
+
+        public void Error(string message, Exception? exception = null)
+        {
+            Debug.WriteLine($"[ERROR] {message} {exception?.Message}");
+        }
     }
 }
