@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using Mieruka.Core.Models;
 
 namespace Mieruka.Core.Interop;
 
@@ -42,6 +43,12 @@ public static class WindowMover
         {
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to move window.");
         }
+    }
+
+    public static void Apply(WindowConfig window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        // Placeholder para integração futura com posicionamento automático de janelas.
     }
 
     private static FrameAdjustment GetFrameAdjustment(IntPtr hwnd)

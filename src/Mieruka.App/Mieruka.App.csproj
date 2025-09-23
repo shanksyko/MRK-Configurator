@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,7 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Mieruka.Core/Mieruka.Core.csproj" />
-    <ProjectReference Include="../Mieruka.Preview/Mieruka.Preview.csproj" />
     <ProjectReference Include="../Mieruka.Automation/Mieruka.Automation.csproj" />
   </ItemGroup>
 </Project>
