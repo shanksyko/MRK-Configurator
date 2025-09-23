@@ -90,7 +90,13 @@ public sealed class MainForm : Form
         {
             ScopeSiteId = null,
         };
-        _vaultPanel.OpenGlobalVaultRequested += (_, _) => _tabs?.SelectedTab = programsTab;
+        _vaultPanel.OpenGlobalVaultRequested += (_, _) =>
+        {
+            if (_tabs != null)
+            {
+                _tabs.SelectedTab = programsTab;
+            }
+        };
 
         var vaultTab = new TabPage("CredentialVault")
         {
