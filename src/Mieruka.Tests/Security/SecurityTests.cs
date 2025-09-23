@@ -48,7 +48,7 @@ public sealed class SecurityTests : IDisposable
 
         var payload = System.Security.Cryptography.ProtectedData.Protect(
             System.Text.Encoding.UTF8.GetBytes("legacy"),
-            MemoryMarshal.ToArray(vault.EntropySpan),
+            vault.EntropySpan.ToArray(),
             System.Security.Cryptography.DataProtectionScope.CurrentUser);
         File.WriteAllBytes(path, payload);
 

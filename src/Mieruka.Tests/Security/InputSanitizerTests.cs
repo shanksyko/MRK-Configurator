@@ -52,7 +52,7 @@ public sealed class InputSanitizerTests : IDisposable
     {
         var sanitized = InputSanitizer.SanitizePath("logs/app.txt", _baseDirectory);
         Assert.StartsWith(_baseDirectory, sanitized, StringComparison.OrdinalIgnoreCase);
-        Assert.True(sanitized.EndsWith(Path.Combine("logs", "app.txt"), StringComparison.OrdinalIgnoreCase));
+        Assert.EndsWith(Path.Combine("logs", "app.txt"), sanitized, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
