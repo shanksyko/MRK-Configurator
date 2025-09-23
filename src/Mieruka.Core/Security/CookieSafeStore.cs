@@ -114,7 +114,11 @@ public sealed class CookieSafeStore
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(plainBytes);
+            if (plainBytes.Length > 0)
+            {
+                Array.Clear(plainBytes, 0, plainBytes.Length);
+                CryptographicOperations.ZeroMemory(plainBytes);
+            }
         }
         try
         {
@@ -134,6 +138,7 @@ public sealed class CookieSafeStore
         {
             if (cipher.Length > 0)
             {
+                Array.Clear(cipher, 0, cipher.Length);
                 CryptographicOperations.ZeroMemory(cipher);
             }
         }
@@ -181,7 +186,20 @@ public sealed class CookieSafeStore
                     byte[] jsonBytes = Array.Empty<byte>();
                     try
                     {
-                        jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                        var entropyBytes = (byte[])_entropy.Clone();
+                        try
+                        {
+                            jsonBytes = System.Security.Cryptography.ProtectedData.Unprotect(
+                                cipher,
+                                entropyBytes,
+                                System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                        }
+                        finally
+                        {
+                            Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                            // TODO: manter janelas de exposição de memória o mais curtas possível
+                        }
+
                         var json = Encoding.UTF8.GetString(jsonBytes);
                         var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
                         if (payload is null)
@@ -222,6 +240,7 @@ public sealed class CookieSafeStore
                     {
                         if (jsonBytes.Length > 0)
                         {
+                            Array.Clear(jsonBytes, 0, jsonBytes.Length);
                             CryptographicOperations.ZeroMemory(jsonBytes);
                         }
                     }
@@ -230,6 +249,7 @@ public sealed class CookieSafeStore
                 {
                     if (cipher.Length > 0)
                     {
+                        Array.Clear(cipher, 0, cipher.Length);
                         CryptographicOperations.ZeroMemory(cipher);
                     }
                 }
@@ -292,7 +312,20 @@ public sealed class CookieSafeStore
                         byte[] jsonBytes = Array.Empty<byte>();
                         try
                         {
-                            jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                            var entropyBytes = (byte[])_entropy.Clone();
+                            try
+                            {
+                                jsonBytes = System.Security.Cryptography.ProtectedData.Unprotect(
+                                    cipher,
+                                    entropyBytes,
+                                    System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                            }
+                            finally
+                            {
+                                Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                                // TODO: manter janelas de exposição de memória o mais curtas possível
+                            }
+
                             var json = Encoding.UTF8.GetString(jsonBytes);
                             var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
                             if (payload is null || payload.ExpiresAt <= DateTimeOffset.UtcNow)
@@ -304,6 +337,7 @@ public sealed class CookieSafeStore
                         {
                             if (jsonBytes.Length > 0)
                             {
+                                Array.Clear(jsonBytes, 0, jsonBytes.Length);
                                 CryptographicOperations.ZeroMemory(jsonBytes);
                             }
                         }
@@ -312,6 +346,7 @@ public sealed class CookieSafeStore
                     {
                         if (cipher.Length > 0)
                         {
+                            Array.Clear(cipher, 0, cipher.Length);
                             CryptographicOperations.ZeroMemory(cipher);
                         }
                     }
@@ -345,7 +380,20 @@ public sealed class CookieSafeStore
                         byte[] jsonBytes = Array.Empty<byte>();
                         try
                         {
-                            jsonBytes = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                            var entropyBytes = (byte[])_entropy.Clone();
+                            try
+                            {
+                                jsonBytes = System.Security.Cryptography.ProtectedData.Unprotect(
+                                    cipher,
+                                    entropyBytes,
+                                    System.Security.Cryptography.DataProtectionScope.CurrentUser);
+                            }
+                            finally
+                            {
+                                Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                                // TODO: manter janelas de exposição de memória o mais curtas possível
+                            }
+
                             var json = Encoding.UTF8.GetString(jsonBytes);
                             var payload = JsonSerializer.Deserialize<CookieFilePayload>(json, SerializerOptions);
                             if (payload is not null && payload.ExpiresAt > DateTimeOffset.UtcNow)
@@ -357,6 +405,7 @@ public sealed class CookieSafeStore
                         {
                             if (jsonBytes.Length > 0)
                             {
+                                Array.Clear(jsonBytes, 0, jsonBytes.Length);
                                 CryptographicOperations.ZeroMemory(jsonBytes);
                             }
                         }
@@ -365,6 +414,7 @@ public sealed class CookieSafeStore
                     {
                         if (cipher.Length > 0)
                         {
+                            Array.Clear(cipher, 0, cipher.Length);
                             CryptographicOperations.ZeroMemory(cipher);
                         }
                     }
@@ -387,7 +437,19 @@ public sealed class CookieSafeStore
 
     private byte[] Protect(byte[] payload)
     {
-        return ProtectedData.Protect(payload, _entropy, DataProtectionScope.CurrentUser);
+        var entropyBytes = (byte[])_entropy.Clone();
+        try
+        {
+            return System.Security.Cryptography.ProtectedData.Protect(
+                payload,
+                entropyBytes,
+                System.Security.Cryptography.DataProtectionScope.CurrentUser);
+        }
+        finally
+        {
+            Array.Clear(entropyBytes, 0, entropyBytes.Length);
+            // TODO: manter janelas de exposição de memória o mais curtas possível
+        }
     }
 
     private sealed record SerializableCookie
