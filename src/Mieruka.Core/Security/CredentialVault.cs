@@ -34,6 +34,11 @@ public sealed class CredentialVault
     private readonly ConcurrentDictionary<string, object> _locks = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Raised whenever credentials associated with a site are modified.
+    /// </summary>
+    public event EventHandler<CredentialChangedEventArgs>? CredentialsChanged;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="CredentialVault"/> class.
     /// </summary>
     /// <param name="applicationEntropy">Entropy bound to the application used during encryption.</param>
@@ -67,6 +72,7 @@ public sealed class CredentialVault
         try
         {
             SaveSecretCore(key, chars, version);
+            NotifyCredentialsChanged(key);
         }
         finally
         {
@@ -289,6 +295,8 @@ public sealed class CredentialVault
                 File.Delete(path);
             }
         }
+
+        NotifyCredentialsChanged(key);
     }
 
     internal string ResolveStoragePath(string key)
@@ -409,6 +417,49 @@ public sealed class CredentialVault
         return $"{SiteKeyPrefix}:{siteId}:{suffix}";
     }
 
+    private static bool TryParseSiteCredentialKey(string key, out string siteId, out CredentialKind kind)
+    {
+        siteId = string.Empty;
+        kind = default;
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        var parts = key.Split(':');
+        if (parts.Length != 3)
+        {
+            return false;
+        }
+
+        if (!string.Equals(parts[0], SiteKeyPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        siteId = parts[1];
+        kind = parts[2] switch
+        {
+            UsernameSuffix => CredentialKind.Username,
+            PasswordSuffix => CredentialKind.Password,
+            TotpSuffix => CredentialKind.Totp,
+            _ => default,
+        };
+
+        return kind != default;
+    }
+
+    private void NotifyCredentialsChanged(string key)
+    {
+        if (!TryParseSiteCredentialKey(key, out var siteId, out var kind))
+        {
+            return;
+        }
+
+        CredentialsChanged?.Invoke(this, new CredentialChangedEventArgs(siteId, kind));
+    }
+
     private static void ValidateSiteId(string siteId)
     {
         if (string.IsNullOrWhiteSpace(siteId))
@@ -475,6 +526,33 @@ public sealed class CredentialVault
     {
         return SHA256.HashData(Encoding.UTF8.GetBytes(key));
     }
+}
+
+/// <summary>
+/// Represents the type of credential stored for a site.
+/// </summary>
+public enum CredentialKind
+{
+    None = 0,
+    Username,
+    Password,
+    Totp,
+}
+
+/// <summary>
+/// Event arguments describing a credential mutation.
+/// </summary>
+public sealed class CredentialChangedEventArgs : EventArgs
+{
+    public CredentialChangedEventArgs(string siteId, CredentialKind kind)
+    {
+        SiteId = siteId;
+        Kind = kind;
+    }
+
+    public string SiteId { get; }
+
+    public CredentialKind Kind { get; }
 }
 
 /// <summary>

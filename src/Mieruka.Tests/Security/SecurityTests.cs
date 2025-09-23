@@ -79,22 +79,28 @@ public sealed class SecurityTests : IDisposable
         var cookies = new CookieSafeStore("tests", baseDirectory: Path.Combine(_tempDirectory, "cookies"));
         var provider = new SecretsProvider(vault, cookies, TimeSpan.FromMinutes(5));
 
-        var username = CreateSecureString("user@example.com");
-        var password = CreateSecureString("p@ssw0rd");
+        using var username = CreateSecureString("user@example.com");
+        using var password = CreateSecureString("p@ssw0rd");
+        using var totp = CreateSecureString("123456");
 
         provider.SaveCredentials("alpha", username, password);
+        provider.SetTotp("alpha", totp);
 
         var cachedUser = provider.GetUsernameFor("alpha");
         var cachedPass = provider.GetPasswordFor("alpha");
+        var cachedTotp = provider.GetTotpFor("alpha");
 
         Assert.NotNull(cachedUser);
         Assert.NotNull(cachedPass);
+        Assert.NotNull(cachedTotp);
         Assert.Equal("user@example.com", ToUnsecureString(cachedUser!));
         Assert.Equal("p@ssw0rd", ToUnsecureString(cachedPass!));
+        Assert.Equal("123456", ToUnsecureString(cachedTotp!));
 
-        provider.DeleteCredentials("alpha");
+        provider.Delete("alpha");
         Assert.Null(provider.GetUsernameFor("alpha"));
         Assert.Null(provider.GetPasswordFor("alpha"));
+        Assert.Null(provider.GetTotpFor("alpha"));
     }
 
     [Fact]

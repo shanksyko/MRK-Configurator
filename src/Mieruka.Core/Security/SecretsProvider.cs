@@ -16,6 +16,8 @@ public sealed class SecretsProvider
     private readonly ConcurrentDictionary<string, CacheEntry> _secretCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly TimeSpan _cacheDuration;
 
+    public event EventHandler<CredentialChangedEventArgs>? CredentialsChanged;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SecretsProvider"/> class.
     /// </summary>
@@ -29,6 +31,8 @@ public sealed class SecretsProvider
         _cacheDuration = cacheDuration is { } duration && duration > TimeSpan.Zero
             ? duration
             : TimeSpan.FromSeconds(45);
+
+        _vault.CredentialsChanged += OnVaultCredentialsChanged;
     }
 
     /// <summary>
@@ -37,11 +41,8 @@ public sealed class SecretsProvider
     /// <param name="siteId">Logical site identifier.</param>
     /// <param name="username">Username stored in the vault.</param>
     /// <param name="password">Password stored in the vault.</param>
-    public void SaveCredentials(string siteId, SecureString username, SecureString password)
+    public void SaveCredentials(string siteId, SecureString? username, SecureString? password)
     {
-        ArgumentNullException.ThrowIfNull(username);
-        ArgumentNullException.ThrowIfNull(password);
-
         SaveSecretInternal(CredentialVault.BuildUsernameKey(siteId), username);
         SaveSecretInternal(CredentialVault.BuildPasswordKey(siteId), password);
     }
@@ -51,10 +52,8 @@ public sealed class SecretsProvider
     /// </summary>
     /// <param name="siteId">Logical site identifier.</param>
     /// <param name="totp">TOTP seed stored in the vault.</param>
-    public void SaveTotp(string siteId, SecureString totp)
+    public void SetTotp(string siteId, SecureString? totp)
     {
-        ArgumentNullException.ThrowIfNull(totp);
-
         SaveSecretInternal(CredentialVault.BuildTotpKey(siteId), totp);
     }
 
@@ -91,17 +90,10 @@ public sealed class SecretsProvider
     /// <summary>
     /// Deletes credentials stored for the provided site.
     /// </summary>
-    public void DeleteCredentials(string siteId)
+    public void Delete(string siteId)
     {
         DeleteSecretInternal(CredentialVault.BuildUsernameKey(siteId));
         DeleteSecretInternal(CredentialVault.BuildPasswordKey(siteId));
-    }
-
-    /// <summary>
-    /// Deletes the stored TOTP seed for the provided site.
-    /// </summary>
-    public void DeleteTotp(string siteId)
-    {
         DeleteSecretInternal(CredentialVault.BuildTotpKey(siteId));
     }
 
@@ -138,8 +130,14 @@ public sealed class SecretsProvider
         return newEntry.CreateCopy();
     }
 
-    private void SaveSecretInternal(string key, SecureString value)
+    private void SaveSecretInternal(string key, SecureString? value)
     {
+        if (value is null)
+        {
+            DeleteSecretInternal(key);
+            return;
+        }
+
         _vault.SaveSecret(key, value);
         _secretCache[key] = CacheEntry.FromSecret(value, _cacheDuration);
     }
@@ -148,6 +146,24 @@ public sealed class SecretsProvider
     {
         _vault.DeleteSecret(key);
         _secretCache.TryRemove(key, out _);
+    }
+
+    private void OnVaultCredentialsChanged(object? sender, CredentialChangedEventArgs e)
+    {
+        var key = e.Kind switch
+        {
+            CredentialKind.Username => CredentialVault.BuildUsernameKey(e.SiteId),
+            CredentialKind.Password => CredentialVault.BuildPasswordKey(e.SiteId),
+            CredentialKind.Totp => CredentialVault.BuildTotpKey(e.SiteId),
+            _ => null,
+        };
+
+        if (!string.IsNullOrEmpty(key))
+        {
+            _secretCache.TryRemove(key, out _);
+        }
+
+        CredentialsChanged?.Invoke(this, e);
     }
 
     private sealed class CacheEntry
