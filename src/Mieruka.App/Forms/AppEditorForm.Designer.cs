@@ -27,6 +27,8 @@ partial class AppEditorForm
     internal NumericUpDown nudJanelaLargura = null!;
     internal NumericUpDown nudJanelaAltura = null!;
     internal CheckBox chkJanelaTelaCheia = null!;
+    internal ComboBox cboMonitores = null!;
+    internal PictureBox picMonitorPreview = null!;
     internal ErrorProvider errorProvider = null!;
 
     protected override void Dispose(bool disposing)
@@ -63,6 +65,9 @@ partial class AppEditorForm
         txtArgumentos = new TextBox();
         chkAutoStart = new CheckBox();
         var tlpJanela = new TableLayoutPanel();
+        var lblMonitor = new Label();
+        cboMonitores = new ComboBox();
+        picMonitorPreview = new PictureBox();
         chkJanelaTelaCheia = new CheckBox();
         var lblX = new Label();
         nudJanelaX = new NumericUpDown();
@@ -84,6 +89,7 @@ partial class AppEditorForm
         painelRodape.SuspendLayout();
         tlpGeral.SuspendLayout();
         tlpJanela.SuspendLayout();
+        ((ISupportInitialize)picMonitorPreview).BeginInit();
         ((ISupportInitialize)nudJanelaX).BeginInit();
         ((ISupportInitialize)nudJanelaY).BeginInit();
         ((ISupportInitialize)nudJanelaLargura).BeginInit();
@@ -220,25 +226,31 @@ partial class AppEditorForm
         //
         // tlpJanela
         //
-        tlpJanela.ColumnCount = 2;
+        tlpJanela.ColumnCount = 3;
         tlpJanela.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         tlpJanela.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tlpJanela.Controls.Add(chkJanelaTelaCheia, 0, 0);
+        tlpJanela.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220F));
+        tlpJanela.Controls.Add(lblMonitor, 0, 0);
+        tlpJanela.Controls.Add(cboMonitores, 1, 0);
+        tlpJanela.Controls.Add(picMonitorPreview, 2, 0);
+        tlpJanela.Controls.Add(chkJanelaTelaCheia, 0, 1);
         tlpJanela.SetColumnSpan(chkJanelaTelaCheia, 2);
-        tlpJanela.Controls.Add(lblX, 0, 1);
-        tlpJanela.Controls.Add(nudJanelaX, 1, 1);
-        tlpJanela.Controls.Add(lblY, 0, 2);
-        tlpJanela.Controls.Add(nudJanelaY, 1, 2);
-        tlpJanela.Controls.Add(lblLargura, 0, 3);
-        tlpJanela.Controls.Add(nudJanelaLargura, 1, 3);
-        tlpJanela.Controls.Add(lblAltura, 0, 4);
-        tlpJanela.Controls.Add(nudJanelaAltura, 1, 4);
+        tlpJanela.Controls.Add(lblX, 0, 2);
+        tlpJanela.Controls.Add(nudJanelaX, 1, 2);
+        tlpJanela.Controls.Add(lblY, 0, 3);
+        tlpJanela.Controls.Add(nudJanelaY, 1, 3);
+        tlpJanela.Controls.Add(lblLargura, 0, 4);
+        tlpJanela.Controls.Add(nudJanelaLargura, 1, 4);
+        tlpJanela.Controls.Add(lblAltura, 0, 5);
+        tlpJanela.Controls.Add(nudJanelaAltura, 1, 5);
+        tlpJanela.SetRowSpan(picMonitorPreview, 6);
         tlpJanela.Dock = DockStyle.Fill;
         tlpJanela.Location = new System.Drawing.Point(8, 8);
         tlpJanela.Margin = new Padding(0);
         tlpJanela.Name = "tlpJanela";
         tlpJanela.Padding = new Padding(0, 0, 0, 8);
-        tlpJanela.RowCount = 5;
+        tlpJanela.RowCount = 6;
+        tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -247,13 +259,44 @@ partial class AppEditorForm
         tlpJanela.Size = new System.Drawing.Size(1016, 604);
         tlpJanela.TabIndex = 0;
         //
+        // lblMonitor
+        //
+        lblMonitor.AutoSize = true;
+        lblMonitor.Margin = new Padding(0, 0, 8, 8);
+        lblMonitor.Name = "lblMonitor";
+        lblMonitor.Size = new System.Drawing.Size(52, 15);
+        lblMonitor.TabIndex = 0;
+        lblMonitor.Text = "Monitor";
+        //
+        // cboMonitores
+        //
+        cboMonitores.Dock = DockStyle.Fill;
+        cboMonitores.DropDownStyle = ComboBoxStyle.DropDownList;
+        cboMonitores.FormattingEnabled = true;
+        cboMonitores.Margin = new Padding(0, 0, 8, 8);
+        cboMonitores.Name = "cboMonitores";
+        cboMonitores.Size = new System.Drawing.Size(768, 23);
+        cboMonitores.TabIndex = 0;
+        //
+        // picMonitorPreview
+        //
+        picMonitorPreview.BackColor = System.Drawing.SystemColors.AppWorkspace;
+        picMonitorPreview.Dock = DockStyle.Fill;
+        picMonitorPreview.Location = new System.Drawing.Point(776, 0);
+        picMonitorPreview.Margin = new Padding(8, 0, 0, 8);
+        picMonitorPreview.Name = "picMonitorPreview";
+        picMonitorPreview.Size = new System.Drawing.Size(240, 288);
+        picMonitorPreview.SizeMode = PictureBoxSizeMode.Zoom;
+        picMonitorPreview.TabIndex = 6;
+        picMonitorPreview.TabStop = false;
+        //
         // chkJanelaTelaCheia
         //
         chkJanelaTelaCheia.AutoSize = true;
-        chkJanelaTelaCheia.Margin = new Padding(0, 0, 0, 8);
+        chkJanelaTelaCheia.Margin = new Padding(0, 0, 8, 8);
         chkJanelaTelaCheia.Name = "chkJanelaTelaCheia";
         chkJanelaTelaCheia.Size = new System.Drawing.Size(147, 19);
-        chkJanelaTelaCheia.TabIndex = 0;
+        chkJanelaTelaCheia.TabIndex = 1;
         chkJanelaTelaCheia.Text = "Utilizar tela inteira";
         chkJanelaTelaCheia.UseVisualStyleBackColor = true;
         //
@@ -263,12 +306,12 @@ partial class AppEditorForm
         lblX.Margin = new Padding(0, 0, 8, 8);
         lblX.Name = "lblX";
         lblX.Size = new System.Drawing.Size(15, 15);
-        lblX.TabIndex = 1;
+        lblX.TabIndex = 2;
         lblX.Text = "X";
         //
         // nudJanelaX
         //
-        nudJanelaX.Margin = new Padding(0, 0, 0, 8);
+        nudJanelaX.Margin = new Padding(0, 0, 8, 8);
         nudJanelaX.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
         nudJanelaX.Minimum = new decimal(new int[] { 10000, 0, 0, int.MinValue });
         nudJanelaX.Name = "nudJanelaX";
@@ -286,7 +329,7 @@ partial class AppEditorForm
         //
         // nudJanelaY
         //
-        nudJanelaY.Margin = new Padding(0, 0, 0, 8);
+        nudJanelaY.Margin = new Padding(0, 0, 8, 8);
         nudJanelaY.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
         nudJanelaY.Minimum = new decimal(new int[] { 10000, 0, 0, int.MinValue });
         nudJanelaY.Name = "nudJanelaY";
@@ -304,7 +347,7 @@ partial class AppEditorForm
         //
         // nudJanelaLargura
         //
-        nudJanelaLargura.Margin = new Padding(0, 0, 0, 8);
+        nudJanelaLargura.Margin = new Padding(0, 0, 8, 8);
         nudJanelaLargura.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
         nudJanelaLargura.Name = "nudJanelaLargura";
         nudJanelaLargura.Size = new System.Drawing.Size(160, 23);
@@ -321,7 +364,7 @@ partial class AppEditorForm
         //
         // nudJanelaAltura
         //
-        nudJanelaAltura.Margin = new Padding(0, 0, 0, 8);
+        nudJanelaAltura.Margin = new Padding(0, 0, 8, 8);
         nudJanelaAltura.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
         nudJanelaAltura.Name = "nudJanelaAltura";
         nudJanelaAltura.Size = new System.Drawing.Size(160, 23);
@@ -466,6 +509,7 @@ partial class AppEditorForm
         tlpGeral.PerformLayout();
         tlpJanela.ResumeLayout(false);
         tlpJanela.PerformLayout();
+        ((ISupportInitialize)picMonitorPreview).EndInit();
         ((ISupportInitialize)nudJanelaX).EndInit();
         ((ISupportInitialize)nudJanelaY).EndInit();
         ((ISupportInitialize)nudJanelaLargura).EndInit();
