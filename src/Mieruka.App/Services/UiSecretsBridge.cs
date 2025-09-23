@@ -5,7 +5,7 @@ using Mieruka.Core.Security;
 
 namespace Mieruka.App.Services;
 
-internal sealed class UiSecretsBridge
+public sealed class UiSecretsBridge
 {
     private readonly SecretsProvider _provider;
 
