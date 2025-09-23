@@ -24,6 +24,7 @@ public partial class MainForm : Form
     private bool _busy;
     private readonly List<MonitorInfo> _monitorSnapshot = new();
     private readonly List<MonitorCardContext> _monitorCardOrder = new();
+    private readonly List<MonitorPreviewHost> _monitorHosts = new();
     private readonly Dictionary<string, MonitorCardContext> _monitorCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
     private IDisplayService? _displayService;
@@ -183,14 +184,28 @@ public partial class MainForm : Form
 
         foreach (var monitor in monitors)
         {
-            var descriptor = new MonitorDescriptor(monitor, MonitorIdentifier.Create(monitor), LayoutHelpers.GetMonitorDisplayName(monitor));
+            var monitorId = MonitorIdentifier.Create(monitor);
             var card = LayoutHelpers.CreateMonitorCard(monitor, OnMonitorCardSelected, OnMonitorCardStopRequested, out var pictureBox);
-            ApplyDescriptor(card, descriptor);
+            ApplyMonitorId(card, monitorId);
 
-            var host = new MonitorPreviewHost(descriptor, pictureBox, preferGpu: true);
-            var context = new MonitorCardContext(descriptor, card, host);
+            var host = new MonitorPreviewHost(monitorId, pictureBox);
+            var context = new MonitorCardContext(monitorId, monitor, card, host);
+
             _monitorCardOrder.Add(context);
-            _monitorCards[descriptor.Id] = context;
+            _monitorCards[monitorId] = context;
+            _monitorHosts.Add(host);
+
+            if (shouldRestart && !_manuallyStoppedMonitors.Contains(monitorId))
+            {
+                try
+                {
+                    host.Start(preferGpu: true);
+                }
+                catch (Exception ex)
+                {
+                    _telemetry.Warn($"Falha ao iniciar preview do monitor '{monitorId}'.", ex);
+                }
+            }
         }
 
         if (SelectedMonitorId is not null && !validIds.Contains(SelectedMonitorId))
@@ -200,7 +215,7 @@ public partial class MainForm : Form
 
         if (SelectedMonitorId is null && _monitorCardOrder.Count > 0)
         {
-            UpdateSelectedMonitor(_monitorCardOrder[0].Descriptor.Id, notify: false);
+            UpdateSelectedMonitor(_monitorCardOrder[0].MonitorId, notify: false);
         }
         else
         {
@@ -208,11 +223,6 @@ public partial class MainForm : Form
         }
 
         RelayoutMonitorCards();
-
-        if (shouldRestart)
-        {
-            StartAutomaticPreviews();
-        }
     }
 
     private IReadOnlyList<MonitorInfo> CaptureMonitorSnapshot()
@@ -335,45 +345,45 @@ public partial class MainForm : Form
         UpdateMonitorSelectionVisuals();
     }
 
-    private static void ApplyDescriptor(Control control, MonitorDescriptor descriptor)
+    private static void ApplyMonitorId(Control control, string monitorId)
     {
-        control.Tag = descriptor;
+        control.Tag = monitorId;
         foreach (Control child in control.Controls)
         {
-            ApplyDescriptor(child, descriptor);
+            ApplyMonitorId(child, monitorId);
         }
     }
 
     private void OnMonitorCardSelected(object? sender, EventArgs e)
     {
-        if (sender is not Control control || control.Tag is not MonitorDescriptor descriptor)
+        if (sender is not Control control || control.Tag is not string monitorId)
         {
             return;
         }
 
-        _manuallyStoppedMonitors.Remove(descriptor.Id);
+        _manuallyStoppedMonitors.Remove(monitorId);
 
-        if (_monitorCards.TryGetValue(descriptor.Id, out var context))
+        if (_monitorCards.TryGetValue(monitorId, out var context))
         {
-            context.Host.Start();
+            context.Host.Start(preferGpu: true);
         }
 
-        UpdateSelectedMonitor(descriptor.Id);
+        UpdateSelectedMonitor(monitorId);
     }
 
     private void OnMonitorCardStopRequested(object? sender, EventArgs e)
     {
-        if (sender is not Control control || control.Tag is not MonitorDescriptor descriptor)
+        if (sender is not Control control || control.Tag is not string monitorId)
         {
             return;
         }
 
-        if (_monitorCards.TryGetValue(descriptor.Id, out var context))
+        if (_monitorCards.TryGetValue(monitorId, out var context))
         {
             context.Host.Stop();
         }
 
-        _manuallyStoppedMonitors.Add(descriptor.Id);
+        _manuallyStoppedMonitors.Add(monitorId);
     }
 
     private void UpdateSelectedMonitor(string? monitorId, bool notify = true)
@@ -398,9 +408,11 @@ public partial class MainForm : Form
         foreach (var context in _monitorCardOrder)
         {
             var isSelected = SelectedMonitorId is not null &&
-                string.Equals(context.Descriptor.Id, SelectedMonitorId, StringComparison.OrdinalIgnoreCase);
+                string.Equals(context.MonitorId, SelectedMonitorId, StringComparison.OrdinalIgnoreCase);
 
-            context.Card.BackColor = isSelected ? System.Drawing.SystemColors.GradientInactiveCaption : System.Drawing.SystemColors.Control;
+            context.Card.BackColor = isSelected
+                ? System.Drawing.SystemColors.GradientInactiveCaption
+                : System.Drawing.SystemColors.Control;
         }
     }
 
@@ -415,12 +427,12 @@ public partial class MainForm : Form
 
         foreach (var context in _monitorCardOrder)
         {
-            if (_manuallyStoppedMonitors.Contains(context.Descriptor.Id))
+            if (_manuallyStoppedMonitors.Contains(context.MonitorId))
             {
                 continue;
             }
 
-            context.Host.Start();
+            context.Host.Start(preferGpu: true);
         }
     }
 
@@ -445,13 +457,14 @@ public partial class MainForm : Form
 
     private void DisposeMonitorCards()
     {
-        foreach (var context in _monitorCardOrder)
+        foreach (var host in _monitorHosts)
         {
-            context.Host.Dispose();
+            host.Dispose();
         }
 
         _monitorCardOrder.Clear();
         _monitorCards.Clear();
+        _monitorHosts.Clear();
 
         if (tlpMonitores is not null)
         {
@@ -729,14 +742,17 @@ public partial class MainForm : Form
 
     private sealed class MonitorCardContext
     {
-        public MonitorCardContext(MonitorDescriptor descriptor, Panel card, MonitorPreviewHost host)
+        public MonitorCardContext(string monitorId, MonitorInfo monitor, Panel card, MonitorPreviewHost host)
         {
-            Descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
+            MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
+            Monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
             Card = card ?? throw new ArgumentNullException(nameof(card));
             Host = host ?? throw new ArgumentNullException(nameof(host));
         }
 
-        public MonitorDescriptor Descriptor { get; }
+        public string MonitorId { get; }
+
+        public MonitorInfo Monitor { get; }
 
         public Panel Card { get; }
 

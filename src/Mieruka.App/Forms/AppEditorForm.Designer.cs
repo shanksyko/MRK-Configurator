@@ -3,6 +3,7 @@
 using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
+using Mieruka.App.Forms.Controls.Apps;
 
 namespace Mieruka.App.Forms;
 
@@ -11,11 +12,13 @@ partial class AppEditorForm
     private IContainer? components = null;
     internal TabControl tabEditor = null!;
     internal TabPage tpGeral = null!;
+    internal TabPage tpAplicativos = null!;
     internal TabPage tpJanela = null!;
     internal TabPage tpSites = null!;
     internal TabPage tpCiclo = null!;
     internal TabPage tpAvancado = null!;
     internal SitesEditorControl sitesEditorControl = null!;
+    internal AppsTab appsTabControl = null!;
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
     internal TextBox txtId = null!;
@@ -48,11 +51,13 @@ partial class AppEditorForm
         components = new Container();
         tabEditor = new TabControl();
         tpGeral = new TabPage();
+        tpAplicativos = new TabPage();
         tpJanela = new TabPage();
         tpSites = new TabPage();
         tpCiclo = new TabPage();
         tpAvancado = new TabPage();
         sitesEditorControl = new SitesEditorControl();
+        appsTabControl = new AppsTab();
         var painelRodape = new FlowLayoutPanel();
         btnSalvar = new Button();
         btnCancelar = new Button();
@@ -82,6 +87,7 @@ partial class AppEditorForm
         errorProvider = new ErrorProvider(components);
         tabEditor.SuspendLayout();
         tpGeral.SuspendLayout();
+        tpAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
         tpSites.SuspendLayout();
         tpCiclo.SuspendLayout();
@@ -100,6 +106,7 @@ partial class AppEditorForm
         // tabEditor
         //
         tabEditor.Controls.Add(tpGeral);
+        tabEditor.Controls.Add(tpAplicativos);
         tabEditor.Controls.Add(tpJanela);
         tabEditor.Controls.Add(tpSites);
         tabEditor.Controls.Add(tpCiclo);
@@ -123,6 +130,25 @@ partial class AppEditorForm
         tpGeral.TabIndex = 0;
         tpGeral.Text = "Geral";
         tpGeral.UseVisualStyleBackColor = true;
+        //
+        // tpAplicativos
+        //
+        tpAplicativos.Controls.Add(appsTabControl);
+        tpAplicativos.Location = new System.Drawing.Point(4, 24);
+        tpAplicativos.Margin = new Padding(8);
+        tpAplicativos.Name = "tpAplicativos";
+        tpAplicativos.Padding = new Padding(8);
+        tpAplicativos.Size = new System.Drawing.Size(1032, 620);
+        tpAplicativos.TabIndex = 1;
+        tpAplicativos.Text = "Aplicativos";
+        tpAplicativos.UseVisualStyleBackColor = true;
+        //
+        // appsTabControl
+        //
+        appsTabControl.Dock = DockStyle.Fill;
+        appsTabControl.Margin = new Padding(0);
+        appsTabControl.Name = "appsTabControl";
+        appsTabControl.TabIndex = 0;
         //
         // tlpGeral
         //
@@ -182,6 +208,8 @@ partial class AppEditorForm
         txtExecutavel.Name = "txtExecutavel";
         txtExecutavel.Size = new System.Drawing.Size(1016, 23);
         txtExecutavel.TabIndex = 3;
+        txtExecutavel.ReadOnly = true;
+        txtExecutavel.TabStop = false;
         //
         // lblArgumentos
         //
@@ -201,6 +229,8 @@ partial class AppEditorForm
         txtArgumentos.ScrollBars = ScrollBars.Vertical;
         txtArgumentos.Size = new System.Drawing.Size(1016, 497);
         txtArgumentos.TabIndex = 5;
+        txtArgumentos.ReadOnly = true;
+        txtArgumentos.TabStop = false;
         //
         // chkAutoStart
         //
@@ -220,7 +250,7 @@ partial class AppEditorForm
         tpJanela.Name = "tpJanela";
         tpJanela.Padding = new Padding(8);
         tpJanela.Size = new System.Drawing.Size(1032, 620);
-        tpJanela.TabIndex = 1;
+        tpJanela.TabIndex = 2;
         tpJanela.Text = "Janela/Posição";
         tpJanela.UseVisualStyleBackColor = true;
         //
@@ -378,7 +408,7 @@ partial class AppEditorForm
         tpSites.Name = "tpSites";
         tpSites.Padding = new Padding(8);
         tpSites.Size = new System.Drawing.Size(1032, 620);
-        tpSites.TabIndex = 2;
+        tpSites.TabIndex = 3;
         tpSites.Text = "Sites";
         tpSites.UseVisualStyleBackColor = true;
         //
@@ -399,7 +429,7 @@ partial class AppEditorForm
         tpCiclo.Name = "tpCiclo";
         tpCiclo.Padding = new Padding(8);
         tpCiclo.Size = new System.Drawing.Size(1032, 620);
-        tpCiclo.TabIndex = 3;
+        tpCiclo.TabIndex = 4;
         tpCiclo.Text = "Ciclo";
         tpCiclo.UseVisualStyleBackColor = true;
         //
@@ -422,7 +452,7 @@ partial class AppEditorForm
         tpAvancado.Name = "tpAvancado";
         tpAvancado.Padding = new Padding(8);
         tpAvancado.Size = new System.Drawing.Size(1032, 620);
-        tpAvancado.TabIndex = 4;
+        tpAvancado.TabIndex = 5;
         tpAvancado.Text = "Avançado";
         tpAvancado.UseVisualStyleBackColor = true;
         //
@@ -497,6 +527,7 @@ partial class AppEditorForm
         Text = "Editor de Programa";
         tabEditor.ResumeLayout(false);
         tpGeral.ResumeLayout(false);
+        tpAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
         tpSites.ResumeLayout(false);
         tpCiclo.ResumeLayout(false);

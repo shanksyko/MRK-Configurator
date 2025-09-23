@@ -2,9 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
+using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
@@ -18,7 +20,8 @@ public partial class AppEditorForm : Form
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
     private MonitorPreviewHost? _monitorPreviewHost;
-    private MonitorDescriptor? _selectedMonitorDescriptor;
+    private MonitorInfo? _selectedMonitorInfo;
+    private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
 
     public AppEditorForm(ProgramaConfig? programa = null, IReadOnlyList<MonitorInfo>? monitors = null, string? selectedMonitorId = null)
@@ -29,6 +32,7 @@ public partial class AppEditorForm : Form
         var salvar = btnSalvar ?? throw new InvalidOperationException("O botão Salvar não foi carregado.");
         _ = btnCancelar ?? throw new InvalidOperationException("O botão Cancelar não foi carregado.");
         var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites não foi carregado.");
+        var appsTab = appsTabControl ?? throw new InvalidOperationException("A aba de aplicativos não foi carregada.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi configurado.");
 
         AcceptButton = salvar;
@@ -42,6 +46,11 @@ public partial class AppEditorForm : Form
         sitesControl.AddRequested += SitesEditorControl_AddRequested;
         sitesControl.RemoveRequested += SitesEditorControl_RemoveRequested;
         sitesControl.CloneRequested += SitesEditorControl_CloneRequested;
+
+        appsTab.ExecutableChosen += AppsTab_ExecutableChosen;
+        appsTab.ExecutableCleared += AppsTab_ExecutableCleared;
+        appsTab.ArgumentsChanged += AppsTab_ArgumentsChanged;
+        _ = appsTab.LoadInstalledAppsAsync();
 
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
@@ -57,13 +66,16 @@ public partial class AppEditorForm : Form
             chkJanelaTelaCheia.Checked = true;
             UpdateMonitorPreview();
         }
+
+        appsTab.ExecutablePath = txtExecutavel.Text;
+        appsTab.Arguments = txtArgumentos.Text;
     }
 
     public ProgramaConfig? Resultado { get; private set; }
 
     public BindingList<SiteConfig> ResultadoSites => new(_sites.Select(site => site with { }).ToList());
 
-    public string? SelectedMonitorId => _selectedMonitorDescriptor?.Id;
+    public string? SelectedMonitorId => _selectedMonitorId;
 
     private void CarregarPrograma(ProgramaConfig programa)
     {
@@ -93,6 +105,9 @@ public partial class AppEditorForm : Form
                 nudJanelaAltura.Value = AjustarRange(nudJanelaAltura, altura);
             }
         }
+
+        appsTabControl!.ExecutablePath = programa.ExecutablePath;
+        appsTabControl.Arguments = programa.Arguments ?? string.Empty;
     }
 
     private static decimal AjustarRange(NumericUpDown control, int value)
@@ -179,14 +194,16 @@ public partial class AppEditorForm : Form
             {
                 cboMonitores.Items.Add(MonitorOption.Empty());
                 cboMonitores.SelectedIndex = 0;
-                _selectedMonitorDescriptor = null;
+                _selectedMonitorInfo = null;
+                _selectedMonitorId = null;
             }
             else
             {
                 foreach (var monitor in _monitors)
                 {
-                    var descriptor = new MonitorDescriptor(monitor, MonitorIdentifier.Create(monitor), LayoutHelpers.GetMonitorDisplayName(monitor));
-                    cboMonitores.Items.Add(new MonitorOption(descriptor));
+                    var monitorId = MonitorIdentifier.Create(monitor);
+                    var displayName = LayoutHelpers.GetMonitorDisplayName(monitor);
+                    cboMonitores.Items.Add(new MonitorOption(monitorId, monitor, displayName));
                 }
 
                 var candidates = new[]
@@ -229,12 +246,12 @@ public partial class AppEditorForm : Form
 
         for (var index = 0; index < cboMonitores.Items.Count; index++)
         {
-            if (cboMonitores.Items[index] is not MonitorOption option || option.Descriptor is null)
+            if (cboMonitores.Items[index] is not MonitorOption option || option.MonitorId is null)
             {
                 continue;
             }
 
-            if (string.Equals(option.Descriptor.Id, identifier, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(option.MonitorId, identifier, StringComparison.OrdinalIgnoreCase))
             {
                 cboMonitores.SelectedIndex = index;
                 return true;
@@ -258,9 +275,10 @@ public partial class AppEditorForm : Form
     {
         _monitorPreviewHost?.Dispose();
         _monitorPreviewHost = null;
-        _selectedMonitorDescriptor = null;
+        _selectedMonitorInfo = null;
+        _selectedMonitorId = null;
 
-        if (cboMonitores?.SelectedItem is not MonitorOption option || option.Descriptor is null || picMonitorPreview is null)
+        if (cboMonitores?.SelectedItem is not MonitorOption option || option.Monitor is null || option.MonitorId is null || picMonitorPreview is null)
         {
             if (picMonitorPreview is not null)
             {
@@ -270,19 +288,28 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        _selectedMonitorDescriptor = option.Descriptor;
-        _monitorPreviewHost = new MonitorPreviewHost(option.Descriptor, picMonitorPreview, preferGpu: true);
-        _monitorPreviewHost.Start();
+        _selectedMonitorInfo = option.Monitor;
+        _selectedMonitorId = option.MonitorId;
+        _monitorPreviewHost = new MonitorPreviewHost(option.MonitorId, picMonitorPreview);
+
+        try
+        {
+            _monitorPreviewHost.Start(preferGpu: true);
+        }
+        catch
+        {
+            // The preview is best-effort only; ignore failures.
+        }
     }
 
-    private MonitorDescriptor? GetSelectedMonitorDescriptor()
+    private MonitorInfo? GetSelectedMonitor()
     {
-        if (_selectedMonitorDescriptor is not null)
+        if (_selectedMonitorInfo is not null)
         {
-            return _selectedMonitorDescriptor;
+            return _selectedMonitorInfo;
         }
 
-        return cboMonitores?.SelectedItem is MonitorOption option ? option.Descriptor : null;
+        return cboMonitores?.SelectedItem is MonitorOption option ? option.Monitor : null;
     }
 
     private static WindowConfig ClampWindowBounds(WindowConfig window, MonitorInfo monitor)
@@ -353,15 +380,15 @@ public partial class AppEditorForm : Form
                 Height = (int)nudJanelaAltura.Value,
             };
 
-        var monitorDescriptor = GetSelectedMonitorDescriptor();
-        if (monitorDescriptor is not null)
+        var monitorInfo = GetSelectedMonitor();
+        if (monitorInfo is not null)
         {
             if (!janela.FullScreen)
             {
-                janela = ClampWindowBounds(janela, monitorDescriptor.Monitor);
+                janela = ClampWindowBounds(janela, monitorInfo);
             }
 
-            janela = janela with { Monitor = monitorDescriptor.Monitor.Key };
+            janela = janela with { Monitor = monitorInfo.Key };
         }
 
         return (_original ?? new ProgramaConfig()) with
@@ -371,7 +398,7 @@ public partial class AppEditorForm : Form
             Arguments = argumentos,
             AutoStart = chkAutoStart.Checked,
             Window = janela,
-            TargetMonitorStableId = monitorDescriptor?.Monitor.StableId ?? string.Empty,
+            TargetMonitorStableId = monitorInfo?.StableId ?? string.Empty,
         };
     }
 
@@ -392,6 +419,11 @@ public partial class AppEditorForm : Form
         if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
         {
             errorProvider.SetError(txtExecutavel, "Informe o executável." );
+            valido = false;
+        }
+        else if (!File.Exists(txtExecutavel.Text))
+        {
+            errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
             valido = false;
         }
         else
@@ -415,25 +447,40 @@ public partial class AppEditorForm : Form
         _monitorPreviewHost = null;
     }
 
+    private void AppsTab_ExecutableChosen(object? sender, AppSelectionEventArgs e)
+    {
+        txtExecutavel.Text = e.ExecutablePath;
+        appsTabControl!.ExecutablePath = e.ExecutablePath;
+    }
+
+    private void AppsTab_ExecutableCleared(object? sender, EventArgs e)
+    {
+        txtExecutavel.Text = string.Empty;
+        appsTabControl!.ExecutablePath = string.Empty;
+    }
+
+    private void AppsTab_ArgumentsChanged(object? sender, string e)
+    {
+        txtArgumentos.Text = e;
+    }
+
     private sealed class MonitorOption
     {
-        public MonitorOption(MonitorDescriptor? descriptor, string displayName)
+        public MonitorOption(string? monitorId, MonitorInfo? monitor, string displayName)
         {
-            Descriptor = descriptor;
+            MonitorId = monitorId;
+            Monitor = monitor;
             DisplayName = displayName;
         }
 
-        public MonitorOption(MonitorDescriptor descriptor)
-            : this(descriptor, descriptor.DisplayName)
-        {
-        }
+        public string? MonitorId { get; }
 
-        public MonitorDescriptor? Descriptor { get; }
+        public MonitorInfo? Monitor { get; }
 
         public string DisplayName { get; }
 
         public static MonitorOption Empty()
-            => new(null, "Nenhum monitor disponível");
+            => new(null, null, "Nenhum monitor disponível");
 
         public override string ToString() => DisplayName;
     }
