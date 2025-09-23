@@ -46,10 +46,10 @@ public sealed class SecurityTests : IDisposable
         var path = vault.ResolveStoragePath("legacy");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-        var payload = ProtectedData.Protect(
+        var payload = System.Security.Cryptography.ProtectedData.Protect(
             System.Text.Encoding.UTF8.GetBytes("legacy"),
             MemoryMarshal.ToArray(vault.EntropySpan),
-            DataProtectionScope.CurrentUser);
+            System.Security.Cryptography.DataProtectionScope.CurrentUser);
         File.WriteAllBytes(path, payload);
 
         var recovered = vault.GetSecret("legacy");
