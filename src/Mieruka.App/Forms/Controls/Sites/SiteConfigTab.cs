@@ -20,6 +20,7 @@ internal sealed class SiteConfigTab : UserControl
     public SiteConfigTab()
     {
         LayoutHelpers.ApplyStandardLayout(this);
+        AutoScroll = true;
 
         var layout = LayoutHelpers.CreateStandardTableLayout();
         layout.RowCount = 4;
