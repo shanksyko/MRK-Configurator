@@ -1,42 +1,99 @@
-using System.Drawing;
+using System;
+using System.ComponentModel;
+using System.Linq;
 using System.Windows.Forms;
-using Mieruka.App.Forms.Controls;
-using Mieruka.Core.Security;
+using Mieruka.Core.Models;
 
 namespace Mieruka.App.Forms;
 
-public sealed class AppEditorForm : Form
+public partial class AppEditorForm : Form
 {
-    private readonly SitesEditorControl _sitesEditor;
+    private readonly BindingList<SiteConfig> _sites = new();
 
-    public AppEditorForm(SecretsProvider secretsProvider)
+    public AppEditorForm()
     {
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96F, 96F);
-        Text = "Editor de Programa";
-        MinimumSize = new Size(1100, 720);
-        StartPosition = FormStartPosition.CenterParent;
+        InitializeComponent();
+        AcceptButton = btnSalvar;
+        CancelButton = btnCancelar;
 
-        var tabs = new TabControl
+        sitesEditorControl.Sites = _sites;
+        sitesEditorControl.AddRequested += SitesEditorControl_AddRequested;
+        sitesEditorControl.RemoveRequested += SitesEditorControl_RemoveRequested;
+        sitesEditorControl.CloneRequested += SitesEditorControl_CloneRequested;
+        sitesEditorControl.TestarLogin += SitesEditorControl_TestarLogin;
+        sitesEditorControl.AplicarPosicao += SitesEditorControl_AplicarPosicao;
+    }
+
+    private void SitesEditorControl_AddRequested(object? sender, EventArgs e)
+    {
+        var site = new SiteConfig
         {
-            Dock = DockStyle.Fill,
+            Id = $"site_{_sites.Count + 1}",
+            Url = "https://example.com",
         };
 
-        var generalTab = new TabPage("Geral");
-        var windowTab = new TabPage("Janela/Posição");
-        var sitesTab = new TabPage("Sites");
-        var cycleTab = new TabPage("Ciclo");
-        var advancedTab = new TabPage("Avançado");
+        _sites.Add(site);
+        sitesEditorControl.SelectSite(site);
+    }
 
-        _sitesEditor = new SitesEditorControl(secretsProvider);
-        sitesTab.Controls.Add(_sitesEditor);
+    private void SitesEditorControl_RemoveRequested(object? sender, EventArgs e)
+    {
+        if (sitesEditorControl.SelectedSite is SiteConfig site)
+        {
+            _sites.Remove(site);
+        }
+    }
 
-        tabs.TabPages.Add(generalTab);
-        tabs.TabPages.Add(windowTab);
-        tabs.TabPages.Add(sitesTab);
-        tabs.TabPages.Add(cycleTab);
-        tabs.TabPages.Add(advancedTab);
+    private void SitesEditorControl_CloneRequested(object? sender, EventArgs e)
+    {
+        if (sitesEditorControl.SelectedSite is not SiteConfig current)
+        {
+            return;
+        }
 
-        Controls.Add(tabs);
+        var clone = new SiteConfig
+        {
+            Id = $"{current.Id}_clone",
+            Url = current.Url,
+            KioskMode = current.KioskMode,
+            AppMode = current.AppMode,
+            AllowedTabHosts = current.AllowedTabHosts?.ToList(),
+            BrowserArguments = current.BrowserArguments?.ToList(),
+        };
+
+        _sites.Add(clone);
+        sitesEditorControl.SelectSite(clone);
+    }
+
+    private void SitesEditorControl_TestarLogin(object? sender, string siteId)
+    {
+        MessageBox.Show(
+            this,
+            $"Testar login do site '{siteId}' não está disponível nesta versão.",
+            "Testar Login",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    private void SitesEditorControl_AplicarPosicao(object? sender, string siteId)
+    {
+        MessageBox.Show(
+            this,
+            $"Aplicar posição para o site '{siteId}' não está disponível nesta versão.",
+            "Aplicar Posição",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    private void btnSalvar_Click(object? sender, EventArgs e)
+    {
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private void btnCancelar_Click(object? sender, EventArgs e)
+    {
+        DialogResult = DialogResult.Cancel;
+        Close();
     }
 }

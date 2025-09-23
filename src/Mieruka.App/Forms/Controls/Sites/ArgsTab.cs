@@ -1,4 +1,6 @@
 using System;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
@@ -119,8 +121,8 @@ internal sealed class ArgsTab : UserControl
         Enabled = true;
         _kioskCheck.Checked = site.KioskMode;
         _appModeCheck.Checked = site.AppMode;
-        _incognitoCheck.Checked = site.BrowserArguments.Any(argument =>
-            string.Equals(argument, "--incognito", StringComparison.OrdinalIgnoreCase));
+        _incognitoCheck.Checked = site.BrowserArguments?.Any(argument =>
+            string.Equals(argument, "--incognito", StringComparison.OrdinalIgnoreCase)) ?? false;
         _proxyBox.Text = string.Empty;
         _bypassBox.Text = string.Empty;
         _timeoutUpDown.Value = site.Login?.TimeoutSeconds ?? 30;
@@ -136,7 +138,7 @@ internal sealed class ArgsTab : UserControl
             return;
         }
 
-        var args = new System.Collections.Generic.List<string>();
+        var args = new List<string>();
         if (_kioskCheck.Checked)
         {
             args.Add("--kiosk");

@@ -1,11 +1,10 @@
 using System;
 using System.ComponentModel;
-using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Automation.Login;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
-using Mieruka.Core.Security;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
@@ -24,14 +23,16 @@ internal sealed class LoginAutoTab : UserControl
     private readonly ListBox _ssoHintsList;
     private readonly ComboBox _mfaCombo;
     private readonly TextBox _totpRefBox;
+    private readonly Button _detectButton;
+    private readonly Button _testButton;
+    private readonly Button _positionButton;
     private SiteConfig? _site;
 
     public event EventHandler<string>? TestLoginRequested;
     public event EventHandler<string>? ApplyPositionRequested;
 
-    public LoginAutoTab(SecretsProvider secretsProvider)
+    public LoginAutoTab()
     {
-        _ = secretsProvider ?? throw new ArgumentNullException(nameof(secretsProvider));
         LayoutHelpers.ApplyStandardLayout(this);
         AutoScroll = true;
 
@@ -156,17 +157,17 @@ internal sealed class LoginAutoTab : UserControl
         footer.Controls.Add(new Label { Text = "TotpSecretKeyRef", AutoSize = true });
         footer.Controls.Add(_totpRefBox);
 
-        var detectButton = new Button { Text = "Detectar Campos", AutoSize = true };
-        detectButton.Click += (_, _) => MessageBox.Show(this, "Detecção automática não implementada.", "Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        footer.Controls.Add(detectButton);
+        _detectButton = new Button { Text = "Detectar Campos", AutoSize = true };
+        _detectButton.Click += async (_, _) => await DetectarCamposAsync().ConfigureAwait(false);
+        footer.Controls.Add(_detectButton);
 
-        var testButton = new Button { Text = "Testar Login", AutoSize = true };
-        testButton.Click += (_, _) => RunLoginTest();
-        footer.Controls.Add(testButton);
+        _testButton = new Button { Text = "Testar Login", AutoSize = true };
+        _testButton.Click += (_, _) => RunLoginTest();
+        footer.Controls.Add(_testButton);
 
-        var positionButton = new Button { Text = "Aplicar Posição", AutoSize = true };
-        positionButton.Click += (_, _) => ApplyPosition();
-        footer.Controls.Add(positionButton);
+        _positionButton = new Button { Text = "Aplicar Posição", AutoSize = true };
+        _positionButton.Click += (_, _) => ApplyPosition();
+        footer.Controls.Add(_positionButton);
 
         layout.Controls.Add(footer, 0, 4);
 
@@ -180,6 +181,30 @@ internal sealed class LoginAutoTab : UserControl
             ? string.Empty
             : Mieruka.Core.Security.CredentialVault.BuildTotpKey(site.Id);
         Enabled = site is not null;
+    }
+
+    private async Task DetectarCamposAsync()
+    {
+        if (_site is null)
+        {
+            MessageBox.Show(this, "Selecione um site para detectar campos.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            _detectButton.Enabled = false;
+            await Task.Delay(250).ConfigureAwait(true);
+            MessageBox.Show(this, "Detecção automática não está disponível nesta versão.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Falha ao detectar campos: {ex.Message}", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _detectButton.Enabled = true;
+        }
     }
 
     private void AddToList(TextBox input, BindingList<string> target)
@@ -206,12 +231,22 @@ internal sealed class LoginAutoTab : UserControl
     {
         if (_site is null)
         {
+            MessageBox.Show(this, "Selecione um site antes de testar.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        var success = _orchestrator.EnsureLoggedIn(_site);
-        var message = success ? "Login bem-sucedido." : "Falha ao efetuar login.";
-        MessageBox.Show(this, message, "Login Automático", MessageBoxButtons.OK, success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        try
+        {
+            var success = _orchestrator.EnsureLoggedIn(_site);
+            var message = success ? "Login bem-sucedido." : "Falha ao efetuar login.";
+            var icon = success ? MessageBoxIcon.Information : MessageBoxIcon.Warning;
+            MessageBox.Show(this, message, "Login Automático", MessageBoxButtons.OK, icon);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Erro ao testar login: {ex.Message}", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
         TestLoginRequested?.Invoke(this, _site.Id);
     }
 
@@ -219,10 +254,18 @@ internal sealed class LoginAutoTab : UserControl
     {
         if (_site is null)
         {
+            MessageBox.Show(this, "Selecione um site antes de aplicar a posição.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        WindowMover.Apply(_site.Window);
-        ApplyPositionRequested?.Invoke(this, _site.Id);
+        try
+        {
+            WindowMover.Apply(_site.Window);
+            ApplyPositionRequested?.Invoke(this, _site.Id);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Erro ao aplicar posição: {ex.Message}", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 }
