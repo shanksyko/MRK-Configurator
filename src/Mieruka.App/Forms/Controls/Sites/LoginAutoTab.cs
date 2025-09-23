@@ -175,7 +175,9 @@ internal sealed class LoginAutoTab : UserControl
     public void BindSite(SiteConfig? site)
     {
         _site = site;
-        _totpRefBox.Text = site is null ? string.Empty : CredentialVault.BuildTotpKey(site.Id);
+        _totpRefBox.Text = site is null
+            ? string.Empty
+            : Mieruka.Core.Security.CredentialVault.BuildTotpKey(site.Id);
         Enabled = site is not null;
     }
 

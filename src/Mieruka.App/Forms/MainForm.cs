@@ -90,7 +90,7 @@ public sealed class MainForm : Form
         {
             ScopeSiteId = null,
         };
-        _vaultPanel.OpenGlobalVaultRequested += (_, _) => _tabs.SelectedTab = programsTab;
+        _vaultPanel.OpenGlobalVaultRequested += (_, _) => _tabs?.SelectedTab = programsTab;
 
         var vaultTab = new TabPage("CredentialVault")
         {
@@ -112,6 +112,11 @@ public sealed class MainForm : Form
 
     public void OpenCredentialVault(string siteId)
     {
+        if (_vaultPanel is null || _tabs is null)
+        {
+            return;
+        }
+
         _vaultPanel.ScopeSiteId = siteId;
         _tabs.SelectedIndex = 1;
     }
