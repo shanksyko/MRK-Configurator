@@ -1,4 +1,5 @@
 #nullable disable
+#nullable enable annotations
 using System.ComponentModel;
 using System.Windows.Forms;
 
@@ -16,16 +17,6 @@ partial class CredentialVaultPanel
     internal Button btnSalvar = null!;
     internal Button btnApagar = null!;
     internal Button btnTestar = null!;
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            components?.Dispose();
-        }
-
-        base.Dispose(disposing);
-    }
 
     #region Windows Form Designer generated code
 

@@ -25,6 +25,13 @@ internal sealed partial class PreviewForm : Form
         CarregarMonitores();
     }
 
+    public PreviewForm(IEnumerable<MonitorInfo> monitors)
+        : this()
+    {
+        ArgumentNullException.ThrowIfNull(monitors);
+        CarregarMonitores(monitors);
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
@@ -34,20 +41,28 @@ internal sealed partial class PreviewForm : Form
 
     private void CarregarMonitores()
     {
+        var monitors = Screen.AllScreens.Select(screen => new MonitorInfo
+        {
+            Key = new MonitorKey { DisplayIndex = Array.IndexOf(Screen.AllScreens, screen) },
+            Name = string.IsNullOrWhiteSpace(screen.DeviceName) ? screen.FriendlyName() : screen.DeviceName,
+            DeviceName = screen.DeviceName,
+            Width = screen.Bounds.Width,
+            Height = screen.Bounds.Height,
+            IsPrimary = screen.Primary,
+        });
+
+        CarregarMonitores(monitors);
+    }
+
+    private void CarregarMonitores(IEnumerable<MonitorInfo> monitors)
+    {
+        ArgumentNullException.ThrowIfNull(monitors);
+
         _monitors.Clear();
         cmbMonitores.Items.Clear();
 
-        foreach (var screen in Screen.AllScreens)
+        foreach (var info in monitors)
         {
-            var info = new MonitorInfo
-            {
-                Key = new MonitorKey { DisplayIndex = Array.IndexOf(Screen.AllScreens, screen) },
-                Name = string.IsNullOrWhiteSpace(screen.DeviceName) ? screen.FriendlyName() : screen.DeviceName,
-                DeviceName = screen.DeviceName,
-                Width = screen.Bounds.Width,
-                Height = screen.Bounds.Height,
-                IsPrimary = screen.Primary,
-            };
             _monitors.Add(info);
             cmbMonitores.Items.Add(new MonitorOption(info));
         }
@@ -126,11 +141,11 @@ internal sealed partial class PreviewForm : Form
         AtualizarStatus("Modo de captura GDI selecionado.");
     }
 
-    private void btnCapturaGpu_Click(object? sender, EventArgs e)
+    private async void btnCapturaGpu_Click(object? sender, EventArgs e)
     {
         try
         {
-            using var probe = new GraphicsCaptureProvider();
+            await using var probe = new GraphicsCaptureProvider();
             if (!probe.IsSupported)
             {
                 throw new PlatformNotSupportedException("Captura por GPU não suportada neste sistema.");
