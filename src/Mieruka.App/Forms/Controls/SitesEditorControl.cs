@@ -8,15 +8,22 @@ namespace Mieruka.App.Forms.Controls;
 
 public partial class SitesEditorControl : UserControl
 {
+    private BindingList<SiteConfig> _sites = new();
     private SiteConfig? _selectedSite;
 
     public SitesEditorControl()
     {
         InitializeComponent();
-        if (bsSites.DataSource is null)
-        {
-            bsSites.DataSource = new BindingList<SiteConfig>();
-        }
+
+        _ = bsSites ?? throw new InvalidOperationException("BindingSource não inicializado.");
+        _ = dgvSites ?? throw new InvalidOperationException("DataGridView não inicializado.");
+        _ = siteConfigTab ?? throw new InvalidOperationException("SiteConfigTab não foi criado.");
+        _ = loginAutoTab ?? throw new InvalidOperationException("LoginAutoTab não foi criado.");
+        _ = whitelistTab ?? throw new InvalidOperationException("WhitelistTab não foi criado.");
+        _ = argsTab ?? throw new InvalidOperationException("ArgsTab não foi criado.");
+        _ = credentialVaultPanel ?? throw new InvalidOperationException("CredentialVaultPanel não foi criado.");
+
+        bsSites.DataSource = _sites;
 
         loginAutoTab.TestLoginRequested += (_, site) =>
         {
@@ -51,27 +58,15 @@ public partial class SitesEditorControl : UserControl
 
     public BindingList<SiteConfig> Sites
     {
-        get
-        {
-            if (bsSites.DataSource is BindingList<SiteConfig> list)
-            {
-                return list;
-            }
-
-            var fallback = new BindingList<SiteConfig>();
-            bsSites.DataSource = fallback;
-            return fallback;
-        }
+        get => _sites;
         set
         {
-            if (value is null)
-            {
-                throw new ArgumentNullException(nameof(value));
-            }
+            ArgumentNullException.ThrowIfNull(value);
 
-            if (!ReferenceEquals(bsSites.DataSource, value))
+            if (!ReferenceEquals(_sites, value))
             {
-                bsSites.DataSource = value;
+                _sites = value;
+                bsSites.DataSource = _sites;
             }
 
             UpdateSelection();

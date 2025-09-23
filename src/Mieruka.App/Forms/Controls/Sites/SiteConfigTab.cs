@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.ComponentModel;
 using System.Linq;
@@ -7,194 +8,176 @@ using Mieruka.Core.Security;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
-internal sealed class SiteConfigTab : UserControl
+internal sealed partial class SiteConfigTab : UserControl
 {
-    private readonly TextBox _urlBox;
-    private readonly TextBox _profileBox;
-    private readonly TextBox _sessionSelectorBox;
-    private readonly TextBox _hostInput;
-    private readonly BindingList<string> _allowedHosts = new();
-    private readonly ListBox _allowedHostsList;
+    private readonly BindingList<string> _hosts = new();
     private SiteConfig? _site;
 
     public SiteConfigTab()
     {
-        LayoutHelpers.ApplyStandardLayout(this);
-        AutoScroll = true;
+        InitializeComponent();
 
-        var layout = LayoutHelpers.CreateStandardTableLayout();
-        layout.RowCount = 4;
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _ = layoutPrincipal ?? throw new InvalidOperationException("Layout principal não foi carregado.");
+        _ = txtUrl ?? throw new InvalidOperationException("Campo de URL não foi carregado.");
+        _ = txtProfileName ?? throw new InvalidOperationException("Campo de ProfileName não foi carregado.");
+        _ = txtSessionSelector ?? throw new InvalidOperationException("Campo de SessionSelector não foi carregado.");
+        _ = lstAllowedHosts ?? throw new InvalidOperationException("Lista de hosts não foi carregada.");
+        _ = txtHostEntrada ?? throw new InvalidOperationException("Campo de host não foi carregado.");
+        _ = btnAdicionarHost ?? throw new InvalidOperationException("Botão Adicionar não foi carregado.");
+        _ = btnRemoverHost ?? throw new InvalidOperationException("Botão Remover não foi carregado.");
+        _ = btnValidarUrl ?? throw new InvalidOperationException("Botão Validar não foi carregado.");
+        _ = btnTestarSessao ?? throw new InvalidOperationException("Botão Testar não foi carregado.");
+        _ = errorProvider ?? throw new InvalidOperationException("ErrorProvider não foi carregado.");
 
-        var header = new TableLayoutPanel
-        {
-            ColumnCount = 2,
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-        };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-
-        header.Controls.Add(new Label { Text = "URL", AutoSize = true }, 0, 0);
-        _urlBox = new TextBox { Dock = DockStyle.Fill };
-        header.Controls.Add(_urlBox, 1, 0);
-
-        header.Controls.Add(new Label { Text = "ProfileName", AutoSize = true }, 0, 1);
-        _profileBox = new TextBox { Dock = DockStyle.Fill };
-        header.Controls.Add(_profileBox, 1, 1);
-
-        header.Controls.Add(new Label { Text = "SessionSelector", AutoSize = true }, 0, 2);
-        _sessionSelectorBox = new TextBox { Dock = DockStyle.Fill };
-        header.Controls.Add(_sessionSelectorBox, 1, 2);
-
-        layout.Controls.Add(header, 0, 0);
-
-        var hostsLabel = new Label
-        {
-            Text = "AllowedTabHosts",
-            AutoSize = true,
-        };
-        layout.Controls.Add(hostsLabel, 0, 1);
-
-        _allowedHostsList = new ListBox
-        {
-            Dock = DockStyle.Fill,
-            DataSource = _allowedHosts,
-        };
-        layout.Controls.Add(_allowedHostsList, 0, 2);
-
-        var commands = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-        };
-
-        _hostInput = new TextBox { Width = 200 };
-        commands.Controls.Add(_hostInput);
-
-        var addButton = new Button { Text = "Adicionar", AutoSize = true };
-        addButton.Click += (_, _) => AddHost();
-        commands.Controls.Add(addButton);
-
-        var removeButton = new Button { Text = "Remover", AutoSize = true };
-        removeButton.Click += (_, _) => RemoveSelectedHost();
-        commands.Controls.Add(removeButton);
-
-        var normalizeButton = new Button { Text = "Normalizar", AutoSize = true };
-        normalizeButton.Click += (_, _) => NormalizeSelectedHost();
-        commands.Controls.Add(normalizeButton);
-
-        var validateButton = new Button { Text = "Validar URL", AutoSize = true };
-        validateButton.Click += (_, _) => ValidateUrl();
-        commands.Controls.Add(validateButton);
-
-        var testSessionButton = new Button { Text = "Testar Sessão", AutoSize = true };
-        testSessionButton.Click += (_, _) => MessageBox.Show(
-            this,
-            "Teste de sessão não implementado.",
-            "Sessão",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
-        commands.Controls.Add(testSessionButton);
-
-        layout.Controls.Add(commands, 0, 3);
-
-        Controls.Add(layout);
+        lstAllowedHosts.DataSource = _hosts;
+        txtUrl.Validating += (_, e) => ValidateUrlInput(e);
+        txtHostEntrada.Validating += (_, e) => ValidateHostInput(e);
     }
 
     public void Bind(SiteConfig? site)
     {
         _site = site;
-        _allowedHosts.Clear();
+        _hosts.Clear();
 
         if (site is null)
         {
-            _urlBox.Text = string.Empty;
-            _profileBox.Text = string.Empty;
-            _sessionSelectorBox.Text = string.Empty;
             Enabled = false;
+            txtUrl.Text = string.Empty;
+            txtProfileName.Text = string.Empty;
+            txtSessionSelector.Text = string.Empty;
             return;
         }
 
         Enabled = true;
-        _urlBox.Text = site.Url;
-        _profileBox.Text = site.ProfileDirectory ?? string.Empty;
-        _sessionSelectorBox.Text = string.Empty;
+        txtUrl.Text = site.Url;
+        txtProfileName.Text = site.ProfileDirectory ?? string.Empty;
+        txtSessionSelector.Text = string.Empty;
 
         foreach (var host in site.AllowedTabHosts ?? Enumerable.Empty<string>())
         {
-            _allowedHosts.Add(host);
+            _hosts.Add(host);
         }
     }
 
-    private void AddHost()
+    private void btnAdicionarHost_Click(object? sender, EventArgs e)
     {
-        var input = _hostInput.Text?.Trim();
-        if (string.IsNullOrEmpty(input))
+        if (!ValidateHostInput())
         {
             return;
         }
 
-        var sanitized = InputSanitizer.SanitizeHost(input);
-        if (string.IsNullOrEmpty(sanitized))
-        {
-            MessageBox.Show(this, "Host inválido.", "AllowedTabHosts", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        if (!_allowedHosts.Any(existing => string.Equals(existing, sanitized, StringComparison.OrdinalIgnoreCase)))
-        {
-            _allowedHosts.Add(sanitized);
-        }
-
-        _hostInput.Clear();
-    }
-
-    private void RemoveSelectedHost()
-    {
-        if (_allowedHostsList.SelectedItem is string host)
-        {
-            _allowedHosts.Remove(host);
-        }
-    }
-
-    private void NormalizeSelectedHost()
-    {
-        if (_allowedHostsList.SelectedItem is not string host)
+        var input = txtHostEntrada.Text.Trim();
+        if (!TryNormalizeHost(input, out var sanitized))
         {
             return;
         }
 
-        var normalized = InputSanitizer.SanitizeHost(host);
-        if (string.IsNullOrEmpty(normalized))
+        if (!_hosts.Any(existing => string.Equals(existing, sanitized, StringComparison.OrdinalIgnoreCase)))
         {
-            MessageBox.Show(this, "Host inválido.", "AllowedTabHosts", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            _hosts.Add(sanitized);
         }
 
-        var index = _allowedHosts.IndexOf(host);
-        if (index >= 0)
+        txtHostEntrada.Clear();
+    }
+
+    private void btnRemoverHost_Click(object? sender, EventArgs e)
+    {
+        if (lstAllowedHosts.SelectedItem is string host)
         {
-            _allowedHosts[index] = normalized;
+            _hosts.Remove(host);
         }
     }
 
-    private void ValidateUrl()
+    private void btnValidarUrl_Click(object? sender, EventArgs e)
     {
-        var text = _urlBox.Text?.Trim();
-        if (Uri.TryCreate(text, UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(txtUrl.Text.Trim(), UriKind.Absolute, out var uri))
         {
-            var allowlist = new UrlAllowlist();
-            allowlist.Add(uri.Host);
-            var message = allowlist.IsAllowed(uri) ? "URL válida." : "URL rejeitada.";
-            MessageBox.Show(this, message, "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "URL inválida.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!TryNormalizeHost(uri.Host, out var sanitized))
+        {
+            MessageBox.Show(this, "Host não pôde ser normalizado.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        MessageBox.Show(this, $"URL válida para host '{sanitized}'.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void btnTestarSessao_Click(object? sender, EventArgs e)
+    {
+        if (_site is null)
+        {
+            MessageBox.Show(this, "Selecione um site antes de testar.", "Sessão", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        MessageBox.Show(this, "Teste de sessão não está disponível nesta versão.", "Sessão", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void ValidateUrlInput(CancelEventArgs e)
+    {
+        var texto = txtUrl.Text.Trim();
+        if (string.IsNullOrEmpty(texto))
+        {
+            errorProvider.SetError(txtUrl, "Informe uma URL.");
+            e.Cancel = true;
+            return;
+        }
+
+        if (!Uri.TryCreate(texto, UriKind.Absolute, out _))
+        {
+            errorProvider.SetError(txtUrl, "URL inválida.");
+            e.Cancel = true;
         }
         else
         {
-            MessageBox.Show(this, "URL inválida.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            errorProvider.SetError(txtUrl, string.Empty);
         }
+    }
+
+    private void ValidateHostInput(CancelEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(txtHostEntrada.Text))
+        {
+            errorProvider.SetError(txtHostEntrada, string.Empty);
+            return;
+        }
+
+        if (!TryNormalizeHost(txtHostEntrada.Text, out _))
+        {
+            errorProvider.SetError(txtHostEntrada, "Host inválido.");
+            e.Cancel = true;
+        }
+        else
+        {
+            errorProvider.SetError(txtHostEntrada, string.Empty);
+        }
+    }
+
+    private bool ValidateHostInput()
+    {
+        var args = new CancelEventArgs();
+        ValidateHostInput(args);
+        return !args.Cancel;
+    }
+
+    private static bool TryNormalizeHost(string? input, out string sanitized)
+    {
+        sanitized = string.Empty;
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return false;
+        }
+
+        var normalized = InputSanitizer.SanitizeHost(input);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return false;
+        }
+
+        sanitized = normalized;
+        return true;
     }
 }

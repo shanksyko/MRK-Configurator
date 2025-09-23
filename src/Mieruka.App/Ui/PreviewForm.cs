@@ -1,114 +1,85 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Preview;
-using Serilog;
 
 namespace Mieruka.App.Ui;
 
-/// <summary>
-/// Window that renders a live monitor preview using the capture subsystem.
-/// </summary>
-internal sealed class PreviewForm : Form
+internal sealed partial class PreviewForm : Form
 {
-    private readonly IReadOnlyList<MonitorInfo> _monitors;
-    private readonly ComboBox _monitorSelector;
-    private readonly PictureBox _previewBox;
-    private readonly Label _statusLabel;
-    private IMonitorCapture? _capture;
+    private readonly List<MonitorInfo> _monitors = new();
+    private Func<IMonitorCapture>? _captureFactory;
+    private IMonitorCapture? _activeCapture;
     private readonly object _captureGate = new();
+    private Bitmap? _currentFrame;
 
-    public PreviewForm(IReadOnlyList<MonitorInfo> monitors)
+    public PreviewForm()
     {
-        _monitors = monitors ?? throw new ArgumentNullException(nameof(monitors));
-
-        AutoScaleMode = AutoScaleMode.Dpi;
-        StartPosition = FormStartPosition.CenterParent;
-        Text = "Preview de Monitores";
-        ClientSize = new Size(960, 600);
-
-        var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
-
-        _monitorSelector = new ComboBox
-        {
-            Dock = DockStyle.Top,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Font = baseFont,
-            Margin = new Padding(12),
-        };
-
-        _previewBox = new PictureBox
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.Black,
-            SizeMode = PictureBoxSizeMode.Zoom,
-        };
-
-        _statusLabel = new Label
-        {
-            Dock = DockStyle.Bottom,
-            Padding = new Padding(12),
-            Font = baseFont,
-            Text = "Selecione um monitor para iniciar o preview.",
-        };
-
-        Controls.Add(_previewBox);
-        Controls.Add(_monitorSelector);
-        Controls.Add(_statusLabel);
-
-        _monitorSelector.SelectedIndexChanged += async (_, _) => await RestartCaptureAsync().ConfigureAwait(false);
-
-        PopulateMonitors();
-    }
-
-    protected override void OnShown(EventArgs e)
-    {
-        base.OnShown(e);
-        if (_monitorSelector.SelectedIndex < 0 && _monitorSelector.Items.Count > 0)
-        {
-            _monitorSelector.SelectedIndex = 0;
-        }
+        InitializeComponent();
+        _captureFactory = () => new GdiMonitorCaptureProvider();
+        CarregarMonitores();
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
         StopCaptureAsync().GetAwaiter().GetResult();
-        DisposeCurrentFrame();
+        LiberarFrameAtual();
     }
 
-    private void PopulateMonitors()
+    private void CarregarMonitores()
     {
-        _monitorSelector.Items.Clear();
+        _monitors.Clear();
+        cmbMonitores.Items.Clear();
 
-        foreach (var monitor in _monitors)
+        foreach (var screen in Screen.AllScreens)
         {
-            var name = string.IsNullOrWhiteSpace(monitor.Name)
-                ? $"Monitor {monitor.Key.DisplayIndex + 1}"
-                : monitor.Name;
-            _monitorSelector.Items.Add(new MonitorOption(name, monitor));
+            var info = new MonitorInfo
+            {
+                Key = new MonitorKey { DisplayIndex = Array.IndexOf(Screen.AllScreens, screen) },
+                Name = string.IsNullOrWhiteSpace(screen.DeviceName) ? screen.FriendlyName() : screen.DeviceName,
+                DeviceName = screen.DeviceName,
+                Width = screen.Bounds.Width,
+                Height = screen.Bounds.Height,
+                IsPrimary = screen.Primary,
+            };
+            _monitors.Add(info);
+            cmbMonitores.Items.Add(new MonitorOption(info));
         }
 
-        if (_monitorSelector.Items.Count > 0)
+        if (cmbMonitores.Items.Count > 0)
         {
-            _monitorSelector.SelectedIndex = 0;
+            cmbMonitores.SelectedIndex = 0;
         }
         else
         {
-            _monitorSelector.Enabled = false;
-            UpdateStatus("Nenhum monitor disponível para preview.");
+            AtualizarStatus("Nenhum monitor detectado.");
         }
     }
 
-    private async Task RestartCaptureAsync()
+    private async void btnIniciar_Click(object? sender, EventArgs e)
+    {
+        await IniciarCapturaAsync().ConfigureAwait(false);
+    }
+
+    private async Task IniciarCapturaAsync()
     {
         await StopCaptureAsync().ConfigureAwait(false);
 
-        if (_monitorSelector.SelectedItem is not MonitorOption option)
+        if (cmbMonitores.SelectedItem is not MonitorOption option)
         {
+            AtualizarStatus("Selecione um monitor para iniciar a captura.");
+            return;
+        }
+
+        if (_captureFactory is null)
+        {
+            AtualizarStatus("Nenhum provedor de captura disponível.");
             return;
         }
 
@@ -116,22 +87,25 @@ internal sealed class PreviewForm : Form
 
         try
         {
-            Log.Information("Iniciando preview para {MonitorName}.", option.DisplayName);
-            capture = MonitorCaptureFactory.Create();
+            capture = _captureFactory();
+            if (!capture.IsSupported)
+            {
+                throw new PlatformNotSupportedException("O provedor selecionado não é suportado neste sistema.");
+            }
+
             capture.FrameArrived += OnFrameArrived;
-            await capture.StartAsync(option.Monitor).ConfigureAwait(false);
+            await capture.StartAsync(option.Info).ConfigureAwait(false);
 
             lock (_captureGate)
             {
-                _capture = capture;
+                _activeCapture = capture;
             }
 
-            UpdateStatus($"Preview ativo: {option.DisplayName}");
+            AtualizarStatus($"Capturando monitor '{option.DisplayName}'.");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Falha ao iniciar preview para {MonitorName}.", option.DisplayName);
-            UpdateStatus($"Falha ao iniciar preview: {ex.Message}");
+            AtualizarStatus($"Falha ao iniciar captura: {ex.Message}");
             if (capture is not null)
             {
                 capture.FrameArrived -= OnFrameArrived;
@@ -140,13 +114,45 @@ internal sealed class PreviewForm : Form
         }
     }
 
+    private async void btnParar_Click(object? sender, EventArgs e)
+    {
+        await StopCaptureAsync().ConfigureAwait(false);
+        AtualizarStatus("Captura interrompida.");
+    }
+
+    private void btnCapturaGdi_Click(object? sender, EventArgs e)
+    {
+        _captureFactory = () => new GdiMonitorCaptureProvider();
+        AtualizarStatus("Modo de captura GDI selecionado.");
+    }
+
+    private void btnCapturaGpu_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var probe = new GraphicsCaptureProvider();
+            if (!probe.IsSupported)
+            {
+                throw new PlatformNotSupportedException("Captura por GPU não suportada neste sistema.");
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Captura GPU indisponível: {ex.Message}", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        _captureFactory = () => new GraphicsCaptureProvider();
+        AtualizarStatus("Modo de captura GPU selecionado.");
+    }
+
     private async Task StopCaptureAsync()
     {
         IMonitorCapture? capture;
         lock (_captureGate)
         {
-            capture = _capture;
-            _capture = null;
+            capture = _activeCapture;
+            _activeCapture = null;
         }
 
         if (capture is null)
@@ -160,9 +166,9 @@ internal sealed class PreviewForm : Form
         {
             await capture.StopAsync().ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch
         {
-            Log.Warning(ex, "Erro ao interromper o preview.");
+            // Ignore errors when stopping the capture.
         }
 
         await capture.DisposeAsync().ConfigureAwait(false);
@@ -177,9 +183,9 @@ internal sealed class PreviewForm : Form
             var bounds = new Rectangle(0, 0, source.Width, source.Height);
             frame = source.Clone(bounds, source.PixelFormat);
         }
-        catch (Exception ex)
+        catch
         {
-            Log.Warning(ex, "Falha ao clonar frame do preview.");
+            // Ignore frame cloning errors.
         }
         finally
         {
@@ -191,38 +197,61 @@ internal sealed class PreviewForm : Form
             return;
         }
 
-        BeginInvoke(new Action(() => DisplayFrame(frame)));
+        BeginInvoke(new Action(() => ExibirFrame(frame)));
     }
 
-    private void DisplayFrame(Bitmap bitmap)
+    private void ExibirFrame(Bitmap frame)
     {
-        var previous = _previewBox.Image as Bitmap;
-        _previewBox.Image = bitmap;
-        previous?.Dispose();
+        LiberarFrameAtual();
+        _currentFrame = frame;
+        picPreview.Image = frame;
     }
 
-    private void DisposeCurrentFrame()
+    private void LiberarFrameAtual()
     {
-        if (_previewBox.Image is Bitmap bitmap)
+        if (_currentFrame is not null)
         {
-            _previewBox.Image = null;
-            bitmap.Dispose();
+            picPreview.Image = null;
+            _currentFrame.Dispose();
+            _currentFrame = null;
         }
     }
 
-    private void UpdateStatus(string message)
+    private void AtualizarStatus(string mensagem)
     {
         if (InvokeRequired)
         {
-            BeginInvoke(new Action<string>(UpdateStatus), message);
+            BeginInvoke(new Action<string>(AtualizarStatus), mensagem);
             return;
         }
 
-        _statusLabel.Text = message;
+        lblStatus.Text = mensagem;
     }
 
-    private sealed record class MonitorOption(string DisplayName, MonitorInfo Monitor)
+    private sealed class MonitorOption
     {
+        public MonitorOption(MonitorInfo info)
+        {
+            Info = info;
+            DisplayName = string.IsNullOrWhiteSpace(info.Name)
+                ? $"Monitor {info.Key.DisplayIndex + 1}"
+                : info.Name;
+        }
+
+        public MonitorInfo Info { get; }
+
+        public string DisplayName { get; }
+
         public override string ToString() => DisplayName;
+    }
+}
+
+internal static class ScreenExtensions
+{
+    public static string FriendlyName(this Screen screen)
+    {
+        return string.IsNullOrWhiteSpace(screen.DeviceName)
+            ? "Monitor"
+            : screen.DeviceName;
     }
 }

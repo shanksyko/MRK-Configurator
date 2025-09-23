@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Windows.Forms;
 using Mieruka.App.Services;
@@ -5,28 +6,27 @@ using Mieruka.Core.Security;
 
 namespace Mieruka.App.Forms.Controls;
 
-public sealed class CredentialVaultPanel : UserControl
+public sealed partial class CredentialVaultPanel : UserControl
 {
     private readonly SecretsProvider? _secretsProvider;
     private readonly UiSecretsBridge? _secretsBridge;
-    private readonly Label _scopeLabel;
-    private readonly Label _statusLabel;
-    private readonly TextBox _userBox;
-    private readonly TextBox _passwordBox;
-    private readonly TextBox _totpBox;
-
-    internal readonly Button btnSalvar;
-    internal readonly Button btnApagar;
-    internal readonly Button btnTestar;
-
     private string? _scopeSiteId;
 
     public event EventHandler<string>? TestLoginRequested;
 
     public CredentialVaultPanel()
     {
-        LayoutHelpers.ApplyStandardLayout(this);
-        AutoScroll = true;
+        InitializeComponent();
+
+        _ = layoutPrincipal ?? throw new InvalidOperationException("Layout não carregado.");
+        _ = lblScope ?? throw new InvalidOperationException("Label scope não carregado.");
+        _ = lblStatus ?? throw new InvalidOperationException("Label status não carregado.");
+        _ = txtUsuario ?? throw new InvalidOperationException("Campo usuário não carregado.");
+        _ = txtSenha ?? throw new InvalidOperationException("Campo senha não carregado.");
+        _ = txtTotp ?? throw new InvalidOperationException("Campo TOTP não carregado.");
+        _ = btnSalvar ?? throw new InvalidOperationException("Botão salvar não carregado.");
+        _ = btnApagar ?? throw new InvalidOperationException("Botão apagar não carregado.");
+        _ = btnTestar ?? throw new InvalidOperationException("Botão testar não carregado.");
 
         try
         {
@@ -41,54 +41,6 @@ public sealed class CredentialVaultPanel : UserControl
             _secretsProvider = null;
             _secretsBridge = null;
         }
-
-        var layout = LayoutHelpers.CreateStandardTableLayout();
-        layout.RowCount = 6;
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-        _scopeLabel = new Label { AutoSize = true };
-        layout.Controls.Add(_scopeLabel, 0, 0);
-
-        _statusLabel = new Label { AutoSize = true };
-        layout.Controls.Add(_statusLabel, 0, 1);
-
-        _userBox = CreateSecretTextBox("Usuário");
-        layout.Controls.Add(_userBox, 0, 2);
-
-        _passwordBox = CreateSecretTextBox("Senha");
-        layout.Controls.Add(_passwordBox, 0, 3);
-
-        _totpBox = CreateSecretTextBox("TOTP");
-        layout.Controls.Add(_totpBox, 0, 4);
-
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-        };
-
-        btnSalvar = new Button { Text = "Salvar", AutoSize = true };
-        btnSalvar.Click += btnSalvar_Click;
-        buttons.Controls.Add(btnSalvar);
-
-        btnApagar = new Button { Text = "Apagar", AutoSize = true };
-        btnApagar.Click += btnApagar_Click;
-        buttons.Controls.Add(btnApagar);
-
-        btnTestar = new Button { Text = "Testar Login", AutoSize = true };
-        btnTestar.Click += btnTestar_Click;
-        buttons.Controls.Add(btnTestar);
-
-        layout.Controls.Add(buttons, 0, 5);
-
-        Controls.Add(layout);
 
         Enabled = false;
         UpdateScope();
@@ -120,16 +72,6 @@ public sealed class CredentialVaultPanel : UserControl
         base.Dispose(disposing);
     }
 
-    private static TextBox CreateSecretTextBox(string placeholder)
-    {
-        return new TextBox
-        {
-            Dock = DockStyle.Fill,
-            UseSystemPasswordChar = true,
-            PlaceholderText = placeholder,
-        };
-    }
-
     private void btnSalvar_Click(object? sender, EventArgs e)
     {
         if (!EnsureScopeAndBridge())
@@ -140,7 +82,7 @@ public sealed class CredentialVaultPanel : UserControl
         btnSalvar.Enabled = false;
         try
         {
-            _secretsBridge!.Save(_scopeSiteId!, _userBox, _passwordBox, _totpBox);
+            _secretsBridge!.Save(_scopeSiteId!, txtUsuario, txtSenha, txtTotp);
             UpdateStatus();
         }
         finally
@@ -187,20 +129,20 @@ public sealed class CredentialVaultPanel : UserControl
     {
         var hasScope = !string.IsNullOrWhiteSpace(_scopeSiteId);
         Enabled = hasScope;
-        _userBox.Enabled = hasScope;
-        _passwordBox.Enabled = hasScope;
-        _totpBox.Enabled = hasScope;
+        txtUsuario.Enabled = hasScope;
+        txtSenha.Enabled = hasScope;
+        txtTotp.Enabled = hasScope;
 
         if (!hasScope)
         {
-            _scopeLabel.Text = "Selecione um site";
-            _statusLabel.Text = string.Empty;
+            lblScope.Text = "Selecione um site";
+            lblStatus.Text = string.Empty;
             ClearInputs();
             UpdateButtonsAvailability();
             return;
         }
 
-        _scopeLabel.Text = $"Credenciais para: {_scopeSiteId}";
+        lblScope.Text = $"Credenciais para: {_scopeSiteId}";
         UpdateStatus();
         UpdateButtonsAvailability();
     }
@@ -209,7 +151,7 @@ public sealed class CredentialVaultPanel : UserControl
     {
         if (!EnsureScopeAndBridge())
         {
-            _statusLabel.Text = "Cofre indisponível";
+            lblStatus.Text = "Cofre indisponível";
             return;
         }
 
@@ -221,7 +163,7 @@ public sealed class CredentialVaultPanel : UserControl
         var hasPassword = password is { Length: > 0 };
         var hasTotp = totp is { Length: > 0 };
 
-        _statusLabel.Text =
+        lblStatus.Text =
             $"Usuário: {(hasUser ? "●" : "—")}, Senha: {(hasPassword ? "●" : "—")}, TOTP: {(hasTotp ? "●" : "—")}";
     }
 
@@ -269,8 +211,8 @@ public sealed class CredentialVaultPanel : UserControl
 
     private void ClearInputs()
     {
-        _userBox.Clear();
-        _passwordBox.Clear();
-        _totpBox.Clear();
+        txtUsuario.Clear();
+        txtSenha.Clear();
+        txtTotp.Clear();
     }
 }
