@@ -215,16 +215,24 @@ public sealed class LoginService
 
     private async Task<bool> ApplyValueAsync(
         IWebDriver driver,
-        string value,
+        string? value,
         IWebElement element,
         Func<IWebElement?> resolver,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(value))
+        {
+            _telemetry.Warn("ApplyValueAsync: login field value is missing.");
+            return false;
+        }
+
+        var nonEmptyValue = value!;
+
         try
         {
             element.Clear();
-            element.SendKeys(value ?? string.Empty);
+            element.SendKeys(nonEmptyValue);
             return true;
         }
         catch (StaleElementReferenceException)
@@ -236,7 +244,7 @@ public sealed class LoginService
             }
 
             refreshed.Clear();
-            refreshed.SendKeys(value ?? string.Empty);
+            refreshed.SendKeys(nonEmptyValue);
             return true;
         }
         catch (InvalidElementStateException exception)
