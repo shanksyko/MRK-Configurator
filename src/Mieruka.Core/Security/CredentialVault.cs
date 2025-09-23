@@ -228,9 +228,15 @@ public sealed class CredentialVault
                     throw new CredentialVaultCorruptedException(key);
                 }
 
-                var plain = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+                var entropyBytes = (byte[])_entropy.Clone();
+                byte[] plain = Array.Empty<byte>();
                 try
                 {
+                    plain = System.Security.Cryptography.ProtectedData.Unprotect(
+                        cipher,
+                        entropyBytes,
+                        System.Security.Cryptography.DataProtectionScope.CurrentUser);
+
                     var secure = BuildSecureString(plain);
                     if (logicalVersion < CurrentSecretVersion)
                     {
@@ -243,7 +249,14 @@ public sealed class CredentialVault
                 }
                 finally
                 {
-                    CryptographicOperations.ZeroMemory(plain);
+                    if (plain.Length > 0)
+                    {
+                        Array.Clear(plain, 0, plain.Length);
+                        CryptographicOperations.ZeroMemory(plain);
+                    }
+
+                    Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                    // TODO: manter janelas de exposição de memória o mais curtas possível
                 }
             }
             catch (EndOfStreamException ex)
@@ -298,33 +311,42 @@ public sealed class CredentialVault
             var charsArray = chars.ToArray(); // TODO: refatorar para não materializar
             try
             {
-                var plain = Encoding.UTF8.GetBytes(charsArray);
+                var plainBytes = Encoding.UTF8.GetBytes(charsArray);
+                var entropyBytes = (byte[])_entropy.Clone();
+                byte[] cipher = Array.Empty<byte>();
                 try
                 {
-                    var cipher = ProtectedData.Protect(plain, _entropy, DataProtectionScope.CurrentUser);
-                    try
-                    {
-                        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-                        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
+                    cipher = System.Security.Cryptography.ProtectedData.Protect(
+                        plainBytes,
+                        entropyBytes,
+                        System.Security.Cryptography.DataProtectionScope.CurrentUser);
 
-                        writer.Write(FileFormatVersion);
-                        writer.Write(version);
-                        writer.Write(DateTimeOffset.UtcNow.UtcTicks);
-                        writer.Write(ComputeKeyHash(key));
-                        writer.Write(cipher.Length);
-                        writer.Write(cipher);
-                    }
-                    finally
-                    {
-                        if (cipher.Length > 0)
-                        {
-                            CryptographicOperations.ZeroMemory(cipher);
-                        }
-                    }
+                    using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                    using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
+
+                    writer.Write(FileFormatVersion);
+                    writer.Write(version);
+                    writer.Write(DateTimeOffset.UtcNow.UtcTicks);
+                    writer.Write(ComputeKeyHash(key));
+                    writer.Write(cipher.Length);
+                    writer.Write(cipher);
                 }
                 finally
                 {
-                    CryptographicOperations.ZeroMemory(plain);
+                    if (cipher.Length > 0)
+                    {
+                        Array.Clear(cipher, 0, cipher.Length);
+                        CryptographicOperations.ZeroMemory(cipher);
+                    }
+
+                    if (plainBytes.Length > 0)
+                    {
+                        Array.Clear(plainBytes, 0, plainBytes.Length);
+                        CryptographicOperations.ZeroMemory(plainBytes);
+                    }
+
+                    Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                    // TODO: manter janelas de exposição de memória o mais curtas possível
                 }
             }
             finally
@@ -340,9 +362,15 @@ public sealed class CredentialVault
     private SecureString ReadLegacySecret(string key, byte[] raw)
     {
         var cipher = raw;
-        var plain = ProtectedData.Unprotect(cipher, _entropy, DataProtectionScope.CurrentUser);
+        var entropyBytes = (byte[])_entropy.Clone();
+        byte[] plain = Array.Empty<byte>();
         try
         {
+            plain = System.Security.Cryptography.ProtectedData.Unprotect(
+                cipher,
+                entropyBytes,
+                System.Security.Cryptography.DataProtectionScope.CurrentUser);
+
             var secure = BuildSecureString(plain);
             var copy = secure.Copy();
             copy.MakeReadOnly();
@@ -351,7 +379,14 @@ public sealed class CredentialVault
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(plain);
+            if (plain.Length > 0)
+            {
+                Array.Clear(plain, 0, plain.Length);
+                CryptographicOperations.ZeroMemory(plain);
+            }
+
+            Array.Clear(entropyBytes, 0, entropyBytes.Length);
+            // TODO: manter janelas de exposição de memória o mais curtas possível
         }
     }
 
