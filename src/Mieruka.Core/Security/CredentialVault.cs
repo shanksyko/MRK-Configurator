@@ -7,6 +7,8 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 
+#nullable enable
+
 namespace Mieruka.Core.Security;
 
 /// <summary>
@@ -293,23 +295,44 @@ public sealed class CredentialVault
         var sync = _locks.GetOrAdd(path, _ => new object());
         lock (sync)
         {
-            var plain = Encoding.UTF8.GetBytes(chars);
+            var charsArray = chars.ToArray(); // TODO: refatorar para não materializar
             try
             {
-                var cipher = ProtectedData.Protect(plain, _entropy, DataProtectionScope.CurrentUser);
-                using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
-                using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
+                var plain = Encoding.UTF8.GetBytes(charsArray);
+                try
+                {
+                    var cipher = ProtectedData.Protect(plain, _entropy, DataProtectionScope.CurrentUser);
+                    try
+                    {
+                        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
 
-                writer.Write(FileFormatVersion);
-                writer.Write(version);
-                writer.Write(DateTimeOffset.UtcNow.UtcTicks);
-                writer.Write(ComputeKeyHash(key));
-                writer.Write(cipher.Length);
-                writer.Write(cipher);
+                        writer.Write(FileFormatVersion);
+                        writer.Write(version);
+                        writer.Write(DateTimeOffset.UtcNow.UtcTicks);
+                        writer.Write(ComputeKeyHash(key));
+                        writer.Write(cipher.Length);
+                        writer.Write(cipher);
+                    }
+                    finally
+                    {
+                        if (cipher.Length > 0)
+                        {
+                            CryptographicOperations.ZeroMemory(cipher);
+                        }
+                    }
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(plain);
+                }
             }
             finally
             {
-                CryptographicOperations.ZeroMemory(plain);
+                if (charsArray.Length > 0)
+                {
+                    CryptographicOperations.ZeroMemory(MemoryMarshal.AsBytes(charsArray.AsSpan()));
+                }
             }
         }
     }

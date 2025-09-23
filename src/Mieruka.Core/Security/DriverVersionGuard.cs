@@ -15,7 +15,7 @@ public sealed class DriverVersionGuard
     /// </summary>
     public DriverVersionGuard(VersionTolerance? tolerance = null)
     {
-        _tolerance = tolerance ?? new VersionTolerance(major: 0, minor: 1);
+        _tolerance = tolerance ?? new VersionTolerance(0, 1);
     }
 
     /// <summary>
