@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Reflection;
+using System.Threading;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
@@ -23,7 +25,11 @@ public sealed class MonitorPreviewHost : IDisposable
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
-    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
+    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont;
+#if DEBUG
+    private const int OverlayFrameInterval = 10;
+    private int _overlayFrameCounter;
+#endif
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
@@ -33,6 +39,8 @@ public sealed class MonitorPreviewHost : IDisposable
         MonitorId = monitorId;
         _target = target;
         EnsurePictureBoxSizeMode();
+        ApplyDoubleBuffering(target);
+        target.ParentChanged += OnTargetParentChanged;
     }
 
     public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target)
@@ -150,6 +158,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
 
         _disposed = true;
+        _target.ParentChanged -= OnTargetParentChanged;
         Stop();
         GC.SuppressFinalize(this);
     }
@@ -193,10 +202,10 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        UpdateTarget(clone);
+        ApplyFrame(clone);
     }
 
-    private void UpdateTarget(Bitmap frame)
+    private void ApplyFrame(Bitmap frame)
     {
         if (_target.IsDisposed)
         {
@@ -208,7 +217,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             try
             {
-                _target.BeginInvoke(new Action<Bitmap>(UpdateTarget), frame);
+                _target.BeginInvoke((Action)(() => ApplyFrameInternal(frame)));
             }
             catch
             {
@@ -218,10 +227,29 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        var previous = _currentFrame;
-        _currentFrame = frame;
-        _target.Image = frame;
-        previous?.Dispose();
+        ApplyFrameInternal(frame);
+    }
+
+    private void ApplyFrameInternal(Bitmap bitmap)
+    {
+        if (_target.IsDisposed)
+        {
+            bitmap.Dispose();
+            return;
+        }
+
+        var old = _target.Image;
+        _target.Image = bitmap;
+        if (!ReferenceEquals(old, bitmap))
+        {
+            old?.Dispose();
+        }
+
+        var previous = Interlocked.Exchange(ref _currentFrame, bitmap);
+        if (!ReferenceEquals(previous, bitmap))
+        {
+            previous?.Dispose();
+        }
     }
 
     private void ClearFrame()
@@ -347,9 +375,36 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
+    private static void ApplyDoubleBuffering(Control control)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            EnableDoubleBuffering(current);
+        }
+    }
+
+    private static void EnableDoubleBuffering(Control control)
+    {
+        var property = control.GetType().GetProperty(
+            "DoubleBuffered",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        property?.SetValue(control, true, null);
+    }
+
+    private void OnTargetParentChanged(object? sender, EventArgs e)
+    {
+        ApplyDoubleBuffering(_target);
+    }
+
 #if DEBUG
     private void DrawDebugOverlay(Bitmap bitmap)
     {
+        if (Interlocked.Increment(ref _overlayFrameCounter) % OverlayFrameInterval != 0)
+        {
+            return;
+        }
+
         try
         {
             using var graphics = Graphics.FromImage(bitmap);

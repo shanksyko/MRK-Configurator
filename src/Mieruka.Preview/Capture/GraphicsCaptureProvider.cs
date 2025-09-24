@@ -90,7 +90,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             _session = _framePool.CreateCaptureSession(_captureItem);
             if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
             {
-                EnableCursorCapture(_session);
+                ConfigureSessionOptions(_session);
             }
             _session.StartCapture();
 
@@ -103,15 +103,16 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
 #if WINDOWS10_0_19041_0_OR_GREATER
     [SupportedOSPlatform("windows10.0.19041")]
-    private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
+    private static void ConfigureSessionOptions(Windows.Graphics.Capture.GraphicsCaptureSession session)
     {
-        session.IsCursorCaptureEnabled = true;
+        session.IsCursorCaptureEnabled = false;
+        session.IsBorderRequired = false;
     }
 #else
     [SupportedOSPlatform("windows10.0.19041")]
-    private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
+    private static void ConfigureSessionOptions(Windows.Graphics.Capture.GraphicsCaptureSession session)
     {
-        // Cursor capture is not available on this target contract.
+        // Cursor capture configuration is not available on this target contract.
     }
 #endif
 
