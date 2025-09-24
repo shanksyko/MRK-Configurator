@@ -12,9 +12,12 @@
 
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" />
+    <PackageReference Include="SharpGen.Runtime" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWinRT" />
+    <PackageReference Include="Microsoft.Windows.SDK.NET.Ref" />
     <PackageReference Include="Vortice.Direct3D11" />
     <PackageReference Include="Vortice.DXGI" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
