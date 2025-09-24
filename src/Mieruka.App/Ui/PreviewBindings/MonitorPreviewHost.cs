@@ -11,6 +11,12 @@ using Mieruka.Preview;
 
 namespace Mieruka.App.Ui.PreviewBindings;
 
+internal static class Guard
+{
+    public static T NotNull<T>(T? value, string paramName) where T : class
+        => value ?? throw new ArgumentNullException(paramName);
+}
+
 /// <summary>
 /// Hosts a monitor preview session and binds frames to a <see cref="PictureBox"/>.
 /// </summary>
@@ -32,11 +38,8 @@ public sealed class MonitorPreviewHost : IDisposable
 
     public MonitorPreviewHost(PictureBox target, MonitorDescriptor monitor, bool preferGpu)
     {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(monitor);
-
-        _target = target;
-        _monitor = monitor;
+        _target = Guard.NotNull(target, nameof(target));
+        _monitor = Guard.NotNull(monitor, nameof(monitor));
         _preferGpu = preferGpu;
 
         MonitorId = CreateMonitorId(monitor);
@@ -50,17 +53,17 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
     public MonitorPreviewHost(PictureBox target, MonitorDescriptor monitor)
-        : this(target, monitor, preferGpu: true)
+        : this(Guard.NotNull(target, nameof(target)), Guard.NotNull(monitor, nameof(monitor)), preferGpu: true)
     {
     }
 
     public MonitorPreviewHost(MonitorDescriptor monitor, PictureBox target)
-        : this(target ?? throw new ArgumentNullException(nameof(target)), monitor ?? throw new ArgumentNullException(nameof(monitor)), preferGpu: true)
+        : this(Guard.NotNull(target, nameof(target)), Guard.NotNull(monitor, nameof(monitor)), preferGpu: true)
     {
     }
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
-        : this(target ?? throw new ArgumentNullException(nameof(target)), CreateDescriptorFromMonitorId(monitorId ?? throw new ArgumentNullException(nameof(monitorId))), preferGpu: true)
+        : this(Guard.NotNull(target, nameof(target)), CreateDescriptorFromMonitorId(Guard.NotNull(monitorId, nameof(monitorId))), preferGpu: true)
     {
     }
 
