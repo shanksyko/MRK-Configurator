@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Runtime.InteropServices;
+using Mieruka.Core.Models;
 using Mieruka.Core.WinAPI;
 
 namespace Mieruka.Core.Monitors;
@@ -21,6 +23,10 @@ public sealed class MonitorDescriptor
     public int Height;
     public int RefreshHz;
     public bool IsPrimary;
+    public Rectangle Bounds = Rectangle.Empty;
+    public Rectangle WorkArea = Rectangle.Empty;
+    public MonitorOrientation Orientation = MonitorOrientation.Unknown;
+    public int Rotation;
 }
 
 public sealed class MonitorService : IMonitorService
@@ -97,10 +103,13 @@ public sealed class MonitorService : IMonitorService
 
             var width = 0;
             var height = 0;
+            var bounds = Rectangle.Empty;
+            var workArea = Rectangle.Empty;
             if (TryGetSourceMode(path, modes, out var sourceMode))
             {
                 width = (int)sourceMode.width;
                 height = (int)sourceMode.height;
+                bounds = new Rectangle(sourceMode.position.x, sourceMode.position.y, width, height);
             }
 
             var descriptor = new MonitorDescriptor
@@ -118,7 +127,31 @@ public sealed class MonitorService : IMonitorService
                 Height = height,
                 RefreshHz = CalculateRefreshRate(target.refreshRate),
                 IsPrimary = ResolveIsPrimary(sourceName.viewGdiDeviceName),
+                Orientation = MonitorOrientation.Unknown,
+                Rotation = 0,
+                Bounds = bounds,
+                WorkArea = workArea,
             };
+
+            if (TryGetMonitorRectangles(descriptor.DeviceName, out var monitorBounds, out var monitorWorkArea))
+            {
+                descriptor.Bounds = monitorBounds;
+                descriptor.WorkArea = monitorWorkArea;
+                descriptor.Width = monitorBounds.Width;
+                descriptor.Height = monitorBounds.Height;
+            }
+            else if (!bounds.IsEmpty)
+            {
+                descriptor.Bounds = bounds;
+                descriptor.WorkArea = bounds;
+            }
+
+            var (descriptorOrientation, descriptorRotation) = MapOrientation(target.rotation);
+            if (descriptorOrientation != MonitorOrientation.Unknown)
+            {
+                descriptor.Orientation = descriptorOrientation;
+                descriptor.Rotation = descriptorRotation;
+            }
 
             descriptors.Add(descriptor);
         }
@@ -166,6 +199,65 @@ public sealed class MonitorService : IMonitorService
 
         return (int)Math.Round(refreshRate.Numerator / (double)refreshRate.Denominator);
     }
+
+    private static (MonitorOrientation Orientation, int Rotation) MapOrientation(DISPLAYCONFIG_ROTATION rotation)
+        => rotation switch
+        {
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_ROTATE90 => (MonitorOrientation.Portrait, 90),
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_ROTATE180 => (MonitorOrientation.LandscapeFlipped, 180),
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_ROTATE270 => (MonitorOrientation.PortraitFlipped, 270),
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_IDENTITY => (MonitorOrientation.Landscape, 0),
+            _ => (MonitorOrientation.Unknown, 0),
+        };
+
+    private static (MonitorOrientation Orientation, int Rotation) MapOrientation(int displayOrientation)
+        => displayOrientation switch
+        {
+            1 => (MonitorOrientation.Portrait, 90),
+            2 => (MonitorOrientation.LandscapeFlipped, 180),
+            3 => (MonitorOrientation.PortraitFlipped, 270),
+            0 => (MonitorOrientation.Landscape, 0),
+            _ => (MonitorOrientation.Unknown, 0),
+        };
+
+    private static bool TryGetMonitorRectangles(string? deviceName, out Rectangle bounds, out Rectangle workArea)
+    {
+        bounds = Rectangle.Empty;
+        workArea = Rectangle.Empty;
+
+        if (string.IsNullOrWhiteSpace(deviceName))
+        {
+            return false;
+        }
+
+        var located = false;
+        var callback = new MonitorEnumProc((IntPtr hMonitor, IntPtr _, ref RECT clip, IntPtr __) =>
+        {
+            var info = MONITORINFOEX.Create();
+            if (!GetMonitorInfo(hMonitor, ref info))
+            {
+                return true;
+            }
+
+            if (!string.Equals(info.szDevice, deviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            bounds = ToRectangle(info.rcMonitor);
+            workArea = ToRectangle(info.rcWork);
+            located = true;
+            return false;
+        });
+
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
+        GC.KeepAlive(callback);
+
+        return located;
+    }
+
+    private static Rectangle ToRectangle(RECT rect)
+        => Rectangle.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
 
     private static bool ResolveIsPrimary(string? deviceName)
     {
@@ -240,18 +332,31 @@ public sealed class MonitorService : IMonitorService
                 return true;
             }
 
-            var width = info.rcMonitor.right - info.rcMonitor.left;
-            var height = info.rcMonitor.bottom - info.rcMonitor.top;
             var deviceName = info.szDevice ?? string.Empty;
+            var bounds = ToRectangle(info.rcMonitor);
+            var workArea = ToRectangle(info.rcWork);
+            var refresh = 0;
+            var orientation = MonitorOrientation.Unknown;
+            var rotation = 0;
+            if (TryGetDisplaySettings(deviceName, out var hz, out var orient, out var rot))
+            {
+                refresh = hz;
+                orientation = orient;
+                rotation = rot;
+            }
 
             descriptors.Add(new MonitorDescriptor
             {
                 DeviceName = deviceName,
                 FriendlyName = ResolveFriendlyName(deviceName),
-                Width = width,
-                Height = height,
-                RefreshHz = GetCurrentRefreshRate(deviceName),
+                Width = bounds.Width,
+                Height = bounds.Height,
+                RefreshHz = refresh,
                 IsPrimary = (info.dwFlags & MonitorInfoFlags.Primary) != 0,
+                Bounds = bounds,
+                WorkArea = workArea,
+                Orientation = orientation,
+                Rotation = rotation,
             });
 
             return true;
@@ -278,11 +383,19 @@ public sealed class MonitorService : IMonitorService
         return string.Empty;
     }
 
-    private static int GetCurrentRefreshRate(string? deviceName)
+    private static bool TryGetDisplaySettings(
+        string? deviceName,
+        out int refreshRate,
+        out MonitorOrientation orientation,
+        out int rotation)
     {
+        refreshRate = 0;
+        orientation = MonitorOrientation.Unknown;
+        rotation = 0;
+
         if (string.IsNullOrWhiteSpace(deviceName))
         {
-            return 0;
+            return false;
         }
 
         try
@@ -292,17 +405,22 @@ public sealed class MonitorService : IMonitorService
                 dmSize = (short)Marshal.SizeOf<DEVMODE>(),
             };
 
-            return EnumDisplaySettings(deviceName, ENUM_CURRENT_SETTINGS, ref mode)
-                ? mode.dmDisplayFrequency
-                : 0;
+            if (!EnumDisplaySettings(deviceName, ENUM_CURRENT_SETTINGS, ref mode))
+            {
+                return false;
+            }
+
+            refreshRate = mode.dmDisplayFrequency;
+            (orientation, rotation) = MapOrientation(mode.dmDisplayOrientation);
+            return true;
         }
         catch (DllNotFoundException)
         {
-            return 0;
+            return false;
         }
         catch (EntryPointNotFoundException)
         {
-            return 0;
+            return false;
         }
     }
 

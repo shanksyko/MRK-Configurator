@@ -43,7 +43,11 @@ public sealed class MonitorSeeder
                 DeviceName = probe.DeviceName ?? string.Empty,
                 Width = bounds.Width,
                 Height = bounds.Height,
+                Bounds = bounds,
+                WorkArea = bounds,
                 Scale = probe.Scale <= 0 ? 1.0 : probe.Scale,
+                Orientation = MonitorOrientation.Unknown,
+                Rotation = 0,
                 IsPrimary = probe.IsPrimary,
                 StableId = ResolveStableId(probe, index),
             });

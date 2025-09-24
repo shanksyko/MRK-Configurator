@@ -18,6 +18,11 @@ public sealed record class ProfileConfig
     public string Name { get; init; } = string.Empty;
 
     /// <summary>
+    /// Schema version associated with the profile payload.
+    /// </summary>
+    public int SchemaVersion { get; init; } = 1;
+
+    /// <summary>
     /// Applications that should be launched when the profile is executed.
     /// </summary>
     public IList<AppConfig> Applications { get; init; } = new List<AppConfig>();

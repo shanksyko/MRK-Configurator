@@ -118,6 +118,10 @@ internal static class MonitorLocator
             Height = screen.Bounds.Height,
             IsPrimary = screen.Primary,
             Scale = 1.0,
+            Bounds = screen.Bounds,
+            WorkArea = screen.WorkingArea,
+            Orientation = MonitorOrientation.Unknown,
+            Rotation = 0,
         };
     }
 }

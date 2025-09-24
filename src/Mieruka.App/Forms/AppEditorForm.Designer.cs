@@ -1,5 +1,4 @@
 #nullable disable
-#nullable enable annotations
 using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
