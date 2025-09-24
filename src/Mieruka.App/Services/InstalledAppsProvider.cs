@@ -6,7 +6,7 @@ using Microsoft.Win32;
 
 namespace Mieruka.App.Services;
 
-public sealed class InstalledAppsProvider
+public static class InstalledAppsProvider
 {
     private static readonly (RegistryKey Root, string Path, string Source)[] RegistryLocations =
     {
@@ -15,7 +15,7 @@ public sealed class InstalledAppsProvider
         (Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU"),
     };
 
-    public List<InstalledAppInfo> GetAll()
+    public static List<InstalledAppInfo> GetAll()
     {
         var apps = new Dictionary<string, InstalledAppInfo>(StringComparer.OrdinalIgnoreCase);
 

@@ -57,6 +57,8 @@ public partial class AppEditorForm : Form
         appsTab.ExecutableChosen += AppsTab_ExecutableChosen;
         appsTab.ExecutableCleared += AppsTab_ExecutableCleared;
         appsTab.ArgumentsChanged += AppsTab_ArgumentsChanged;
+        appsTab.OpenRequested += AppsTab_OpenRequestedAsync;
+        appsTab.TestRequested += AppsTab_TestRequestedAsync;
         _ = appsTab.LoadInstalledAppsAsync();
 
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
@@ -501,6 +503,32 @@ public partial class AppEditorForm : Form
         }
     }
 
+    private static void LaunchExecutable(string executablePath, string? arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            UseShellExecute = false,
+        };
+
+        if (!string.IsNullOrWhiteSpace(arguments))
+        {
+            startInfo.Arguments = arguments;
+        }
+
+        var workingDirectory = Path.GetDirectoryName(executablePath);
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            startInfo.WorkingDirectory = workingDirectory;
+        }
+
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            throw new InvalidOperationException("Não foi possível iniciar o aplicativo selecionado.");
+        }
+    }
+
     private async Task PositionExistingProcessAsync(Process process, MonitorInfo monitor, WindowConfig window)
     {
         if (process.HasExited)
@@ -746,6 +774,108 @@ public partial class AppEditorForm : Form
     private void AppsTab_ArgumentsChanged(object? sender, string e)
     {
         txtArgumentos.Text = e;
+    }
+
+    private async Task AppsTab_OpenRequestedAsync(object? sender, AppExecutionRequestEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(e.ExecutablePath) || !File.Exists(e.ExecutablePath))
+        {
+            MessageBox.Show(
+                this,
+                "Selecione um executável válido para abrir.",
+                "Abrir aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() => LaunchExecutable(e.ExecutablePath, e.Arguments)).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível abrir o aplicativo selecionado: {ex.Message}",
+                "Abrir aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task AppsTab_TestRequestedAsync(object? sender, AppExecutionRequestEventArgs e)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            MessageBox.Show(
+                this,
+                "O teste de posicionamento está disponível apenas no Windows.",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var monitor = GetSelectedMonitor();
+        if (monitor is null)
+        {
+            MessageBox.Show(
+                this,
+                "Selecione um monitor para testar a posição.",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var window = BuildWindowConfigurationFromInputs();
+        if (!window.FullScreen)
+        {
+            window = ClampWindowBounds(window, monitor);
+        }
+
+        window = window with { Monitor = monitor.Key };
+
+        var executablePath = e.ExecutablePath;
+        var arguments = e.Arguments;
+        var hasExecutable = !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
+
+        try
+        {
+            if (hasExecutable)
+            {
+                var existingProcess = FindRunningProcess(executablePath);
+                if (existingProcess is not null)
+                {
+                    try
+                    {
+                        await PositionExistingProcessAsync(existingProcess, monitor, window).ConfigureAwait(true);
+                    }
+                    finally
+                    {
+                        existingProcess.Dispose();
+                    }
+                }
+                else
+                {
+                    await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, window).ConfigureAwait(true);
+                }
+            }
+            else
+            {
+                await LaunchDummyWindowAsync(monitor, window).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível testar a posição: {ex.Message}",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private sealed class MonitorOption
