@@ -267,7 +267,7 @@ public partial class MainForm : Form
             {
                 try
                 {
-                    host.Start(preferGpu: true);
+                    host.Start();
                 }
                 catch (Exception ex)
                 {
@@ -571,7 +571,7 @@ public partial class MainForm : Form
 
         if (_monitorCards.TryGetValue(monitorId, out var context))
         {
-            context.Host.Start(preferGpu: true);
+            context.Host.Start();
         }
 
         UpdateSelectedMonitor(monitorId);
@@ -670,7 +670,7 @@ public partial class MainForm : Form
                 continue;
             }
 
-            context.Host.Start(preferGpu: true);
+            context.Host.Start();
         }
     }
 
