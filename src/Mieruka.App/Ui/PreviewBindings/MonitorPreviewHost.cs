@@ -23,17 +23,20 @@ public sealed class MonitorPreviewHost : IDisposable
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
-    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont;
+    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
-        MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
-        _target = target ?? throw new ArgumentNullException(nameof(target));
+        ArgumentNullException.ThrowIfNull(monitorId);
+        ArgumentNullException.ThrowIfNull(target);
+
+        MonitorId = monitorId;
+        _target = target;
         EnsurePictureBoxSizeMode();
     }
 
     public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target)
-        : this(CreateMonitorId(descriptor), target)
+        : this(CreateMonitorId(descriptor ?? throw new ArgumentNullException(nameof(descriptor))), target)
     {
         _monitorBounds = descriptor.Bounds;
         _monitorWorkArea = descriptor.WorkArea;
