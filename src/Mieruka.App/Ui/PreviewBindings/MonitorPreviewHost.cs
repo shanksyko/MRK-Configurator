@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
+using Mieruka.Core.Models;
+using Mieruka.Core.Monitors;
 using Mieruka.Preview;
 
 namespace Mieruka.App.Ui.PreviewBindings;
@@ -21,6 +23,11 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
+    }
+
+    public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target)
+        : this(CreateMonitorId(descriptor), target)
+    {
     }
 
     /// <summary>
@@ -228,5 +235,26 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             // Ignore dispose failures.
         }
+    }
+
+    internal static string CreateMonitorId(MonitorDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+
+        var hasAdapter = descriptor.AdapterLuidHi != 0 || descriptor.AdapterLuidLo != 0 || descriptor.TargetId != 0;
+        if (!hasAdapter)
+        {
+            return descriptor.DeviceName ?? string.Empty;
+        }
+
+        var key = new MonitorKey
+        {
+            AdapterLuidHigh = (int)descriptor.AdapterLuidHi,
+            AdapterLuidLow = (int)descriptor.AdapterLuidLo,
+            TargetId = unchecked((int)descriptor.TargetId),
+            DeviceId = descriptor.DeviceName ?? string.Empty,
+        };
+
+        return MonitorIdentifier.Create(key, descriptor.DeviceName);
     }
 }
