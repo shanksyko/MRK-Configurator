@@ -23,12 +23,19 @@ public sealed class MonitorPreviewHost : IDisposable
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
-    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
+    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
-        ArgumentNullException.ThrowIfNull(monitorId);
-        ArgumentNullException.ThrowIfNull(target);
+        if (monitorId is null)
+        {
+            throw new ArgumentNullException(nameof(monitorId));
+        }
+
+        if (target is null)
+        {
+            throw new ArgumentNullException(nameof(target));
+        }
 
         MonitorId = monitorId;
         _target = target;
@@ -208,7 +215,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             try
             {
-                _target.BeginInvoke(new Action<Bitmap>(UpdateTarget), frame);
+                _target.BeginInvoke((Action)(() => UpdateTarget(frame)));
             }
             catch
             {
@@ -356,7 +363,7 @@ public sealed class MonitorPreviewHost : IDisposable
             using var background = new SolidBrush(Color.FromArgb(160, Color.Black));
             using var foreground = new SolidBrush(Color.White);
 
-            var text = string.Concat(MonitorId, " ", bitmap.Width, "x", bitmap.Height);
+            var text = string.Concat(MonitorId ?? string.Empty, " ", bitmap.Width, "x", bitmap.Height);
             if (_refreshRate > 0)
             {
                 text = string.Concat(text, " @", _refreshRate, "Hz");
