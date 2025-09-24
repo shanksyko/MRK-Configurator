@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Mieruka.Core.WinAPI;
 
 namespace Mieruka.Core.Monitors;
 
