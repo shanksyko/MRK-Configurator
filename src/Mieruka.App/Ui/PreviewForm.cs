@@ -194,7 +194,7 @@ internal sealed partial class PreviewForm : Form
         Bitmap? frame = null;
         try
         {
-            var source = e.Bitmap;
+            var source = e.Frame;
             var bounds = new Rectangle(0, 0, source.Width, source.Height);
             frame = source.Clone(bounds, source.PixelFormat);
         }

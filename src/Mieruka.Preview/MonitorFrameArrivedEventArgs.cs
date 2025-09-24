@@ -19,7 +19,7 @@ public sealed class MonitorFrameArrivedEventArgs : EventArgs, IDisposable
     /// <param name="timestamp">Timestamp associated with the frame.</param>
     public MonitorFrameArrivedEventArgs(Bitmap bitmap, DateTimeOffset timestamp)
     {
-        Bitmap = bitmap ?? throw new ArgumentNullException(nameof(bitmap));
+        Frame = bitmap ?? throw new ArgumentNullException(nameof(bitmap));
         Timestamp = timestamp;
     }
 
@@ -27,7 +27,14 @@ public sealed class MonitorFrameArrivedEventArgs : EventArgs, IDisposable
     /// Gets the captured bitmap. The caller is responsible for disposing the instance
     /// once it is no longer required.
     /// </summary>
-    public Bitmap Bitmap { get; }
+    public Bitmap Frame { get; }
+
+    /// <summary>
+    /// Gets the captured bitmap. The caller is responsible for disposing the instance
+    /// once it is no longer required.
+    /// </summary>
+    [Obsolete("Use Frame property instead.")]
+    public Bitmap Bitmap => Frame;
 
     /// <summary>
     /// Gets the timestamp associated with the captured frame.
@@ -42,7 +49,7 @@ public sealed class MonitorFrameArrivedEventArgs : EventArgs, IDisposable
             return;
         }
 
-        Bitmap.Dispose();
+        Frame.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
     }
