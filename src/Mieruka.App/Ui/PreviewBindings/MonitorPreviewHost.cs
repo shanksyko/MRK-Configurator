@@ -114,13 +114,13 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         if (preferGpu)
         {
-            yield return () => Preview.CreateForMonitor(MonitorId);
-            yield return () => GdiCapture.CreateForMonitor(MonitorId);
+            yield return () => CreateForMonitor.Gpu(MonitorId);
+            yield return () => CreateForMonitor.Gdi(MonitorId);
         }
         else
         {
-            yield return () => GdiCapture.CreateForMonitor(MonitorId);
-            yield return () => Preview.CreateForMonitor(MonitorId);
+            yield return () => CreateForMonitor.Gdi(MonitorId);
+            yield return () => CreateForMonitor.Gpu(MonitorId);
         }
     }
 
@@ -129,7 +129,7 @@ public sealed class MonitorPreviewHost : IDisposable
         Bitmap? clone = null;
         try
         {
-            var bitmap = e.Bitmap;
+            var bitmap = e.Frame;
             clone = bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), bitmap.PixelFormat);
         }
         catch
