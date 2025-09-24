@@ -23,6 +23,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
+    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
@@ -349,7 +350,6 @@ public sealed class MonitorPreviewHost : IDisposable
         try
         {
             using var graphics = Graphics.FromImage(bitmap);
-            using var font = SystemFonts.CaptionFont;
             using var background = new SolidBrush(Color.FromArgb(160, Color.Black));
             using var foreground = new SolidBrush(Color.White);
 
@@ -368,6 +368,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 text = string.Concat(text, " ", _orientation);
             }
 
+            var font = OverlayFont;
             var measured = graphics.MeasureString(text, font);
             var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);
             graphics.FillRectangle(background, rect);
