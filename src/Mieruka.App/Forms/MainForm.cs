@@ -198,7 +198,12 @@ public partial class MainForm : Form
         foreach (var source in cardSources)
         {
             var monitor = source.Monitor;
-            var card = LayoutHelpers.CreateMonitorCard(monitor, OnMonitorCardSelected, OnMonitorCardStopRequested, out var pictureBox);
+            var card = LayoutHelpers.CreateMonitorCard(
+                monitor,
+                OnMonitorCardSelected,
+                OnMonitorCardStopRequested,
+                OnMonitorCardTestRequested,
+                out var pictureBox);
 
             var monitorId = ResolveMonitorId(source);
             MonitorPreviewHost host;
@@ -541,6 +546,34 @@ public partial class MainForm : Form
         }
 
         _manuallyStoppedMonitors.Add(monitorId);
+    }
+
+    private void OnMonitorCardTestRequested(object? sender, EventArgs e)
+    {
+        if (sender is not Control control || control.Tag is not string monitorId)
+        {
+            return;
+        }
+
+        if (!_monitorCards.TryGetValue(monitorId, out var context))
+        {
+            return;
+        }
+
+        try
+        {
+            var preview = new PreviewForm(new[] { context.Monitor });
+            preview.Show(this);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível abrir o preview: {ex.Message}",
+                "Preview",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private void UpdateSelectedMonitor(string? monitorId, bool notify = true)

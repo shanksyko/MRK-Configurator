@@ -68,11 +68,13 @@ internal static class LayoutHelpers
         MonitorInfo monitor,
         EventHandler selecionarHandler,
         EventHandler pararHandler,
+        EventHandler testarHandler,
         out PictureBox previewBox)
     {
         ArgumentNullException.ThrowIfNull(monitor);
         ArgumentNullException.ThrowIfNull(selecionarHandler);
         ArgumentNullException.ThrowIfNull(pararHandler);
+        ArgumentNullException.ThrowIfNull(testarHandler);
 
         var card = new Panel
         {
@@ -144,10 +146,20 @@ internal static class LayoutHelpers
             Margin = new Padding(0),
         };
 
+        var btnTestar = new Button
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Text = "Testar",
+            Margin = new Padding(0, 0, 8, 0),
+        };
+
         btnSelecionar.Click += selecionarHandler;
         btnParar.Click += pararHandler;
+        btnTestar.Click += testarHandler;
 
         footer.Controls.Add(btnSelecionar);
+        footer.Controls.Add(btnTestar);
         footer.Controls.Add(btnParar);
 
         card.Controls.Add(previewBox);
