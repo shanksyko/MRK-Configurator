@@ -2,19 +2,26 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
+using Mieruka.App.Services;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
+using Mieruka.Core.Interop;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
 
 public partial class AppEditorForm : Form
 {
+    private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
+
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
     private readonly List<MonitorInfo> _monitors;
@@ -348,6 +355,283 @@ public partial class AppEditorForm : Form
             Width = width,
             Height = height,
         };
+    }
+
+    private async void btnTestarJanela_Click(object? sender, EventArgs e)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            MessageBox.Show(
+                this,
+                "O teste de posicionamento está disponível apenas no Windows.",
+                "Teste de janela",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var monitor = GetSelectedMonitor();
+        if (monitor is null)
+        {
+            MessageBox.Show(
+                this,
+                "Selecione um monitor para testar a posição.",
+                "Teste de janela",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var window = BuildWindowConfigurationFromInputs();
+        if (!window.FullScreen)
+        {
+            window = ClampWindowBounds(window, monitor);
+        }
+
+        window = window with { Monitor = monitor.Key };
+
+        var executablePath = txtExecutavel.Text.Trim();
+        var arguments = string.IsNullOrWhiteSpace(txtArgumentos.Text) ? null : txtArgumentos.Text;
+        var hasExecutable = !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
+        var button = btnTestarJanela;
+
+        if (button is not null)
+        {
+            button.Enabled = false;
+        }
+
+        try
+        {
+            if (hasExecutable)
+            {
+                var existingProcess = FindRunningProcess(executablePath);
+                if (existingProcess is not null)
+                {
+                    try
+                    {
+                        await PositionExistingProcessAsync(existingProcess, monitor, window).ConfigureAwait(true);
+                    }
+                    finally
+                    {
+                        existingProcess.Dispose();
+                    }
+                }
+                else
+                {
+                    await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, window).ConfigureAwait(true);
+                }
+            }
+            else
+            {
+                await LaunchDummyWindowAsync(monitor, window).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível testar a posição: {ex.Message}",
+                "Teste de janela",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (button is not null)
+            {
+                button.Enabled = true;
+            }
+        }
+    }
+
+    private WindowConfig BuildWindowConfigurationFromInputs()
+    {
+        if (chkJanelaTelaCheia.Checked)
+        {
+            return new WindowConfig { FullScreen = true };
+        }
+
+        return new WindowConfig
+        {
+            FullScreen = false,
+            X = (int)nudJanelaX.Value,
+            Y = (int)nudJanelaY.Value,
+            Width = (int)nudJanelaLargura.Value,
+            Height = (int)nudJanelaAltura.Value,
+        };
+    }
+
+    private async Task LaunchAndPositionProcessAsync(
+        string executablePath,
+        string? arguments,
+        MonitorInfo monitor,
+        WindowConfig window)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            UseShellExecute = false,
+        };
+
+        if (!string.IsNullOrWhiteSpace(arguments))
+        {
+            startInfo.Arguments = arguments;
+        }
+
+        var workingDirectory = Path.GetDirectoryName(executablePath);
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            startInfo.WorkingDirectory = workingDirectory;
+        }
+
+        var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            throw new InvalidOperationException("Não foi possível iniciar o processo para teste.");
+        }
+
+        try
+        {
+            var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
+            ApplyWindowPosition(handle, monitor, window);
+        }
+        finally
+        {
+            process.Dispose();
+        }
+    }
+
+    private async Task PositionExistingProcessAsync(Process process, MonitorInfo monitor, WindowConfig window)
+    {
+        if (process.HasExited)
+        {
+            throw new InvalidOperationException("O processo selecionado já foi encerrado.");
+        }
+
+        process.Refresh();
+        var handle = process.MainWindowHandle;
+        if (handle == IntPtr.Zero)
+        {
+            handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        ApplyWindowPosition(handle, monitor, window);
+    }
+
+    private async Task LaunchDummyWindowAsync(MonitorInfo monitor, WindowConfig window)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "notepad.exe",
+            UseShellExecute = true,
+        };
+
+        var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            throw new InvalidOperationException("Não foi possível iniciar a janela de teste.");
+        }
+
+        try
+        {
+            var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
+            ApplyWindowPosition(handle, monitor, window);
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+        }
+        finally
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.CloseMainWindow();
+                    if (!process.WaitForExit((int)WindowTestTimeout.TotalMilliseconds))
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore failures while closing the dummy window.
+            }
+
+            process.Dispose();
+        }
+    }
+
+    private static void ApplyWindowPosition(IntPtr handle, MonitorInfo monitor, WindowConfig window)
+    {
+        if (handle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("A janela de destino não foi localizada.");
+        }
+
+        var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
+        WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
+    }
+
+    private static Process? FindRunningProcess(string executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var normalized = Path.GetFullPath(executablePath);
+            var processName = Path.GetFileNameWithoutExtension(normalized);
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                return null;
+            }
+
+            var candidates = Process.GetProcessesByName(processName);
+            Process? match = null;
+
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    var module = candidate.MainModule;
+                    var candidatePath = module?.FileName;
+                    if (!string.IsNullOrWhiteSpace(candidatePath) &&
+                        string.Equals(Path.GetFullPath(candidatePath), normalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        match = candidate;
+                        break;
+                    }
+                }
+                catch (Win32Exception)
+                {
+                    // Ignore processes without access rights.
+                }
+                catch (InvalidOperationException)
+                {
+                    // Ignore processes that exited while enumerating.
+                }
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (!ReferenceEquals(candidate, match))
+                {
+                    candidate.Dispose();
+                }
+            }
+
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+        catch
+        {
+            // Swallow exceptions when enumerating running processes.
+        }
+
+        return null;
     }
 
     private void btnSalvar_Click(object? sender, EventArgs e)

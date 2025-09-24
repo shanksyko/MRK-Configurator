@@ -21,6 +21,7 @@ partial class AppEditorForm
     internal AppsTab appsTabControl = null!;
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
+    internal Button btnTestarJanela = null!;
     internal TextBox txtId = null!;
     internal TextBox txtExecutavel = null!;
     internal TextBox txtArgumentos = null!;
@@ -61,6 +62,7 @@ partial class AppEditorForm
         var painelRodape = new FlowLayoutPanel();
         btnSalvar = new Button();
         btnCancelar = new Button();
+        btnTestarJanela = new Button();
         var tlpGeral = new TableLayoutPanel();
         var lblId = new Label();
         txtId = new TextBox();
@@ -273,13 +275,15 @@ partial class AppEditorForm
         tlpJanela.Controls.Add(nudJanelaLargura, 1, 4);
         tlpJanela.Controls.Add(lblAltura, 0, 5);
         tlpJanela.Controls.Add(nudJanelaAltura, 1, 5);
-        tlpJanela.SetRowSpan(picMonitorPreview, 6);
+        tlpJanela.Controls.Add(btnTestarJanela, 1, 6);
+        tlpJanela.SetRowSpan(picMonitorPreview, 7);
         tlpJanela.Dock = DockStyle.Fill;
         tlpJanela.Location = new System.Drawing.Point(8, 8);
         tlpJanela.Margin = new Padding(0);
         tlpJanela.Name = "tlpJanela";
         tlpJanela.Padding = new Padding(0, 0, 0, 8);
-        tlpJanela.RowCount = 6;
+        tlpJanela.RowCount = 7;
+        tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -399,6 +403,18 @@ partial class AppEditorForm
         nudJanelaAltura.Name = "nudJanelaAltura";
         nudJanelaAltura.Size = new System.Drawing.Size(160, 23);
         nudJanelaAltura.TabIndex = 8;
+        //
+        // btnTestarJanela
+        //
+        btnTestarJanela.AutoSize = true;
+        btnTestarJanela.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnTestarJanela.Margin = new Padding(0, 0, 8, 8);
+        btnTestarJanela.Name = "btnTestarJanela";
+        btnTestarJanela.Size = new System.Drawing.Size(52, 25);
+        btnTestarJanela.TabIndex = 9;
+        btnTestarJanela.Text = "Testar";
+        btnTestarJanela.UseVisualStyleBackColor = true;
+        btnTestarJanela.Click += btnTestarJanela_Click;
         //
         // tpSites
         //
