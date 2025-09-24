@@ -407,7 +407,11 @@ public partial class MainForm : Form
             DeviceName = deviceName,
             Width = descriptor.Width,
             Height = descriptor.Height,
+            Bounds = descriptor.Bounds,
+            WorkArea = descriptor.WorkArea,
             Scale = 1.0,
+            Orientation = descriptor.Orientation,
+            Rotation = descriptor.Rotation,
             IsPrimary = descriptor.IsPrimary,
             StableId = MonitorIdentifier.Create(key, deviceName),
         };
@@ -464,8 +468,12 @@ public partial class MainForm : Form
                 DeviceName = screen.DeviceName ?? string.Empty,
                 Width = screen.Bounds.Width,
                 Height = screen.Bounds.Height,
+                Bounds = screen.Bounds,
+                WorkArea = screen.WorkingArea,
                 IsPrimary = screen.Primary,
                 Scale = 1.0,
+                Orientation = MonitorOrientation.Unknown,
+                Rotation = 0,
             });
         }
 
@@ -861,7 +869,7 @@ public partial class MainForm : Form
 
     private async void btnExecutarPerfil_Click(object? sender, EventArgs e)
     {
-        await RunProfileAsync(ProfileFromUI()).ConfigureAwait(true);
+        await RunProfileAsync(BuildProfileFromUI()).ConfigureAwait(true);
     }
 
     private async void btnPararPerfil_Click(object? sender, EventArgs e)
@@ -889,7 +897,7 @@ public partial class MainForm : Form
 
     private async void menuPerfisExecutar_Click(object? sender, EventArgs e)
     {
-        await RunProfileAsync(ProfileFromUI()).ConfigureAwait(true);
+        await RunProfileAsync(BuildProfileFromUI()).ConfigureAwait(true);
     }
 
     private async void menuPerfisParar_Click(object? sender, EventArgs e)
@@ -1077,7 +1085,7 @@ public partial class MainForm : Form
         }
     }
 
-    private ProfileConfig ProfileFromUI()
+    private ProfileConfig BuildProfileFromUI()
     {
         var id = !string.IsNullOrWhiteSpace(_currentProfile?.Id)
             ? _currentProfile!.Id
@@ -1099,6 +1107,7 @@ public partial class MainForm : Form
         {
             Id = id,
             Name = name,
+            SchemaVersion = 1,
             DefaultMonitorId = defaultMonitor,
             Applications = apps,
             Windows = windows,
@@ -1107,7 +1116,7 @@ public partial class MainForm : Form
 
     private ProfileConfig ProfileFromSelection(ProgramaConfig selected)
     {
-        var profile = ProfileFromUI();
+        var profile = BuildProfileFromUI();
         var apps = new List<AppConfig> { CloneAppConfig(selected) };
         return profile with { Applications = apps };
     }
@@ -1388,7 +1397,7 @@ public partial class MainForm : Form
             return;
         }
 
-        var profile = ProfileFromUI();
+        var profile = BuildProfileFromUI();
 
         try
         {

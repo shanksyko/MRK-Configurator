@@ -18,16 +18,27 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly object _gate = new();
     private Bitmap? _currentFrame;
     private bool _disposed;
+    private Rectangle _monitorBounds;
+    private Rectangle _monitorWorkArea;
+    private MonitorOrientation _orientation;
+    private int _rotation;
+    private int _refreshRate;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
+        EnsurePictureBoxSizeMode();
     }
 
     public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target)
         : this(CreateMonitorId(descriptor), target)
     {
+        _monitorBounds = descriptor.Bounds;
+        _monitorWorkArea = descriptor.WorkArea;
+        _orientation = descriptor.Orientation;
+        _rotation = descriptor.Rotation;
+        _refreshRate = descriptor.RefreshHz;
     }
 
     /// <summary>
@@ -39,6 +50,26 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Gets the active capture session, if any.
     /// </summary>
     public IMonitorCapture? Capture { get; private set; }
+
+    /// <summary>
+    /// Gets the bounds of the monitor being captured when available.
+    /// </summary>
+    public Rectangle MonitorBounds => _monitorBounds;
+
+    /// <summary>
+    /// Gets the work area of the monitor being captured when available.
+    /// </summary>
+    public Rectangle MonitorWorkArea => _monitorWorkArea;
+
+    /// <summary>
+    /// Gets the orientation of the monitor when available.
+    /// </summary>
+    public MonitorOrientation Orientation => _orientation;
+
+    /// <summary>
+    /// Gets the rotation of the monitor in degrees when available.
+    /// </summary>
+    public int Rotation => _rotation;
 
     /// <summary>
     /// Starts the preview using GPU capture when available.
@@ -54,6 +85,8 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             return;
         }
+
+        PopulateMetadataFromMonitor();
 
         foreach (var factory in EnumerateFactories(preferGpu))
         {
@@ -138,6 +171,9 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             var bitmap = e.Frame;
             clone = bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), bitmap.PixelFormat);
+#if DEBUG
+            DrawDebugOverlay(clone);
+#endif
         }
         catch
         {
@@ -257,4 +293,90 @@ public sealed class MonitorPreviewHost : IDisposable
 
         return MonitorIdentifier.Create(key, descriptor.DeviceName);
     }
+
+    private void EnsurePictureBoxSizeMode()
+    {
+        if (_target.SizeMode != PictureBoxSizeMode.Zoom)
+        {
+            _target.SizeMode = PictureBoxSizeMode.Zoom;
+        }
+    }
+
+    private void PopulateMetadataFromMonitor()
+    {
+        if (_monitorBounds != Rectangle.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = MonitorLocator.Find(MonitorId);
+            if (info is null)
+            {
+                return;
+            }
+
+            if (info.Bounds != Rectangle.Empty)
+            {
+                _monitorBounds = info.Bounds;
+            }
+
+            if (info.WorkArea != Rectangle.Empty)
+            {
+                _monitorWorkArea = info.WorkArea;
+            }
+
+            if (info.Orientation != MonitorOrientation.Unknown)
+            {
+                _orientation = info.Orientation;
+            }
+
+            if (info.Rotation != 0)
+            {
+                _rotation = info.Rotation;
+            }
+        }
+        catch
+        {
+            // Metadata retrieval is best-effort only.
+        }
+    }
+
+#if DEBUG
+    private void DrawDebugOverlay(Bitmap bitmap)
+    {
+        try
+        {
+            using var graphics = Graphics.FromImage(bitmap);
+            using var font = SystemFonts.CaptionFont;
+            using var background = new SolidBrush(Color.FromArgb(160, Color.Black));
+            using var foreground = new SolidBrush(Color.White);
+
+            var text = string.Concat(MonitorId, " ", bitmap.Width, "x", bitmap.Height);
+            if (_refreshRate > 0)
+            {
+                text = string.Concat(text, " @", _refreshRate, "Hz");
+            }
+
+            if (_rotation != 0)
+            {
+                text = string.Concat(text, " rot:", _rotation);
+            }
+            else if (_orientation != MonitorOrientation.Unknown)
+            {
+                text = string.Concat(text, " ", _orientation);
+            }
+
+            var measured = graphics.MeasureString(text, font);
+            var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);
+            graphics.FillRectangle(background, rect);
+            graphics.DrawString(text, font, foreground, new PointF(rect.Left + 4, rect.Top + 2));
+        }
+        catch
+        {
+            // Debug overlay is best-effort only.
+        }
+    }
+#endif
 }

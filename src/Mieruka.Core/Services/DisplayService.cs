@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -219,16 +220,40 @@ public sealed class DisplayService : IDisplayService
             var width = 0;
             var height = 0;
             var scale = 1.0;
+            var bounds = Rectangle.Empty;
+            var workArea = Rectangle.Empty;
+            var orientation = MonitorOrientation.Unknown;
+            var rotation = 0;
 
             if (TryGetSourceMode(path, modes, out var sourceMode))
             {
                 width = (int)sourceMode.width;
                 height = (int)sourceMode.height;
+                bounds = new Rectangle(sourceMode.position.x, sourceMode.position.y, width, height);
 
                 if (TryGetScale(sourceMode, out var calculatedScale))
                 {
                     scale = calculatedScale;
                 }
+            }
+
+            if (TryGetMonitorRectangles(sourceName.viewGdiDeviceName, out var monitorBounds, out var monitorWorkArea))
+            {
+                bounds = monitorBounds;
+                workArea = monitorWorkArea;
+                width = bounds.Width;
+                height = bounds.Height;
+            }
+            else if (!bounds.IsEmpty)
+            {
+                workArea = bounds;
+            }
+
+            var mappedOrientation = MapOrientation(path.targetInfo.rotation);
+            if (mappedOrientation.Orientation != MonitorOrientation.Unknown)
+            {
+                orientation = mappedOrientation.Orientation;
+                rotation = mappedOrientation.Rotation;
             }
 
             var adapterDevice = GetDisplayAdapter(sourceName.viewGdiDeviceName);
@@ -253,6 +278,10 @@ public sealed class DisplayService : IDisplayService
                 Connector = GetConnectorName(targetName.outputTechnology),
                 Edid = ExtractEdid(monitorDevice),
                 StableId = ResolveStableId(targetName, sourceName, index),
+                Bounds = bounds,
+                WorkArea = workArea,
+                Orientation = orientation,
+                Rotation = rotation,
             };
 
             monitors.Add(monitorInfo);
@@ -324,6 +353,55 @@ public sealed class DisplayService : IDisplayService
             return false;
         }
     }
+
+    private static (MonitorOrientation Orientation, int Rotation) MapOrientation(DISPLAYCONFIG_ROTATION rotation)
+        => rotation switch
+        {
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_ROTATE90 => (MonitorOrientation.Portrait, 90),
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_ROTATE180 => (MonitorOrientation.LandscapeFlipped, 180),
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_ROTATE270 => (MonitorOrientation.PortraitFlipped, 270),
+            DISPLAYCONFIG_ROTATION.DISPLAYCONFIG_ROTATION_IDENTITY => (MonitorOrientation.Landscape, 0),
+            _ => (MonitorOrientation.Unknown, 0),
+        };
+
+    private static bool TryGetMonitorRectangles(string? deviceName, out Rectangle bounds, out Rectangle workArea)
+    {
+        bounds = Rectangle.Empty;
+        workArea = Rectangle.Empty;
+
+        if (string.IsNullOrWhiteSpace(deviceName))
+        {
+            return false;
+        }
+
+        var located = false;
+        var callback = new MonitorEnumProc((IntPtr monitor, IntPtr _, ref RECT rect, IntPtr __) =>
+        {
+            var info = MONITORINFOEX.Create();
+            if (!GetMonitorInfo(monitor, ref info))
+            {
+                return true;
+            }
+
+            if (!string.Equals(info.szDevice, deviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            bounds = ToRectangle(info.rcMonitor);
+            workArea = ToRectangle(info.rcWork);
+            located = true;
+            return false;
+        });
+
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
+        GC.KeepAlive(callback);
+
+        return located;
+    }
+
+    private static Rectangle ToRectangle(RECT rect)
+        => Rectangle.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
 
     private static string ResolveStableId(
         DISPLAYCONFIG_TARGET_DEVICE_NAME target,
@@ -751,10 +829,52 @@ public sealed class DisplayService : IDisplayService
     private static extern bool EnumDisplayDevices(string? lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
 
     [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+    [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(POINT pt, MonitorFromPointFlags dwFlags);
 
     [DllImport("Shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hmonitor, MonitorDpiType dpiType, out uint dpiX, out uint dpiY);
+
+    private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MONITORINFOEX
+    {
+        private const int CchDeviceName = 32;
+
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchDeviceName)]
+        public string szDevice;
+
+        public static MONITORINFOEX Create()
+        {
+            return new MONITORINFOEX
+            {
+                cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>(),
+                szDevice = string.Empty,
+            };
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT

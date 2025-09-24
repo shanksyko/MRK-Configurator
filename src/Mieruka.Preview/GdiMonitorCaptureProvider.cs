@@ -163,7 +163,8 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
                             hdcSource,
                             _monitorBounds.Left,
                             _monitorBounds.Top,
-                            NativeMethods.TernaryRasterOperations.SRCCOPY))
+                            NativeMethods.TernaryRasterOperations.SRCCOPY |
+                            NativeMethods.TernaryRasterOperations.CAPTUREBLT))
                     {
                         throw new InvalidOperationException("The BitBlt operation failed.");
                     }
@@ -231,6 +232,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         public enum TernaryRasterOperations : uint
         {
             SRCCOPY = 0x00CC0020,
+            CAPTUREBLT = 0x40000000,
         }
     }
 }

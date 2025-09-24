@@ -1,3 +1,5 @@
+using System.Drawing;
+
 namespace Mieruka.Core.Models;
 
 /// <summary>
@@ -31,9 +33,29 @@ public sealed record class MonitorInfo
     public int Height { get; init; }
 
     /// <summary>
+    /// Physical bounds of the monitor in virtual screen coordinates.
+    /// </summary>
+    public Rectangle Bounds { get; init; }
+
+    /// <summary>
+    /// Work area of the monitor in virtual screen coordinates.
+    /// </summary>
+    public Rectangle WorkArea { get; init; }
+
+    /// <summary>
     /// Display scaling factor used by the operating system.
     /// </summary>
     public double Scale { get; init; } = 1.0;
+
+    /// <summary>
+    /// Orientation of the monitor.
+    /// </summary>
+    public MonitorOrientation Orientation { get; init; } = MonitorOrientation.Unknown;
+
+    /// <summary>
+    /// Rotation applied to the monitor in degrees.
+    /// </summary>
+    public int Rotation { get; init; }
 
     /// <summary>
     /// Indicates if the monitor is the primary one.

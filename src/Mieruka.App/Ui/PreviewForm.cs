@@ -48,6 +48,10 @@ internal sealed partial class PreviewForm : Form
             DeviceName = screen.DeviceName,
             Width = screen.Bounds.Width,
             Height = screen.Bounds.Height,
+            Bounds = screen.Bounds,
+            WorkArea = screen.WorkingArea,
+            Orientation = MonitorOrientation.Unknown,
+            Rotation = 0,
             IsPrimary = screen.Primary,
         });
 

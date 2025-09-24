@@ -54,7 +54,16 @@ public sealed class ProfileStore
             throw new ArgumentException("Profile identifier must not be empty.", nameof(profile));
         }
 
+        if (string.IsNullOrWhiteSpace(profile.Name))
+        {
+            throw new ArgumentException("Profile name must not be empty.", nameof(profile));
+        }
+
         var sanitized = SanitizeProfile(profile);
+        if (sanitized.SchemaVersion <= 0)
+        {
+            sanitized = sanitized with { SchemaVersion = 1 };
+        }
         var document = new ProfileDocument
         {
             SchemaVersion = CurrentSchemaVersion,
@@ -65,6 +74,7 @@ public sealed class ProfileStore
 
         lock (_gate)
         {
+            Directory.CreateDirectory(_profilesDirectory);
             using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
             JsonSerializer.Serialize(stream, document, _serializerOptions);
         }
