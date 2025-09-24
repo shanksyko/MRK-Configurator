@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,12 +18,14 @@ public sealed class AppsTab : UserControl
     private readonly Button _btnAdd;
     private readonly Button _btnRemove;
     private readonly Button _btnEditArgs;
+    private readonly Button _btnOpen;
+    private readonly Button _btnTest;
     private readonly TextBox _txtArgs;
     private readonly TextBox _txtPreview;
     private readonly BindingList<InstalledAppInfo> _allApps = new();
     private readonly BindingList<InstalledAppInfo> _filteredApps = new();
-    private readonly InstalledAppsProvider _provider = new();
     private string _currentExecutablePath = string.Empty;
+    private InstalledAppInfo? _selectedApp;
 
     public AppsTab()
     {
@@ -122,10 +125,18 @@ public sealed class AppsTab : UserControl
         _btnEditArgs = new Button { Text = "Editar Args", AutoSize = true };
         _btnEditArgs.Click += (_, _) => FocusArgs();
 
+        _btnOpen = new Button { Text = "Abrir", AutoSize = true };
+        _btnOpen.Click += (_, _) => OpenSelectedExecutableAsync();
+
+        _btnTest = new Button { Text = "Testar", AutoSize = true };
+        _btnTest.Click += (_, _) => TestSelectedExecutableAsync();
+
         buttonPanel.Controls.Add(_btnSelectExecutable);
         buttonPanel.Controls.Add(_btnAdd);
         buttonPanel.Controls.Add(_btnRemove);
         buttonPanel.Controls.Add(_btnEditArgs);
+        buttonPanel.Controls.Add(_btnOpen);
+        buttonPanel.Controls.Add(_btnTest);
 
         layout.Controls.Add(buttonPanel, 1, 1);
 
@@ -210,7 +221,7 @@ public sealed class AppsTab : UserControl
 
     public async Task LoadInstalledAppsAsync()
     {
-        var apps = await Task.Run(() => _provider.GetAll()).ConfigureAwait(false);
+        var apps = await Task.Run(InstalledAppsProvider.GetAll).ConfigureAwait(false);
         if (IsDisposed)
         {
             return;
@@ -264,6 +275,7 @@ public sealed class AppsTab : UserControl
     {
         if (_grid.CurrentRow?.DataBoundItem is InstalledAppInfo app)
         {
+            _selectedApp = app;
             ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(app.Name, app.ExecutablePath, app));
         }
     }
@@ -272,12 +284,14 @@ public sealed class AppsTab : UserControl
     {
         if (_grid.CurrentRow?.DataBoundItem is InstalledAppInfo app)
         {
+            _selectedApp = app;
             ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(app.Name, app.ExecutablePath, app));
         }
     }
 
     private void ClearSelection()
     {
+        _selectedApp = null;
         ExecutableCleared?.Invoke(this, EventArgs.Empty);
     }
 
@@ -334,9 +348,180 @@ public sealed class AppsTab : UserControl
             return;
         }
 
+        _selectedApp = null;
         var fileName = Path.GetFileNameWithoutExtension(dialog.FileName);
         ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(fileName, dialog.FileName, null));
     }
+
+    private async void OpenSelectedExecutableAsync()
+    {
+        var args = BuildExecutionArgs(validateExecutable: true);
+        if (args is null)
+        {
+            return;
+        }
+
+        if (!_btnOpen.IsDisposed)
+        {
+            _btnOpen.Enabled = false;
+        }
+
+        try
+        {
+            if (OpenRequested is not null)
+            {
+                await InvokeAsync(OpenRequested, this, args).ConfigureAwait(true);
+            }
+            else
+            {
+                await LaunchProcessAsync(args).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível abrir o aplicativo selecionado: {ex.Message}",
+                "Abrir aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (!_btnOpen.IsDisposed)
+            {
+                _btnOpen.Enabled = true;
+            }
+        }
+    }
+
+    private async void TestSelectedExecutableAsync()
+    {
+        var args = BuildExecutionArgs(validateExecutable: false);
+        if (args is null)
+        {
+            return;
+        }
+
+        if (TestRequested is null)
+        {
+            MessageBox.Show(
+                this,
+                "O teste de posicionamento não está disponível neste contexto.",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        if (!_btnTest.IsDisposed)
+        {
+            _btnTest.Enabled = false;
+        }
+
+        try
+        {
+            await InvokeAsync(TestRequested, this, args).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível testar o aplicativo selecionado: {ex.Message}",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (!_btnTest.IsDisposed)
+            {
+                _btnTest.Enabled = true;
+            }
+        }
+    }
+
+    private AppExecutionRequestEventArgs? BuildExecutionArgs(bool validateExecutable)
+    {
+        var executablePath = _currentExecutablePath.Trim();
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            MessageBox.Show(
+                this,
+                "Selecione um executável antes de continuar.",
+                "Aplicativos",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return null;
+        }
+
+        if (validateExecutable && !File.Exists(executablePath))
+        {
+            MessageBox.Show(
+                this,
+                "O executável informado não foi encontrado.",
+                "Aplicativos",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return null;
+        }
+
+        var arguments = string.IsNullOrWhiteSpace(_txtArgs.Text) ? null : _txtArgs.Text;
+        return new AppExecutionRequestEventArgs(executablePath, arguments, _selectedApp);
+    }
+
+    private static Task LaunchProcessAsync(AppExecutionRequestEventArgs args)
+    {
+        return Task.Run(() =>
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = args.ExecutablePath,
+                UseShellExecute = false,
+            };
+
+            if (!string.IsNullOrWhiteSpace(args.Arguments))
+            {
+                startInfo.Arguments = args.Arguments;
+            }
+
+            var workingDirectory = Path.GetDirectoryName(args.ExecutablePath);
+            if (!string.IsNullOrWhiteSpace(workingDirectory))
+            {
+                startInfo.WorkingDirectory = workingDirectory;
+            }
+
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                throw new InvalidOperationException("Não foi possível iniciar o aplicativo selecionado.");
+            }
+        });
+    }
+
+    private static Task InvokeAsync(AppExecutionHandler? handler, object? sender, AppExecutionRequestEventArgs args)
+    {
+        if (handler is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var delegates = handler.GetInvocationList();
+        if (delegates.Length == 1)
+        {
+            return ((AppExecutionHandler)delegates[0])(sender, args);
+        }
+
+        var tasks = delegates
+            .Cast<AppExecutionHandler>()
+            .Select(d => d(sender, args));
+
+        return Task.WhenAll(tasks);
+    }
+
+    public event AppExecutionHandler? OpenRequested;
+
+    public event AppExecutionHandler? TestRequested;
 }
 
 public sealed class AppSelectionEventArgs : EventArgs
@@ -351,6 +536,24 @@ public sealed class AppSelectionEventArgs : EventArgs
     public string? Name { get; }
 
     public string ExecutablePath { get; }
+
+    public InstalledAppInfo? App { get; }
+}
+
+public delegate Task AppExecutionHandler(object? sender, AppExecutionRequestEventArgs e);
+
+public sealed class AppExecutionRequestEventArgs : EventArgs
+{
+    public AppExecutionRequestEventArgs(string executablePath, string? arguments, InstalledAppInfo? app)
+    {
+        ExecutablePath = executablePath;
+        Arguments = arguments;
+        App = app;
+    }
+
+    public string ExecutablePath { get; }
+
+    public string? Arguments { get; }
 
     public InstalledAppInfo? App { get; }
 }
