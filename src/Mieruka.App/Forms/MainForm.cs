@@ -3,12 +3,17 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Ui;
 using Mieruka.App.Services;
+using Mieruka.Automation.Execution;
+using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
@@ -31,6 +36,14 @@ public partial class MainForm : Form
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
     private IDisplayService? _displayService;
     private bool _previewsRequested;
+    private readonly ProfileStore _profileStore = new();
+    private ProfileExecutor? _profileExecutor;
+    private CancellationTokenSource? _profileExecutionCts;
+    private Task? _profileExecutionTask;
+    private bool _profileRunning;
+    private ProfileConfig? _currentProfile;
+    private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
+    private const string DefaultProfileId = "workspace";
 
     public string? SelectedMonitorId { get; private set; }
 
@@ -39,6 +52,8 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+
+        UpdateStatusText("Pronto");
 
         var grid = dgvProgramas ?? throw new InvalidOperationException("O DataGridView de programas não foi criado pelo designer.");
         var source = bsProgramas ?? throw new InvalidOperationException("A BindingSource de programas não foi inicializada.");
@@ -62,6 +77,7 @@ public partial class MainForm : Form
         FormClosing += MainForm_FormClosing;
 
         LoadInitialData();
+        LoadProfileFromStore();
         UpdateButtonStates();
     }
 
@@ -150,6 +166,26 @@ public partial class MainForm : Form
     {
         StopAutomaticPreviews(clearManualState: true);
         DisposeMonitorCards();
+
+        if (_profileRunning)
+        {
+            try
+            {
+                _profileExecutor?.Stop();
+                _profileExecutionCts?.Cancel();
+                _profileExecutionTask?.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch
+            {
+                // Ignore failures while stopping background execution during shutdown.
+            }
+        }
+
+        _profileExecutionCts?.Dispose();
+        _profileExecutionCts = null;
+        _profileExecutionTask = null;
+        _profileExecutor?.Dispose();
+        _profileExecutor = null;
 
         if (_displayService is not null)
         {
@@ -585,6 +621,10 @@ public partial class MainForm : Form
         }
 
         SelectedMonitorId = monitorId;
+        if (_currentProfile is not null)
+        {
+            _currentProfile = _currentProfile with { DefaultMonitorId = monitorId };
+        }
         UpdateMonitorSelectionVisuals();
 
         if (notify && monitorId is not null)
@@ -814,6 +854,96 @@ public partial class MainForm : Form
         }
     }
 
+    private void btnSalvarPerfil_Click(object? sender, EventArgs e)
+    {
+        SalvarPerfil();
+    }
+
+    private async void btnExecutarPerfil_Click(object? sender, EventArgs e)
+    {
+        await RunProfileAsync(ProfileFromUI()).ConfigureAwait(true);
+    }
+
+    private async void btnPararPerfil_Click(object? sender, EventArgs e)
+    {
+        await StopProfileExecutionAsync().ConfigureAwait(true);
+    }
+
+    private async void btnTestarItem_Click(object? sender, EventArgs e)
+    {
+        var selecionado = ObterProgramaSelecionado();
+        if (selecionado is null)
+        {
+            MessageBox.Show(this, "Selecione um item para testar.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var profile = ProfileFromSelection(selecionado);
+        await RunProfileAsync(profile).ConfigureAwait(true);
+    }
+
+    private void menuPerfisSalvar_Click(object? sender, EventArgs e)
+    {
+        SalvarPerfil();
+    }
+
+    private async void menuPerfisExecutar_Click(object? sender, EventArgs e)
+    {
+        await RunProfileAsync(ProfileFromUI()).ConfigureAwait(true);
+    }
+
+    private async void menuPerfisParar_Click(object? sender, EventArgs e)
+    {
+        await StopProfileExecutionAsync().ConfigureAwait(true);
+    }
+
+    private void menuPerfisTestar_Click(object? sender, EventArgs e)
+    {
+        btnTestarItem_Click(sender, EventArgs.Empty);
+    }
+
+    private void menuPerfisCarregar_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            var profiles = _profileStore.ListAll();
+            if (profiles.Count == 0)
+            {
+                MessageBox.Show(this, "Nenhum perfil salvo foi encontrado.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (profiles.Count == 1)
+            {
+                ApplyProfile(profiles[0]);
+                UpdateStatusText($"Perfil '{profiles[0].Name}' carregado.");
+                return;
+            }
+
+            var options = string.Join(Environment.NewLine, profiles.Select(p => $"{p.Id} - {p.Name}"));
+            var selectedId = PromptText(this, "Carregar Perfil", $"Perfis disponíveis:{Environment.NewLine}{options}{Environment.NewLine}{Environment.NewLine}Informe o identificador do perfil:", _currentProfile?.Id ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(selectedId))
+            {
+                return;
+            }
+
+            var profile = profiles.FirstOrDefault(p => string.Equals(p.Id, selectedId.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (profile is null)
+            {
+                MessageBox.Show(this, $"O perfil '{selectedId}' não foi encontrado.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            ApplyProfile(profile);
+            UpdateStatusText($"Perfil '{profile.Name}' carregado.");
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao carregar perfis.", ex);
+            MessageBox.Show(this, $"Erro ao carregar perfis: {ex.Message}", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private void Orchestrator_StateChanged(object? sender, OrchestratorStateChangedEventArgs e)
     {
         if (IsDisposed)
@@ -850,6 +980,8 @@ public partial class MainForm : Form
         btnExcluir.Enabled = temSelecao;
         btnExecutar.Enabled = podeExecutar;
         btnParar.Enabled = podeParar;
+
+        UpdateProfileUiState();
     }
 
     private ProgramaConfig? ObterProgramaSelecionado()
@@ -876,6 +1008,459 @@ public partial class MainForm : Form
                 break;
             }
         }
+    }
+
+    private void UpdateProfileUiState()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new MethodInvoker(UpdateProfileUiState));
+            return;
+        }
+
+        var hasPrograms = _programas.Count > 0;
+        var selected = ObterProgramaSelecionado() is not null;
+        var canRun = hasPrograms && !_profileRunning;
+
+        if (btnSalvarPerfil is not null)
+        {
+            btnSalvarPerfil.Enabled = !_profileRunning;
+        }
+
+        if (btnExecutarPerfil is not null)
+        {
+            btnExecutarPerfil.Enabled = canRun;
+        }
+
+        if (btnPararPerfil is not null)
+        {
+            btnPararPerfil.Enabled = _profileRunning;
+        }
+
+        if (btnTestarItem is not null)
+        {
+            btnTestarItem.Enabled = !_profileRunning && selected;
+        }
+
+        if (menuPerfisSalvar is not null)
+        {
+            menuPerfisSalvar.Enabled = !_profileRunning;
+        }
+
+        if (menuPerfisExecutar is not null)
+        {
+            menuPerfisExecutar.Enabled = canRun;
+        }
+
+        if (menuPerfisParar is not null)
+        {
+            menuPerfisParar.Enabled = _profileRunning;
+        }
+
+        if (menuPerfisTestar is not null)
+        {
+            menuPerfisTestar.Enabled = !_profileRunning && selected;
+        }
+    }
+
+    private void UpdateStatusText(string message)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action<string>(UpdateStatusText), message);
+            return;
+        }
+
+        if (lblStatus is not null)
+        {
+            lblStatus.Text = message;
+        }
+    }
+
+    private ProfileConfig ProfileFromUI()
+    {
+        var id = !string.IsNullOrWhiteSpace(_currentProfile?.Id)
+            ? _currentProfile!.Id
+            : GenerateDefaultProfileId();
+        var name = !string.IsNullOrWhiteSpace(_currentProfile?.Name)
+            ? _currentProfile!.Name
+            : "Perfil atual";
+        var defaultMonitor = SelectedMonitorId ?? _currentProfile?.DefaultMonitorId;
+
+        var apps = new List<AppConfig>(_programas.Count);
+        foreach (var programa in _programas)
+        {
+            apps.Add(CloneAppConfig(programa));
+        }
+
+        var windows = _currentProfile?.Windows?.Select(CloneWindowConfig).ToList() ?? new List<WindowConfig>();
+
+        return new ProfileConfig
+        {
+            Id = id,
+            Name = name,
+            DefaultMonitorId = defaultMonitor,
+            Applications = apps,
+            Windows = windows,
+        };
+    }
+
+    private ProfileConfig ProfileFromSelection(ProgramaConfig selected)
+    {
+        var profile = ProfileFromUI();
+        var apps = new List<AppConfig> { CloneAppConfig(selected) };
+        return profile with { Applications = apps };
+    }
+
+    private static AppConfig CloneAppConfig(AppConfig app)
+    {
+        var environment = new Dictionary<string, string>(app.EnvironmentVariables, StringComparer.OrdinalIgnoreCase);
+        var window = CloneWindowConfig(app.Window);
+        var watchdog = app.Watchdog with
+        {
+            HealthCheck = app.Watchdog.HealthCheck is null ? null : app.Watchdog.HealthCheck with { },
+        };
+
+        return app with
+        {
+            EnvironmentVariables = environment,
+            Watchdog = watchdog,
+            Window = window,
+        };
+    }
+
+    private static WindowConfig CloneWindowConfig(WindowConfig window)
+        => window with { Monitor = window.Monitor with { } };
+
+    private bool EnsureProfileIdentity()
+    {
+        if (_currentProfile is not null &&
+            !string.IsNullOrWhiteSpace(_currentProfile.Id) &&
+            !string.IsNullOrWhiteSpace(_currentProfile.Name))
+        {
+            return true;
+        }
+
+        var defaultName = _currentProfile?.Name;
+        var name = PromptText(this, "Salvar Perfil", "Informe um nome para o perfil:", string.IsNullOrWhiteSpace(defaultName) ? "Perfil" : defaultName);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        var defaultId = NormalizeProfileId(name);
+        var id = PromptText(this, "Salvar Perfil", "Informe um identificador para o perfil:", defaultId);
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return false;
+        }
+
+        id = NormalizeProfileId(id);
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            MessageBox.Show(this, "Informe um identificador válido.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        var windows = _currentProfile?.Windows?.Select(CloneWindowConfig).ToList() ?? new List<WindowConfig>();
+        var defaultMonitor = _currentProfile?.DefaultMonitorId;
+
+        _currentProfile = new ProfileConfig
+        {
+            Id = id,
+            Name = name.Trim(),
+            DefaultMonitorId = defaultMonitor,
+            Windows = windows,
+            Applications = new List<AppConfig>(),
+        };
+
+        return true;
+    }
+
+    private static string NormalizeProfileId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var sanitized = ProfileIdSanitizer.Replace(value.Trim(), "_");
+        sanitized = sanitized.Trim('_');
+        if (sanitized.Length == 0)
+        {
+            sanitized = "perfil";
+        }
+
+        return sanitized.ToLowerInvariant();
+    }
+
+    private static string GenerateDefaultProfileId() => DefaultProfileId;
+
+    private static string? PromptText(IWin32Window owner, string title, string message, string? defaultValue)
+    {
+        using var prompt = new Form
+        {
+            Text = title,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MinimizeBox = false,
+            MaximizeBox = false,
+            ShowInTaskbar = false,
+            ClientSize = new Size(360, 140),
+        };
+
+        var label = new Label
+        {
+            AutoSize = true,
+            Text = message,
+            Location = new Point(12, 12),
+        };
+
+        var textBox = new TextBox
+        {
+            Location = new Point(12, label.Bottom + 8),
+            Width = prompt.ClientSize.Width - 24,
+            Text = defaultValue ?? string.Empty,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+        };
+
+        var okButton = new Button
+        {
+            Text = "OK",
+            DialogResult = DialogResult.OK,
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+            Location = new Point(prompt.ClientSize.Width - 180, prompt.ClientSize.Height - 40),
+            Size = new Size(80, 27),
+        };
+
+        var cancelButton = new Button
+        {
+            Text = "Cancelar",
+            DialogResult = DialogResult.Cancel,
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+            Location = new Point(prompt.ClientSize.Width - 92, prompt.ClientSize.Height - 40),
+            Size = new Size(80, 27),
+        };
+
+        prompt.Controls.Add(label);
+        prompt.Controls.Add(textBox);
+        prompt.Controls.Add(okButton);
+        prompt.Controls.Add(cancelButton);
+        prompt.AcceptButton = okButton;
+        prompt.CancelButton = cancelButton;
+
+        return prompt.ShowDialog(owner) == DialogResult.OK ? textBox.Text : null;
+    }
+
+    private void LoadProfileFromStore()
+    {
+        try
+        {
+            var profiles = _profileStore.ListAll();
+            if (profiles.Count == 0)
+            {
+                UpdateProfileUiState();
+                return;
+            }
+
+            ApplyProfile(profiles[0]);
+            UpdateStatusText($"Perfil '{profiles[0].Name}' carregado.");
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao carregar perfis.", ex);
+        }
+    }
+
+    private void ApplyProfile(ProfileConfig profile)
+    {
+        var applications = profile.Applications.Select(CloneAppConfig).ToList();
+        var windows = profile.Windows.Select(CloneWindowConfig).ToList();
+
+        _currentProfile = profile with
+        {
+            Applications = applications,
+            Windows = windows,
+        };
+
+        _programas.Clear();
+        foreach (var app in applications)
+        {
+            _programas.Add(CloneAppConfig(app));
+        }
+
+        bsProgramas?.ResetBindings(false);
+
+        if (!string.IsNullOrWhiteSpace(profile.DefaultMonitorId))
+        {
+            UpdateSelectedMonitor(profile.DefaultMonitorId, notify: false);
+        }
+
+        UpdateProfileUiState();
+    }
+
+    private ProfileExecutor CreateProfileExecutor()
+    {
+        var executor = new ProfileExecutor();
+        executor.AppStarted += ProfileExecutor_AppStarted;
+        executor.AppPositioned += ProfileExecutor_AppPositioned;
+        executor.Completed += ProfileExecutor_Completed;
+        executor.Failed += ProfileExecutor_Failed;
+        return executor;
+    }
+
+    private async Task RunProfileAsync(ProfileConfig profile)
+    {
+        if (_profileRunning)
+        {
+            return;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            MessageBox.Show(this, "A execução de perfis está disponível apenas no Windows.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (profile.Applications.Count == 0)
+        {
+            MessageBox.Show(this, "Adicione ao menos um aplicativo ao perfil antes de executar.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        _profileExecutor ??= CreateProfileExecutor();
+
+        _profileExecutionCts?.Dispose();
+        _profileExecutionCts = new CancellationTokenSource();
+
+        _profileRunning = true;
+        UpdateProfileUiState();
+        UpdateStatusText($"Executando perfil '{profile.Name}'...");
+
+        try
+        {
+            _profileExecutionTask = _profileExecutor.Start(profile, _profileExecutionCts.Token);
+            await _profileExecutionTask.ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha durante a execução do perfil.", ex);
+            MessageBox.Show(this, $"Erro ao executar o perfil: {ex.Message}", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _profileExecutionTask = null;
+            _profileExecutionCts?.Dispose();
+            _profileExecutionCts = null;
+            _profileRunning = false;
+            UpdateProfileUiState();
+        }
+    }
+
+    private async Task StopProfileExecutionAsync()
+    {
+        if (!_profileRunning)
+        {
+            return;
+        }
+
+        _profileExecutor?.Stop();
+        _profileExecutionCts?.Cancel();
+        UpdateStatusText("Cancelando execução do perfil...");
+
+        if (_profileExecutionTask is Task task)
+        {
+            try
+            {
+                await task.ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _telemetry.Warn("Falha ao aguardar o cancelamento do perfil.", ex);
+            }
+        }
+    }
+
+    private void SalvarPerfil()
+    {
+        if (!EnsureProfileIdentity())
+        {
+            return;
+        }
+
+        var profile = ProfileFromUI();
+
+        try
+        {
+            _profileStore.Save(profile);
+            _currentProfile = profile;
+            UpdateStatusText($"Perfil '{profile.Name}' salvo.");
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao salvar perfil.", ex);
+            MessageBox.Show(this, $"Erro ao salvar perfil: {ex.Message}", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            UpdateProfileUiState();
+        }
+    }
+
+    private void ProfileExecutor_AppStarted(object? sender, AppExecutionEventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => ProfileExecutor_AppStarted(sender, e)));
+            return;
+        }
+
+        var name = string.IsNullOrWhiteSpace(e.DisplayName) ? "aplicativo" : e.DisplayName;
+        UpdateStatusText($"Iniciando {name}...");
+    }
+
+    private void ProfileExecutor_AppPositioned(object? sender, AppExecutionEventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => ProfileExecutor_AppPositioned(sender, e)));
+            return;
+        }
+
+        var name = string.IsNullOrWhiteSpace(e.DisplayName) ? "janela" : e.DisplayName;
+        if (e.Monitor is not null && !string.IsNullOrWhiteSpace(e.Monitor.Name))
+        {
+            UpdateStatusText($"'{name}' posicionado em {e.Monitor.Name}.");
+        }
+        else
+        {
+            UpdateStatusText($"'{name}' posicionado.");
+        }
+    }
+
+    private void ProfileExecutor_Completed(object? sender, ProfileExecutionCompletedEventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => ProfileExecutor_Completed(sender, e)));
+            return;
+        }
+
+        UpdateStatusText(e.Cancelled ? "Execução cancelada." : "Execução concluída.");
+    }
+
+    private void ProfileExecutor_Failed(object? sender, ProfileExecutionFailedEventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => ProfileExecutor_Failed(sender, e)));
+            return;
+        }
+
+        var target = e.Application?.Id ?? e.Window?.Title ?? e.Profile.Name;
+        var message = $"Falha ao posicionar '{target}': {e.Exception.Message}";
+        UpdateStatusText(message);
+        MessageBox.Show(this, message, "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private string GerarIdentificadorUnico(string baseId)
