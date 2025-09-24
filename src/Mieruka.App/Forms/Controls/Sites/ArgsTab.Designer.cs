@@ -1,4 +1,5 @@
-#nullable disable
+﻿#nullable enable annotations
+#nullable disable warnings
 using System.ComponentModel;
 using System.Windows.Forms;
 
