@@ -10,6 +10,7 @@ using Mieruka.App.Forms.Controls;
 using Mieruka.App.Ui;
 using Mieruka.App.Services;
 using Mieruka.Core.Models;
+using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
@@ -24,6 +25,7 @@ public partial class MainForm : Form
     private bool _busy;
     private readonly List<MonitorInfo> _monitorSnapshot = new();
     private readonly List<MonitorCardContext> _monitorCardOrder = new();
+    private readonly IMonitorService _monitorService = new MonitorService();
     private readonly List<MonitorPreviewHost> _monitorHosts = new();
     private readonly Dictionary<string, MonitorCardContext> _monitorCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
@@ -170,11 +172,20 @@ public partial class MainForm : Form
         }
 
         var monitors = CaptureMonitorSnapshot().ToList();
+        var descriptors = EnumerateMonitorDescriptors();
+        var cardSources = BuildMonitorSources(monitors, descriptors);
+
+        monitors = new List<MonitorInfo>(cardSources.Count);
+        foreach (var source in cardSources)
+        {
+            monitors.Add(source.Monitor);
+        }
+
         _monitorSnapshot.Clear();
         _monitorSnapshot.AddRange(monitors);
 
-        var validIds = new HashSet<string>(monitors.Select(MonitorIdentifier.Create), StringComparer.OrdinalIgnoreCase);
-        _manuallyStoppedMonitors.RemoveWhere(id => !validIds.Contains(id));
+        var expectedIds = new HashSet<string>(cardSources.Select(ResolveMonitorId), StringComparer.OrdinalIgnoreCase);
+        _manuallyStoppedMonitors.RemoveWhere(id => !expectedIds.Contains(id));
 
         var shouldRestart = _previewsRequested && WindowState != FormWindowState.Minimized;
 
@@ -182,13 +193,29 @@ public partial class MainForm : Form
 
         UpdateMonitorColumns();
 
-        foreach (var monitor in monitors)
+        var actualIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in cardSources)
         {
-            var monitorId = MonitorIdentifier.Create(monitor);
+            var monitor = source.Monitor;
             var card = LayoutHelpers.CreateMonitorCard(monitor, OnMonitorCardSelected, OnMonitorCardStopRequested, out var pictureBox);
+
+            var monitorId = ResolveMonitorId(source);
+            MonitorPreviewHost host;
+
+            if (source.Descriptor is not null)
+            {
+                host = new MonitorPreviewHost(source.Descriptor, pictureBox);
+                monitorId = host.MonitorId;
+            }
+            else
+            {
+                host = new MonitorPreviewHost(monitorId, pictureBox);
+            }
+
+            actualIds.Add(monitorId);
             ApplyMonitorId(card, monitorId);
 
-            var host = new MonitorPreviewHost(monitorId, pictureBox);
             var context = new MonitorCardContext(monitorId, monitor, card, host);
 
             _monitorCardOrder.Add(context);
@@ -208,7 +235,7 @@ public partial class MainForm : Form
             }
         }
 
-        if (SelectedMonitorId is not null && !validIds.Contains(SelectedMonitorId))
+        if (SelectedMonitorId is not null && !actualIds.Contains(SelectedMonitorId))
         {
             SelectedMonitorId = null;
         }
@@ -223,6 +250,136 @@ public partial class MainForm : Form
         }
 
         RelayoutMonitorCards();
+    }
+
+    private IReadOnlyList<MonitorDescriptor> EnumerateMonitorDescriptors()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return Array.Empty<MonitorDescriptor>();
+        }
+
+        try
+        {
+            return _monitorService.GetAll();
+        }
+        catch
+        {
+            return Array.Empty<MonitorDescriptor>();
+        }
+    }
+
+    private List<MonitorCardSource> BuildMonitorSources(
+        List<MonitorInfo> monitors,
+        IReadOnlyList<MonitorDescriptor> descriptors)
+    {
+        var result = new List<MonitorCardSource>(monitors.Count + descriptors.Count);
+        var descriptorsById = new Dictionary<string, MonitorDescriptor>(StringComparer.OrdinalIgnoreCase);
+        var descriptorsByDevice = new Dictionary<string, MonitorDescriptor>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var descriptor in descriptors)
+        {
+            var id = MonitorPreviewHost.CreateMonitorId(descriptor);
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                descriptorsById[id] = descriptor;
+            }
+
+            if (!string.IsNullOrWhiteSpace(descriptor.DeviceName))
+            {
+                descriptorsByDevice[descriptor.DeviceName] = descriptor;
+            }
+        }
+
+        var used = new HashSet<MonitorDescriptor>();
+
+        foreach (var monitor in monitors)
+        {
+            var descriptor = FindDescriptorForMonitor(monitor, descriptorsById, descriptorsByDevice);
+            if (descriptor is not null)
+            {
+                used.Add(descriptor);
+            }
+
+            result.Add(new MonitorCardSource(monitor, descriptor));
+        }
+
+        var displayIndex = monitors.Count;
+        foreach (var descriptor in descriptors)
+        {
+            if (used.Contains(descriptor))
+            {
+                continue;
+            }
+
+            var fallback = CreateMonitorInfo(descriptor, displayIndex++);
+            monitors.Add(fallback);
+            result.Add(new MonitorCardSource(fallback, descriptor));
+        }
+
+        return result;
+    }
+
+    private static MonitorDescriptor? FindDescriptorForMonitor(
+        MonitorInfo monitor,
+        IDictionary<string, MonitorDescriptor> descriptorsById,
+        IDictionary<string, MonitorDescriptor> descriptorsByDevice)
+    {
+        var monitorId = MonitorIdentifier.Create(monitor);
+        if (!string.IsNullOrWhiteSpace(monitorId) && descriptorsById.TryGetValue(monitorId, out var byId))
+        {
+            return byId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.DeviceName) && descriptorsByDevice.TryGetValue(monitor.DeviceName, out var byDevice))
+        {
+            return byDevice;
+        }
+
+        var deviceId = monitor.Key?.DeviceId;
+        if (!string.IsNullOrWhiteSpace(deviceId) && descriptorsByDevice.TryGetValue(deviceId, out var byKey))
+        {
+            return byKey;
+        }
+
+        return null;
+    }
+
+    private static MonitorInfo CreateMonitorInfo(MonitorDescriptor descriptor, int displayIndex)
+    {
+        var deviceName = descriptor.DeviceName ?? string.Empty;
+        var friendly = !string.IsNullOrWhiteSpace(descriptor.FriendlyName) ? descriptor.FriendlyName : deviceName;
+
+        var key = new MonitorKey
+        {
+            DeviceId = deviceName,
+            DisplayIndex = displayIndex,
+            AdapterLuidHigh = (int)descriptor.AdapterLuidHi,
+            AdapterLuidLow = (int)descriptor.AdapterLuidLo,
+            TargetId = unchecked((int)descriptor.TargetId),
+        };
+
+        return new MonitorInfo
+        {
+            Key = key,
+            Name = friendly,
+            DeviceName = deviceName,
+            Width = descriptor.Width,
+            Height = descriptor.Height,
+            Scale = 1.0,
+            IsPrimary = descriptor.IsPrimary,
+            StableId = MonitorIdentifier.Create(key, deviceName),
+        };
+    }
+
+    private static string ResolveMonitorId(MonitorCardSource source)
+    {
+        if (source.Descriptor is not null)
+        {
+            return MonitorPreviewHost.CreateMonitorId(source.Descriptor);
+        }
+
+        return MonitorIdentifier.Create(source.Monitor);
     }
 
     private IReadOnlyList<MonitorInfo> CaptureMonitorSnapshot()
@@ -738,6 +895,19 @@ public partial class MainForm : Form
             bsProgramas.ResetBindings(false);
             SelecionarPrograma(programa);
         }
+    }
+
+    private readonly struct MonitorCardSource
+    {
+        public MonitorCardSource(MonitorInfo monitor, MonitorDescriptor? descriptor)
+        {
+            Monitor = monitor;
+            Descriptor = descriptor;
+        }
+
+        public MonitorInfo Monitor { get; }
+
+        public MonitorDescriptor? Descriptor { get; }
     }
 
     private sealed class MonitorCardContext
