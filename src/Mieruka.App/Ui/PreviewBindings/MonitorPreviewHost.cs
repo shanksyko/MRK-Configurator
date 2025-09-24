@@ -32,8 +32,15 @@ public sealed class MonitorPreviewHost : IDisposable
 
     public MonitorPreviewHost(PictureBox target, MonitorDescriptor monitor, bool preferGpu)
     {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(monitor);
+        if (target is null)
+        {
+            throw new ArgumentNullException(nameof(target));
+        }
+
+        if (monitor is null)
+        {
+            throw new ArgumentNullException(nameof(monitor));
+        }
 
         _target = target;
         _monitor = monitor;
@@ -49,13 +56,13 @@ public sealed class MonitorPreviewHost : IDisposable
         EnsurePictureBoxSizeMode();
     }
 
-    public MonitorPreviewHost(PictureBox target, MonitorDescriptor monitor)
-        : this(target, monitor, preferGpu: true)
+    public MonitorPreviewHost(PictureBox? target, MonitorDescriptor monitor)
+        : this(target ?? throw new ArgumentNullException(nameof(target)), monitor, preferGpu: true)
     {
     }
 
     public MonitorPreviewHost(MonitorDescriptor monitor, PictureBox target)
-        : this(target ?? throw new ArgumentNullException(nameof(target)), monitor ?? throw new ArgumentNullException(nameof(monitor)), preferGpu: true)
+        : this(target ?? throw new ArgumentNullException(nameof(target)), monitor, preferGpu: true)
     {
     }
 
