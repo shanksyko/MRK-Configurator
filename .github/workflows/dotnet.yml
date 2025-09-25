@@ -36,6 +36,15 @@ jobs:
       - name: Test
         run: dotnet test .\Mieruka.sln -c Release --no-build --logger "trx;LogFileName=test_results.trx"
 
+      - name: Publish
+        run: dotnet publish .\src\Mieruka.App\Mieruka.App.csproj -c Release -o out\publish
+
+      - name: Upload App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mieruka-app
+          path: out/publish
+
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
