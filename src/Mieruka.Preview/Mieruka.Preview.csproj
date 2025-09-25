@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <WindowsSdkPackageVersion>10.0.22621.26</WindowsSdkPackageVersion>
+    <WindowsSdkPackageVersion>10.0.22621.0</WindowsSdkPackageVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -22,13 +22,14 @@
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+  <ItemGroup>
+    <!-- Versões vêm do Directory.Packages.props -->
     <PackageReference Include="Microsoft.Windows.CsWinRT" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" PrivateAssets="all" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
-    <CsWinRTWindowsMetadata>$(PkgMicrosoft_Windows_SDK_BuildTools)\lib\uap10.0\</CsWinRTWindowsMetadata>
+  <PropertyGroup>
+    <CsWinRTWindowsMetadata>$(PkgMicrosoft_Windows_SDK_Contracts)\ref\10.0.22621.0\</CsWinRTWindowsMetadata>
     <CsWinRTUseWindowsSDK>true</CsWinRTUseWindowsSDK>
   </PropertyGroup>
 </Project>
