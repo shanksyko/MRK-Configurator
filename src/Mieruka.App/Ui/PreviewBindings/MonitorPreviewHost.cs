@@ -16,7 +16,7 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// </summary>
 public sealed class MonitorPreviewHost : IDisposable
 {
-    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont;
+    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
     private readonly PictureBox _target;
     private readonly MonitorDescriptor _monitor;
