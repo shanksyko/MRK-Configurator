@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <CsWinRTWindowsMetadata>$(PkgMicrosoft_Windows_SDK_Contracts)\ref\10.0.22621.0\</CsWinRTWindowsMetadata>
+    <CsWinRTWindowsMetadata>$(PkgMicrosoft_Windows_SDK_Contracts)\ref\10.0.22621.1\</CsWinRTWindowsMetadata>
     <CsWinRTUseWindowsSDK>true</CsWinRTUseWindowsSDK>
   </PropertyGroup>
 </Project>
