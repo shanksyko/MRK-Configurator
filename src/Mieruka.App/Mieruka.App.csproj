@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
-    <WindowsSdkPackageVersion>10.0.22621.3233</WindowsSdkPackageVersion>
+    <WindowsSdkPackageVersion>10.0.22621.26</WindowsSdkPackageVersion>
   </PropertyGroup>
 
   <PropertyGroup>

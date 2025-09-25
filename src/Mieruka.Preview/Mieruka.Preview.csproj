@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <WindowsSdkPackageVersion>10.0.22621.3233</WindowsSdkPackageVersion>
+    <WindowsSdkPackageVersion>10.0.22621.26</WindowsSdkPackageVersion>
   </PropertyGroup>
 
   <ItemGroup>
