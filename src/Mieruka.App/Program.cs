@@ -3,10 +3,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.FileProviders;
 using Mieruka.App.Config;
 using Mieruka.App.Forms;
 using Serilog;
 using Serilog.Events;
+using Serilog.Settings.Configuration;
 
 namespace Mieruka.App;
 
@@ -56,11 +59,30 @@ internal static class Program
 
     private static IConfigurationRoot BuildConfiguration()
     {
-        return new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
+        var builder = new ConfigurationBuilder();
+
+        var configurationDirectory = ConfigurationBootstrapper.ResolveConfigurationDirectory();
+        if (Directory.Exists(configurationDirectory))
+        {
+            var persistedSource = new JsonConfigurationSource
+            {
+                FileProvider = new PhysicalFileProvider(configurationDirectory),
+                Path = "appsettings.json",
+                Optional = true,
+                ReloadOnChange = false,
+            };
+
+            persistedSource.ResolveFileProvider();
+            builder.Add(persistedSource);
+        }
+
+        var baseDirectory = AppContext.BaseDirectory;
+
+        return builder
+            .SetBasePath(baseDirectory)
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
             .AddJsonFile(Path.Combine("config", "appsettings.json"), optional: true, reloadOnChange: false)
-            .AddJsonFile(Path.Combine("config", "appsettings.Development.json"), optional: true, reloadOnChange: false)
+            .AddJsonFile(Path.Combine("config", "appsettings.sample.json"), optional: true, reloadOnChange: false)
             .AddEnvironmentVariables("MIERUKA_")
             .Build();
     }
@@ -73,7 +95,9 @@ internal static class Program
         var serilogSection = configuration.GetSection("Logging:Serilog");
         if (serilogSection.Exists())
         {
-            loggerConfiguration.ReadFrom.Configuration(configuration, "Logging:Serilog");
+            loggerConfiguration.ReadFrom.Configuration(
+                configuration,
+                new ConfigurationReaderOptions { SectionName = "Logging:Serilog" });
         }
         else
         {
