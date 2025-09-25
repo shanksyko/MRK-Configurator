@@ -6,6 +6,8 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Security;
 using Mieruka.Core.Services;
 using OpenQA.Selenium;
+using NetCookie = System.Net.Cookie;
+using SelCookie = OpenQA.Selenium.Cookie;
 
 namespace Mieruka.Automation.Login;
 
@@ -75,7 +77,7 @@ public sealed class CookieBridge
             {
                 var domain = string.IsNullOrEmpty(cookie.Domain) ? targetUri.Host : cookie.Domain;
                 var expires = cookie.Expires == DateTime.MinValue ? (DateTime?)null : cookie.Expires;
-                var seleniumCookie = new OpenQA.Selenium.Cookie(
+                var seleniumCookie = new SelCookie(
                     cookie.Name,
                     cookie.Value,
                     domain,
@@ -112,7 +114,7 @@ public sealed class CookieBridge
             return false;
         }
 
-        IReadOnlyCollection<OpenQA.Selenium.Cookie> cookies;
+        IReadOnlyCollection<SelCookie> cookies;
         try
         {
             cookies = driver.Manage().Cookies.AllCookies;
@@ -150,7 +152,7 @@ public sealed class CookieBridge
         return true;
     }
 
-    private static bool BelongsToHost(OpenQA.Selenium.Cookie cookie, string host)
+    private static bool BelongsToHost(SelCookie cookie, string host)
     {
         if (string.IsNullOrEmpty(cookie.Domain))
         {
@@ -171,12 +173,12 @@ public sealed class CookieBridge
         return false;
     }
 
-    private static Cookie? ConvertCookie(OpenQA.Selenium.Cookie cookie, string host)
+    private static NetCookie? ConvertCookie(SelCookie cookie, string host)
     {
         try
         {
             var domain = string.IsNullOrEmpty(cookie.Domain) ? host : cookie.Domain;
-            var netCookie = new Cookie(cookie.Name, cookie.Value, cookie.Path ?? "/", domain);
+            var netCookie = new NetCookie(cookie.Name, cookie.Value, cookie.Path ?? "/", domain);
 
             if (cookie.Expiry is { } expires)
             {

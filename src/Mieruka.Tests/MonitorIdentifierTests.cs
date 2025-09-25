@@ -12,7 +12,7 @@ public sealed class MonitorIdentifierTests
         {
             AdapterLuidHigh = 0x1A2B3C4D,
             AdapterLuidLow = 0x55667788,
-            TargetId = 0x90ABCDEF,
+            TargetId = unchecked((int)0x90ABCDEF),
             DeviceId = "DISPLAY\\ABC123",
         };
 
@@ -28,7 +28,7 @@ public sealed class MonitorIdentifierTests
         var originalKey = new MonitorKey
         {
             AdapterLuidHigh = 0x01020304,
-            AdapterLuidLow = 0xA0B0C0D0,
+            AdapterLuidLow = unchecked((int)0xA0B0C0D0),
             TargetId = 0x11121314,
             DeviceId = "DISPLAY\\XYZ",
         };

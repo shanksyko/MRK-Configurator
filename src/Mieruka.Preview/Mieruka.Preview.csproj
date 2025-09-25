@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <WindowsSdkPackageVersion>10.0.22621.3233</WindowsSdkPackageVersion>
+    <WindowsSdkPackageVersion>10.0.22621.26</WindowsSdkPackageVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,9 +17,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.CsWinRT" />
+    <PackageReference Include="Microsoft.Windows.CsWinRT" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" PrivateAssets="all" />
     <PackageReference Include="Vortice.Direct3D11" />
     <PackageReference Include="Vortice.DXGI" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <CsWinRTWindowsMetadata>$(WindowsSdkPackageVersion)</CsWinRTWindowsMetadata>
+    <CsWinRTUseWindowsSDK>true</CsWinRTUseWindowsSDK>
+  </PropertyGroup>
 </Project>
