@@ -9,12 +9,11 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
-    <PackageVersion Include="Microsoft.Windows.SDK.NET.Ref" Version="10.0.26100.74" />
+    <PackageVersion Include="Microsoft.Windows.CsWinRT" Version="2.0.7" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageVersion Include="Selenium.WebDriver" Version="4.35.0" />
     <PackageVersion Include="Serilog" Version="3.1.1" />
-    <PackageVersion Include="Serilog.Settings.Configuration" Version="3.5.0" />
+    <PackageVersion Include="Serilog.Settings.Configuration" Version="7.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
     <PackageVersion Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageVersion Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
