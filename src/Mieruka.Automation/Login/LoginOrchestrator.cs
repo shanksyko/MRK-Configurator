@@ -151,4 +151,21 @@ public sealed class LoginOrchestrator
             // Ignore refresh failures; the automation can continue without them.
         }
     }
+
+    private sealed class NullTelemetry : ITelemetry
+    {
+        public static ITelemetry Instance { get; } = new NullTelemetry();
+
+        public void Info(string message, Exception? exception = null)
+        {
+        }
+
+        public void Warn(string message, Exception? exception = null)
+        {
+        }
+
+        public void Error(string message, Exception? exception = null)
+        {
+        }
+    }
 }

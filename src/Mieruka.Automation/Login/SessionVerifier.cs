@@ -87,11 +87,17 @@ public sealed class SessionVerifier
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out uri))
+        if (string.IsNullOrWhiteSpace(url))
         {
             return false;
         }
 
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
+        {
+            return false;
+        }
+
+        uri = parsed;
         return true;
     }
 
