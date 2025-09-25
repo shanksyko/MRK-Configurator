@@ -2,7 +2,9 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <WindowsSdkPackageVersion>10.0.22621.0</WindowsSdkPackageVersion>
+    <WindowsSdkPackageVersion Condition="'$(WindowsSdkPackageVersion)' == ''">10.0.22621.0</WindowsSdkPackageVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -29,7 +31,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <CsWinRTWindowsMetadata>$(PkgMicrosoft_Windows_SDK_Contracts)\ref\10.0.22621.0\</CsWinRTWindowsMetadata>
+    <CsWinRTWindowsMetadata>$(PkgMicrosoft_Windows_SDK_Contracts)ref/netstandard2.0/</CsWinRTWindowsMetadata>
     <CsWinRTUseWindowsSDK>true</CsWinRTUseWindowsSDK>
   </PropertyGroup>
 </Project>

@@ -82,7 +82,7 @@ public sealed class SecuritySettingsForm : Form
         layout.Controls.Add(_policyCombo, 1, 0);
 
         // Allowlist controls
-        _allowListBox = new ListBox { Dock = DockStyle.Fill }; 
+        _allowListBox = new ListBox { Dock = DockStyle.Fill };
         _hostInput = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "Adicionar host" };
         var addHostButton = new Button { Text = "Adicionar", Dock = DockStyle.Fill };
         var removeHostButton = new Button { Text = "Remover", Dock = DockStyle.Fill };

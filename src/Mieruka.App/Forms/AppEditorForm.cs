@@ -720,7 +720,7 @@ public partial class AppEditorForm : Form
 
         if (string.IsNullOrWhiteSpace(txtId.Text))
         {
-            errorProvider.SetError(txtId, "Informe um identificador." );
+            errorProvider.SetError(txtId, "Informe um identificador.");
             valido = false;
         }
         else
@@ -730,7 +730,7 @@ public partial class AppEditorForm : Form
 
         if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
         {
-            errorProvider.SetError(txtExecutavel, "Informe o executável." );
+            errorProvider.SetError(txtExecutavel, "Informe o executável.");
             valido = false;
         }
         else if (!File.Exists(txtExecutavel.Text))
