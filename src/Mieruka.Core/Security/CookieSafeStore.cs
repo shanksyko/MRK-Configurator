@@ -186,7 +186,7 @@ public sealed class CookieSafeStore
                     byte[] jsonBytes = Array.Empty<byte>();
                     try
                     {
-                        var entropyBytes = (byte[])_entropy.Clone();
+                        var entropyBytes = RentEntropyCopy();
                         try
                         {
                             jsonBytes = System.Security.Cryptography.ProtectedData.Unprotect(
@@ -196,8 +196,7 @@ public sealed class CookieSafeStore
                         }
                         finally
                         {
-                            Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                            // TODO: manter janelas de exposição de memória o mais curtas possível
+                            CryptographicOperations.ZeroMemory(entropyBytes);
                         }
 
                         var json = Encoding.UTF8.GetString(jsonBytes);
@@ -312,7 +311,7 @@ public sealed class CookieSafeStore
                         byte[] jsonBytes = Array.Empty<byte>();
                         try
                         {
-                            var entropyBytes = (byte[])_entropy.Clone();
+                            var entropyBytes = RentEntropyCopy();
                             try
                             {
                                 jsonBytes = System.Security.Cryptography.ProtectedData.Unprotect(
@@ -322,8 +321,7 @@ public sealed class CookieSafeStore
                             }
                             finally
                             {
-                                Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                                // TODO: manter janelas de exposição de memória o mais curtas possível
+                                CryptographicOperations.ZeroMemory(entropyBytes);
                             }
 
                             var json = Encoding.UTF8.GetString(jsonBytes);
@@ -380,7 +378,7 @@ public sealed class CookieSafeStore
                         byte[] jsonBytes = Array.Empty<byte>();
                         try
                         {
-                            var entropyBytes = (byte[])_entropy.Clone();
+                            var entropyBytes = RentEntropyCopy();
                             try
                             {
                                 jsonBytes = System.Security.Cryptography.ProtectedData.Unprotect(
@@ -390,8 +388,7 @@ public sealed class CookieSafeStore
                             }
                             finally
                             {
-                                Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                                // TODO: manter janelas de exposição de memória o mais curtas possível
+                                CryptographicOperations.ZeroMemory(entropyBytes);
                             }
 
                             var json = Encoding.UTF8.GetString(jsonBytes);
@@ -437,7 +434,7 @@ public sealed class CookieSafeStore
 
     private byte[] Protect(byte[] payload)
     {
-        var entropyBytes = (byte[])_entropy.Clone();
+        var entropyBytes = RentEntropyCopy();
         try
         {
             return System.Security.Cryptography.ProtectedData.Protect(
@@ -447,9 +444,15 @@ public sealed class CookieSafeStore
         }
         finally
         {
-            Array.Clear(entropyBytes, 0, entropyBytes.Length);
-            // TODO: manter janelas de exposição de memória o mais curtas possível
+            CryptographicOperations.ZeroMemory(entropyBytes);
         }
+    }
+
+    private byte[] RentEntropyCopy()
+    {
+        var buffer = GC.AllocateUninitializedArray<byte>(_entropy.Length);
+        Buffer.BlockCopy(_entropy, 0, buffer, 0, buffer.Length);
+        return buffer;
     }
 
     private sealed record SerializableCookie
