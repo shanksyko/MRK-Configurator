@@ -7,7 +7,7 @@ using Mieruka.Core.Services;
 
 namespace Mieruka.Preview;
 
-public static class MonitorLocator
+internal static class MonitorLocator
 {
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
 

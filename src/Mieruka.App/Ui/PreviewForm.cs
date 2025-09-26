@@ -20,11 +20,6 @@ internal sealed partial class PreviewForm : Form
 
     public PreviewForm()
     {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
-        {
-            throw new PlatformNotSupportedException("O preview requer Windows 10 (build 19041) ou superior.");
-        }
-
         InitializeComponent();
         _captureFactory = () => new GdiMonitorCaptureProvider();
         CarregarMonitores();

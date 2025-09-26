@@ -1,5 +1,4 @@
-﻿#nullable enable annotations
-#nullable disable warnings
+#nullable disable
 using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Sites;

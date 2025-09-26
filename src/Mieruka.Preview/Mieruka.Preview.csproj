@@ -1,12 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <CsWinRTEnabled>false</CsWinRTEnabled>
-    <WindowsSdkPackageVersion>10.0.22621.56</WindowsSdkPackageVersion>
-    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,7 +12,6 @@
 
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="SharpGen.Runtime" />
   </ItemGroup>
 
   <ItemGroup>

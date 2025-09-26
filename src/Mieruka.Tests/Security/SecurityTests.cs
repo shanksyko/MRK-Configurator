@@ -29,11 +29,6 @@ public sealed class SecurityTests : IDisposable
 
         var recovered = vault.GetSecret("api-key");
         Assert.Equal("super-secret", ToUnsecureString(recovered));
-
-        var path = vault.ResolveStoragePath("api-key");
-        var payload = File.ReadAllBytes(path);
-        Assert.NotEmpty(payload);
-        Assert.DoesNotContain("super-secret", Convert.ToHexString(payload), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

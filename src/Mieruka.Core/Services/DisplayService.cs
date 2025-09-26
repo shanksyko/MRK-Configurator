@@ -364,8 +364,6 @@ public sealed class DisplayService : IDisplayService
             _ => (MonitorOrientation.Unknown, 0),
         };
 
-    private static readonly MonitorEnumProc MonitorRectanglesCallback = OnMonitorRectangles;
-
     private static bool TryGetMonitorRectangles(string? deviceName, out Rectangle bounds, out Rectangle workArea)
     {
         bounds = Rectangle.Empty;
@@ -376,74 +374,30 @@ public sealed class DisplayService : IDisplayService
             return false;
         }
 
-        var state = new MonitorRectanglesState(deviceName);
-        var handle = GCHandle.Alloc(state);
-
-        try
+        var located = false;
+        var callback = new MonitorEnumProc((IntPtr monitor, IntPtr _, ref RECT rect, IntPtr __) =>
         {
-            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, MonitorRectanglesCallback, GCHandle.ToIntPtr(handle));
-        }
-        finally
-        {
-            if (handle.IsAllocated)
+            var info = MONITORINFOEX.Create();
+            if (!GetMonitorInfo(monitor, ref info))
             {
-                handle.Free();
+                return true;
             }
-        }
 
-        if (state.Located)
-        {
-            bounds = state.Bounds;
-            workArea = state.WorkArea;
-        }
+            if (!string.Equals(info.szDevice, deviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
 
-        return state.Located;
-    }
+            bounds = ToRectangle(info.rcMonitor);
+            workArea = ToRectangle(info.rcWork);
+            located = true;
+            return false;
+        });
 
-    private static bool OnMonitorRectangles(IntPtr monitor, IntPtr _, ref RECT __, IntPtr data)
-    {
-        if (data == IntPtr.Zero)
-        {
-            return true;
-        }
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
+        GC.KeepAlive(callback);
 
-        var handle = GCHandle.FromIntPtr(data);
-        if (handle.Target is not MonitorRectanglesState state)
-        {
-            return true;
-        }
-
-        var info = MONITORINFOEX.Create();
-        if (!GetMonitorInfo(monitor, ref info))
-        {
-            return true;
-        }
-
-        if (!string.Equals(info.szDevice, state.DeviceName, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        state.Bounds = ToRectangle(info.rcMonitor);
-        state.WorkArea = ToRectangle(info.rcWork);
-        state.Located = true;
-        return false;
-    }
-
-    private sealed class MonitorRectanglesState
-    {
-        public MonitorRectanglesState(string deviceName)
-        {
-            DeviceName = deviceName;
-        }
-
-        public string DeviceName { get; }
-
-        public Rectangle Bounds { get; set; } = Rectangle.Empty;
-
-        public Rectangle WorkArea { get; set; } = Rectangle.Empty;
-
-        public bool Located { get; set; }
+        return located;
     }
 
     private static Rectangle ToRectangle(RECT rect)
