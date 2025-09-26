@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.App.Config;
 
@@ -22,6 +23,7 @@ internal static class ConfigurationBootstrapper
     public static string EnsureConfigurationFile()
     {
         var configurationPath = ResolveConfigurationPath();
+        Log.Information("Inicializando configuração em {ConfigurationPath}", configurationPath);
         if (File.Exists(configurationPath))
         {
             return configurationPath;
@@ -36,18 +38,29 @@ internal static class ConfigurationBootstrapper
         var samplePath = Path.Combine(AppContext.BaseDirectory, SampleRelativePath);
         if (!File.Exists(samplePath))
         {
-            throw new FileNotFoundException(
+            var exception = new FileNotFoundException(
                 $"Sample configuration '{SampleRelativePath}' was not copied to the output directory.",
                 samplePath);
+            Log.Fatal(exception, "A amostra de configuração não foi encontrada em {SamplePath}", samplePath);
+            throw exception;
         }
+
+        Log.Warning(
+            "Nenhum arquivo de configuração encontrado. Copiando amostra de {SamplePath} para {ConfigurationPath}",
+            samplePath,
+            configurationPath);
 
         try
         {
             File.Copy(samplePath, configurationPath, overwrite: false);
+            Log.Warning("Arquivo de configuração criado a partir da amostra em {ConfigurationPath}", configurationPath);
         }
         catch (IOException) when (File.Exists(configurationPath))
         {
             // The configuration was created by another process concurrently. Nothing else to do.
+            Log.Information(
+                "Arquivo de configuração detectado durante a cópia em {ConfigurationPath}. Outra instância já criou o arquivo.",
+                configurationPath);
         }
 
         return configurationPath;
@@ -59,6 +72,7 @@ internal static class ConfigurationBootstrapper
     public static JsonStore<GeneralConfig> CreateStore()
     {
         var path = EnsureConfigurationFile();
+        Log.Information("Carregando configurações de {ConfigurationPath}", path);
         return new JsonStore<GeneralConfig>(path);
     }
 

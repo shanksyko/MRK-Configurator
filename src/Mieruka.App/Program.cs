@@ -286,7 +286,7 @@ internal static class Program
         {
             try
             {
-                Log.Error(ex, "Falha ao inicializar a configuração.");
+                Log.Fatal(ex, "Falha ao inicializar a configuração.");
             }
             catch
             {
