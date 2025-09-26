@@ -303,7 +303,7 @@ public partial class AppEditorForm : Form
 
         try
         {
-            _monitorPreviewHost.Start();
+            _monitorPreviewHost.Start(preferGpu: true);
         }
         catch
         {

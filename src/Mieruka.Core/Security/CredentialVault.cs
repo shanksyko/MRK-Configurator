@@ -234,7 +234,7 @@ public sealed class CredentialVault
                     throw new CredentialVaultCorruptedException(key);
                 }
 
-                var entropyBytes = RentEntropyCopy();
+                var entropyBytes = (byte[])_entropy.Clone();
                 byte[] plain = Array.Empty<byte>();
                 try
                 {
@@ -261,7 +261,8 @@ public sealed class CredentialVault
                         CryptographicOperations.ZeroMemory(plain);
                     }
 
-                    CryptographicOperations.ZeroMemory(entropyBytes);
+                    Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                    // TODO: manter janelas de exposição de memória o mais curtas possível
                 }
             }
             catch (EndOfStreamException ex)
@@ -315,11 +316,11 @@ public sealed class CredentialVault
         var sync = _locks.GetOrAdd(path, _ => new object());
         lock (sync)
         {
-            var charsArray = chars.ToArray(); // Materialized buffer cleared immediately after use.
+            var charsArray = chars.ToArray(); // TODO: refatorar para não materializar
             try
             {
                 var plainBytes = Encoding.UTF8.GetBytes(charsArray);
-                var entropyBytes = RentEntropyCopy();
+                var entropyBytes = (byte[])_entropy.Clone();
                 byte[] cipher = Array.Empty<byte>();
                 try
                 {
@@ -352,7 +353,8 @@ public sealed class CredentialVault
                         CryptographicOperations.ZeroMemory(plainBytes);
                     }
 
-                    CryptographicOperations.ZeroMemory(entropyBytes);
+                    Array.Clear(entropyBytes, 0, entropyBytes.Length);
+                    // TODO: manter janelas de exposição de memória o mais curtas possível
                 }
             }
             finally
@@ -368,7 +370,7 @@ public sealed class CredentialVault
     private SecureString ReadLegacySecret(string key, byte[] raw)
     {
         var cipher = raw;
-        var entropyBytes = RentEntropyCopy();
+        var entropyBytes = (byte[])_entropy.Clone();
         byte[] plain = Array.Empty<byte>();
         try
         {
@@ -391,15 +393,9 @@ public sealed class CredentialVault
                 CryptographicOperations.ZeroMemory(plain);
             }
 
-            CryptographicOperations.ZeroMemory(entropyBytes);
+            Array.Clear(entropyBytes, 0, entropyBytes.Length);
+            // TODO: manter janelas de exposição de memória o mais curtas possível
         }
-    }
-
-    private byte[] RentEntropyCopy()
-    {
-        var buffer = GC.AllocateUninitializedArray<byte>(_entropy.Length);
-        Buffer.BlockCopy(_entropy, 0, buffer, 0, buffer.Length);
-        return buffer;
     }
 
     private static void ValidateKey(string key)

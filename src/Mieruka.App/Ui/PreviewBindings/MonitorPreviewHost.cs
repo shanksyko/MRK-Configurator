@@ -1,5 +1,3 @@
-#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -16,11 +14,7 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// </summary>
 public sealed class MonitorPreviewHost : IDisposable
 {
-    private static readonly Font OverlayFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
-
     private readonly PictureBox _target;
-    private readonly MonitorDescriptor _monitor;
-    private readonly bool _preferGpu;
     private readonly object _gate = new();
     private Bitmap? _currentFrame;
     private bool _disposed;
@@ -30,49 +24,22 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _rotation;
     private int _refreshRate;
 
-    public MonitorPreviewHost(PictureBox target, MonitorDescriptor monitor, bool preferGpu)
+    public MonitorPreviewHost(string monitorId, PictureBox target)
     {
-        if (target is null)
-        {
-            throw new ArgumentNullException(nameof(target));
-        }
-
-        if (monitor is null)
-        {
-            throw new ArgumentNullException(nameof(monitor));
-        }
-
-        _target = target;
-        _monitor = monitor;
-        _preferGpu = preferGpu;
-
-        MonitorId = CreateMonitorId(monitor);
-        _monitorBounds = monitor.Bounds;
-        _monitorWorkArea = monitor.WorkArea;
-        _orientation = monitor.Orientation;
-        _rotation = monitor.Rotation;
-        _refreshRate = monitor.RefreshHz;
-
+        MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
+        _target = target ?? throw new ArgumentNullException(nameof(target));
         EnsurePictureBoxSizeMode();
     }
 
-    public MonitorPreviewHost(PictureBox? target, MonitorDescriptor monitor)
-        : this(target ?? throw new ArgumentNullException(nameof(target)), monitor, preferGpu: true)
+    public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target)
+        : this(CreateMonitorId(descriptor), target)
     {
+        _monitorBounds = descriptor.Bounds;
+        _monitorWorkArea = descriptor.WorkArea;
+        _orientation = descriptor.Orientation;
+        _rotation = descriptor.Rotation;
+        _refreshRate = descriptor.RefreshHz;
     }
-
-    public MonitorPreviewHost(MonitorDescriptor monitor, PictureBox target)
-        : this(target ?? throw new ArgumentNullException(nameof(target)), monitor, preferGpu: true)
-    {
-    }
-
-    public MonitorPreviewHost(string monitorId, PictureBox target)
-        : this(target ?? throw new ArgumentNullException(nameof(target)), CreateDescriptorFromMonitorId(monitorId ?? throw new ArgumentNullException(nameof(monitorId))), preferGpu: true)
-    {
-    }
-
-    public static bool IsPreviewSupported()
-        => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041);
 
     /// <summary>
     /// Gets the identifier of the monitor being previewed.
@@ -107,7 +74,7 @@ public sealed class MonitorPreviewHost : IDisposable
     /// <summary>
     /// Starts the preview using GPU capture when available.
     /// </summary>
-    public void Start()
+    public void Start(bool preferGpu)
     {
         if (_disposed || Capture is not null)
         {
@@ -119,14 +86,9 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (!IsPreviewSupported())
-        {
-            return;
-        }
-
         PopulateMetadataFromMonitor();
 
-        foreach (var factory in EnumerateFactories(_preferGpu))
+        foreach (var factory in EnumerateFactories(preferGpu))
         {
             IMonitorCapture? capture = null;
             try
@@ -227,10 +189,10 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        ApplyFrame(clone);
+        UpdateTarget(clone);
     }
 
-    private void ApplyFrame(Bitmap frame)
+    private void UpdateTarget(Bitmap frame)
     {
         if (_target.IsDisposed)
         {
@@ -242,7 +204,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             try
             {
-                _target.BeginInvoke((Action)(() => ApplyFrame(frame)));
+                _target.BeginInvoke(new Action<Bitmap>(UpdateTarget), frame);
             }
             catch
             {
@@ -332,15 +294,6 @@ public sealed class MonitorPreviewHost : IDisposable
         return MonitorIdentifier.Create(key, descriptor.DeviceName);
     }
 
-    private static MonitorDescriptor CreateDescriptorFromMonitorId(string monitorId)
-    {
-        return new MonitorDescriptor
-        {
-            DeviceName = monitorId,
-            FriendlyName = monitorId,
-        };
-    }
-
     private void EnsurePictureBoxSizeMode()
     {
         if (_target.SizeMode != PictureBoxSizeMode.Zoom)
@@ -351,31 +304,6 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void PopulateMetadataFromMonitor()
     {
-        if (_monitorBounds == Rectangle.Empty && _monitor.Bounds != Rectangle.Empty)
-        {
-            _monitorBounds = _monitor.Bounds;
-        }
-
-        if (_monitorWorkArea == Rectangle.Empty && _monitor.WorkArea != Rectangle.Empty)
-        {
-            _monitorWorkArea = _monitor.WorkArea;
-        }
-
-        if (_orientation == MonitorOrientation.Unknown && _monitor.Orientation != MonitorOrientation.Unknown)
-        {
-            _orientation = _monitor.Orientation;
-        }
-
-        if (_rotation == 0 && _monitor.Rotation != 0)
-        {
-            _rotation = _monitor.Rotation;
-        }
-
-        if (_refreshRate == 0 && _monitor.RefreshHz > 0)
-        {
-            _refreshRate = _monitor.RefreshHz;
-        }
-
         if (_monitorBounds != Rectangle.Empty)
         {
             return;
@@ -421,6 +349,7 @@ public sealed class MonitorPreviewHost : IDisposable
         try
         {
             using var graphics = Graphics.FromImage(bitmap);
+            using var font = SystemFonts.CaptionFont;
             using var background = new SolidBrush(Color.FromArgb(160, Color.Black));
             using var foreground = new SolidBrush(Color.White);
 
@@ -439,7 +368,6 @@ public sealed class MonitorPreviewHost : IDisposable
                 text = string.Concat(text, " ", _orientation);
             }
 
-            var font = OverlayFont;
             var measured = graphics.MeasureString(text, font);
             var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);
             graphics.FillRectangle(background, rect);
