@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
@@ -15,32 +18,29 @@ namespace Mieruka.App;
 
 internal static class Program
 {
+    private const string AppDisplayName = "MRK Configurator";
+    private const string LogFilePattern = "app-.log";
+    private static readonly object MessageBoxGate = new();
+    private static string? _logDirectory;
+
     [STAThread]
     private static void Main()
     {
-        var configuration = BuildConfiguration();
-        Log.Logger = CreateLogger(configuration);
+        EnsureBootstrapLogger();
 
         try
         {
-            Log.Information("Starting MRK Configurator");
+            ConfigureGlobalExceptionHandlers();
 
             ApplicationConfiguration.Initialize();
 
-            try
-            {
-                var store = ConfigurationBootstrapper.CreateStore();
-                _ = ConfigurationBootstrapper.LoadAsync(store).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                Log.Fatal(ex, "Failed to initialize configuration");
+            var configuration = BuildConfiguration();
+            TryConfigureLogger(configuration);
 
-                MessageBox.Show(
-                    $"Failed to initialize configuration: {ex.Message}",
-                    "MRK Configurator",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+            Log.Information("Starting MRK Configurator");
+
+            if (!TryWarmUpConfiguration())
+            {
                 return;
             }
 
@@ -48,12 +48,60 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "Application terminated unexpectedly");
-            throw;
+            HandleFatalException("Erro inesperado durante a inicialização do aplicativo.", ex);
         }
         finally
         {
-            Log.CloseAndFlush();
+            FlushLogger();
+        }
+    }
+
+    private static void ConfigureGlobalExceptionHandlers()
+    {
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, args) =>
+            HandleFatalException("Falha não tratada em thread da interface.", args.Exception);
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception exception)
+            {
+                HandleFatalException("Falha não tratada na aplicação.", exception);
+            }
+            else
+            {
+                try
+                {
+                    Log.Fatal("Falha não tratada: {Exception}", args.ExceptionObject);
+                }
+                catch
+                {
+                    // Ignore logging failures.
+                }
+
+                ShowFatalError(
+                    "Falha não tratada na aplicação.",
+                    args.ExceptionObject?.ToString() ?? "Erro desconhecido.");
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            HandleFatalException("Falha não observada em tarefa em segundo plano.", args.Exception);
+            args.SetObserved();
+        };
+    }
+
+    private static void EnsureBootstrapLogger()
+    {
+        try
+        {
+            Log.Logger = CreateBootstrapLogger();
+        }
+        catch
+        {
+            // Fall back to a silent logger when bootstrap fails.
+            Log.Logger = new LoggerConfiguration().CreateLogger();
         }
     }
 
@@ -87,6 +135,26 @@ internal static class Program
             .Build();
     }
 
+    private static void TryConfigureLogger(IConfiguration configuration)
+    {
+        try
+        {
+            var logger = CreateLogger(configuration);
+            Log.Logger = logger;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                Log.Error(ex, "Failed to apply logging configuration. Continuing with bootstrap logger.");
+            }
+            catch
+            {
+                // Ignore logging failures during bootstrap.
+            }
+        }
+    }
+
     private static ILogger CreateLogger(IConfiguration configuration)
     {
         var loggerConfiguration = new LoggerConfiguration()
@@ -101,13 +169,12 @@ internal static class Program
         }
         else
         {
-            var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
-            Directory.CreateDirectory(logDirectory);
+            var logDirectory = EnsureLogDirectory();
 
             loggerConfiguration
                 .MinimumLevel.Information()
                 .WriteTo.File(
-                    Path.Combine(logDirectory, "mieruka-.log"),
+                    Path.Combine(logDirectory, LogFilePattern),
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 14,
                     restrictedToMinimumLevel: LogEventLevel.Information);
@@ -123,5 +190,149 @@ internal static class Program
 #endif
 
         return loggerConfiguration.CreateLogger();
+    }
+
+    private static ILogger CreateBootstrapLogger()
+    {
+        foreach (var directory in EnumerateLogDirectories())
+        {
+            try
+            {
+                Directory.CreateDirectory(directory);
+                _logDirectory = directory;
+
+                return new LoggerConfiguration()
+                    .MinimumLevel.Debug()
+                    .WriteTo.File(
+                        Path.Combine(directory, LogFilePattern),
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 14,
+                        restrictedToMinimumLevel: LogEventLevel.Debug)
+                    .CreateLogger();
+            }
+            catch
+            {
+                // Try the next candidate when the directory cannot be created.
+            }
+        }
+
+        _logDirectory ??= Path.Combine(Path.GetTempPath(), "Mieruka", "logs");
+        return new LoggerConfiguration().CreateLogger();
+    }
+
+    private static IEnumerable<string> EnumerateLogDirectories()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrWhiteSpace(localAppData))
+        {
+            yield return Path.Combine(localAppData, "Mieruka", "logs");
+        }
+
+        yield return Path.Combine(AppContext.BaseDirectory, "logs");
+        yield return Path.Combine(Path.GetTempPath(), "Mieruka", "logs");
+    }
+
+    private static string EnsureLogDirectory()
+    {
+        if (!string.IsNullOrWhiteSpace(_logDirectory))
+        {
+            try
+            {
+                Directory.CreateDirectory(_logDirectory);
+            }
+            catch
+            {
+                // Ignore failures and attempt to recover below.
+            }
+
+            return _logDirectory!;
+        }
+
+        foreach (var directory in EnumerateLogDirectories())
+        {
+            try
+            {
+                Directory.CreateDirectory(directory);
+                _logDirectory = directory;
+                return directory;
+            }
+            catch
+            {
+                // Try the next candidate when directory creation fails.
+            }
+        }
+
+        _logDirectory = Path.Combine(Path.GetTempPath(), "Mieruka", "logs");
+        return _logDirectory;
+    }
+
+    private static bool TryWarmUpConfiguration()
+    {
+        try
+        {
+            var store = ConfigurationBootstrapper.CreateStore();
+            _ = ConfigurationBootstrapper.LoadAsync(store).GetAwaiter().GetResult();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            HandleFatalException("Falha ao inicializar a configuração.", ex);
+            return false;
+        }
+    }
+
+    private static void HandleFatalException(string message, Exception exception)
+    {
+        try
+        {
+            Log.Fatal(exception, message);
+        }
+        catch
+        {
+            // Ignore logging failures.
+        }
+
+        ShowFatalError(message, exception.Message);
+    }
+
+    private static void ShowFatalError(string title, string details)
+    {
+        var logHint = string.IsNullOrWhiteSpace(_logDirectory)
+            ? "Os logs não puderam ser gravados."
+            : $"Um registro detalhado foi salvo em:{Environment.NewLine}{_logDirectory}";
+
+        var message = string.Join(
+            Environment.NewLine + Environment.NewLine,
+            title,
+            $"Detalhes: {details}",
+            logHint);
+
+        try
+        {
+            lock (MessageBoxGate)
+            {
+                MessageBox.Show(
+                    message,
+                    AppDisplayName,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+        catch
+        {
+            // Ignore UI failures when showing the error message.
+        }
+    }
+
+    private static void FlushLogger()
+    {
+        try
+        {
+            Log.CloseAndFlush();
+        }
+        catch
+        {
+            // Ignore failures while flushing logs during shutdown.
+        }
     }
 }

@@ -44,6 +44,7 @@ public partial class MainForm : Form
     private ProfileConfig? _currentProfile;
     private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
     private const string DefaultProfileId = "workspace";
+    private readonly bool _monitorPreviewSupported = MonitorPreviewHost.IsPreviewSupported();
 
     public string? SelectedMonitorId { get; private set; }
 
@@ -59,6 +60,12 @@ public partial class MainForm : Form
         var source = bsProgramas ?? throw new InvalidOperationException("A BindingSource de programas não foi inicializada.");
         _ = menuPreview ?? throw new InvalidOperationException("O menu de preview não foi criado.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi criado.");
+
+        if (!_monitorPreviewSupported)
+        {
+            menuPreview.Enabled = false;
+            menuPreview.ToolTipText = "Preview indisponível: requer Windows 10 (build 19041) ou superior.";
+        }
 
         source.DataSource = _programas;
         grid.AutoGenerateColumns = false;
@@ -223,7 +230,9 @@ public partial class MainForm : Form
         var expectedIds = new HashSet<string>(cardSources.Select(ResolveMonitorId), StringComparer.OrdinalIgnoreCase);
         _manuallyStoppedMonitors.RemoveWhere(id => !expectedIds.Contains(id));
 
-        var shouldRestart = _previewsRequested && WindowState != FormWindowState.Minimized;
+        var shouldRestart = _monitorPreviewSupported &&
+            _previewsRequested &&
+            WindowState != FormWindowState.Minimized;
 
         DisposeMonitorCards();
 
@@ -239,7 +248,8 @@ public partial class MainForm : Form
                 OnMonitorCardSelected,
                 OnMonitorCardStopRequested,
                 OnMonitorCardTestRequested,
-                out var pictureBox);
+                out var pictureBox,
+                previewAvailable: _monitorPreviewSupported);
 
             var monitorId = ResolveMonitorId(source);
             MonitorPreviewHost host;
@@ -263,7 +273,7 @@ public partial class MainForm : Form
             _monitorCards[monitorId] = context;
             _monitorHosts.Add(host);
 
-            if (shouldRestart && !_manuallyStoppedMonitors.Contains(monitorId))
+            if (_monitorPreviewSupported && shouldRestart && !_manuallyStoppedMonitors.Contains(monitorId))
             {
                 try
                 {
@@ -569,7 +579,7 @@ public partial class MainForm : Form
 
         _manuallyStoppedMonitors.Remove(monitorId);
 
-        if (_monitorCards.TryGetValue(monitorId, out var context))
+        if (_monitorPreviewSupported && _monitorCards.TryGetValue(monitorId, out var context))
         {
             context.Host.Start();
         }
@@ -584,7 +594,7 @@ public partial class MainForm : Form
             return;
         }
 
-        if (_monitorCards.TryGetValue(monitorId, out var context))
+        if (_monitorPreviewSupported && _monitorCards.TryGetValue(monitorId, out var context))
         {
             context.Host.Stop();
         }
@@ -601,6 +611,12 @@ public partial class MainForm : Form
 
         if (!_monitorCards.TryGetValue(monitorId, out var context))
         {
+            return;
+        }
+
+        if (!_monitorPreviewSupported)
+        {
+            ShowPreviewNotSupportedMessage();
             return;
         }
 
@@ -656,6 +672,11 @@ public partial class MainForm : Form
 
     private void StartAutomaticPreviews()
     {
+        if (!_monitorPreviewSupported)
+        {
+            return;
+        }
+
         _previewsRequested = true;
 
         if (WindowState == FormWindowState.Minimized)
@@ -676,6 +697,11 @@ public partial class MainForm : Form
 
     private void PausePreviews()
     {
+        if (!_monitorPreviewSupported)
+        {
+            return;
+        }
+
         foreach (var context in _monitorCardOrder)
         {
             context.Host.Stop();
@@ -736,6 +762,12 @@ public partial class MainForm : Form
 
     private void menuPreview_Click(object? sender, EventArgs e)
     {
+        if (!_monitorPreviewSupported)
+        {
+            ShowPreviewNotSupportedMessage();
+            return;
+        }
+
         try
         {
             var preview = new PreviewForm();
@@ -745,6 +777,16 @@ public partial class MainForm : Form
         {
             MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private void ShowPreviewNotSupportedMessage()
+    {
+        MessageBox.Show(
+            this,
+            "O preview de monitores requer Windows 10 (build 19041) ou superior.",
+            "Preview indisponível",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 
     private void btnAdicionar_Click(object? sender, EventArgs e)
