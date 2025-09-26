@@ -309,37 +309,40 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
+        MonitorInfo info;
         try
         {
-            var info = MonitorLocator.Find(MonitorId);
-            if (info is null)
-            {
-                return;
-            }
-
-            if (info.Bounds != Rectangle.Empty)
-            {
-                _monitorBounds = info.Bounds;
-            }
-
-            if (info.WorkArea != Rectangle.Empty)
-            {
-                _monitorWorkArea = info.WorkArea;
-            }
-
-            if (info.Orientation != MonitorOrientation.Unknown)
-            {
-                _orientation = info.Orientation;
-            }
-
-            if (info.Rotation != 0)
-            {
-                _rotation = info.Rotation;
-            }
+            info = MonitorLocator.Find(MonitorId)
+                ?? throw new InvalidOperationException($"Monitor '{MonitorId}' não foi encontrado para preencher metadados de preview.");
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch
         {
             // Metadata retrieval is best-effort only.
+            return;
+        }
+
+        if (info.Bounds != Rectangle.Empty)
+        {
+            _monitorBounds = info.Bounds;
+        }
+
+        if (info.WorkArea != Rectangle.Empty)
+        {
+            _monitorWorkArea = info.WorkArea;
+        }
+
+        if (info.Orientation != MonitorOrientation.Unknown)
+        {
+            _orientation = info.Orientation;
+        }
+
+        if (info.Rotation != 0)
+        {
+            _rotation = info.Rotation;
         }
     }
 
