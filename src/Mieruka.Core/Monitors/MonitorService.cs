@@ -231,6 +231,8 @@ public sealed class MonitorService : IMonitorService
         }
 
         var located = false;
+        var locatedBounds = Rectangle.Empty;
+        var locatedWorkArea = Rectangle.Empty;
         var callback = new MonitorEnumProc((IntPtr hMonitor, IntPtr _, ref RECT clip, IntPtr __) =>
         {
             var info = MONITORINFOEX.Create();
@@ -244,14 +246,20 @@ public sealed class MonitorService : IMonitorService
                 return true;
             }
 
-            bounds = ToRectangle(info.rcMonitor);
-            workArea = ToRectangle(info.rcWork);
+            locatedBounds = ToRectangle(info.rcMonitor);
+            locatedWorkArea = ToRectangle(info.rcWork);
             located = true;
             return false;
         });
 
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
         GC.KeepAlive(callback);
+
+        if (located)
+        {
+            bounds = locatedBounds;
+            workArea = locatedWorkArea;
+        }
 
         return located;
     }
