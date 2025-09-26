@@ -69,7 +69,8 @@ internal static class LayoutHelpers
         EventHandler selecionarHandler,
         EventHandler pararHandler,
         EventHandler testarHandler,
-        out PictureBox previewBox)
+        out PictureBox previewBox,
+        bool previewAvailable = true)
     {
         ArgumentNullException.ThrowIfNull(monitor);
         ArgumentNullException.ThrowIfNull(selecionarHandler);
@@ -157,6 +158,9 @@ internal static class LayoutHelpers
         btnSelecionar.Click += selecionarHandler;
         btnParar.Click += pararHandler;
         btnTestar.Click += testarHandler;
+
+        btnParar.Enabled = previewAvailable;
+        btnTestar.Enabled = previewAvailable;
 
         footer.Controls.Add(btnSelecionar);
         footer.Controls.Add(btnTestar);

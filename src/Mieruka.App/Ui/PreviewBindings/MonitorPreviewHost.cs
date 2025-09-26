@@ -71,6 +71,9 @@ public sealed class MonitorPreviewHost : IDisposable
     {
     }
 
+    public static bool IsPreviewSupported()
+        => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041);
+
     /// <summary>
     /// Gets the identifier of the monitor being previewed.
     /// </summary>
@@ -112,6 +115,11 @@ public sealed class MonitorPreviewHost : IDisposable
         }
 
         if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (!IsPreviewSupported())
         {
             return;
         }
