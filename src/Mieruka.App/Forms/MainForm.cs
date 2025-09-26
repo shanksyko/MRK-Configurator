@@ -9,15 +9,16 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Mieruka.App;
 using Mieruka.App.Forms.Controls;
-using Mieruka.App.Ui;
 using Mieruka.App.Services;
+using Mieruka.App.Ui;
+using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Automation.Execution;
 using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
-using Mieruka.App.Ui.PreviewBindings;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
@@ -44,7 +45,9 @@ public partial class MainForm : Form
     private ProfileConfig? _currentProfile;
     private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
     private const string DefaultProfileId = "workspace";
-    private readonly bool _monitorPreviewSupported = MonitorPreviewHost.IsPreviewSupported();
+    private const string SafeModeStatusMessage = "Modo Seguro: ajuste configuração (Arquivo → Config), depois reinicie.";
+    private const string SafeModePreviewMessage = "O preview está indisponível no Modo Seguro.";
+    private readonly bool _monitorPreviewSupported;
 
     public string? SelectedMonitorId { get; private set; }
 
@@ -54,14 +57,27 @@ public partial class MainForm : Form
     {
         InitializeComponent();
 
-        UpdateStatusText("Pronto");
+        _monitorPreviewSupported = !AppRuntime.SafeMode && MonitorPreviewHost.IsPreviewSupported();
+
+        ConfigureSafeModeBanner();
+        UpdateLogDirectoryStatus();
+
+        var initialStatus = AppRuntime.SafeMode
+            ? SafeModeStatusMessage
+            : "Pronto";
+        UpdateStatusText(initialStatus);
 
         var grid = dgvProgramas ?? throw new InvalidOperationException("O DataGridView de programas não foi criado pelo designer.");
         var source = bsProgramas ?? throw new InvalidOperationException("A BindingSource de programas não foi inicializada.");
         _ = menuPreview ?? throw new InvalidOperationException("O menu de preview não foi criado.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi criado.");
 
-        if (!_monitorPreviewSupported)
+        if (AppRuntime.SafeMode)
+        {
+            menuPreview.Enabled = false;
+            menuPreview.ToolTipText = SafeModePreviewMessage;
+        }
+        else if (!_monitorPreviewSupported)
         {
             menuPreview.Enabled = false;
             menuPreview.ToolTipText = "Preview indisponível: requer Windows 10 (build 19041) ou superior.";
@@ -112,7 +128,7 @@ public partial class MainForm : Form
 
     private void InitializeMonitorInfrastructure()
     {
-        if (!OperatingSystem.IsWindows())
+        if (AppRuntime.SafeMode || !OperatingSystem.IsWindows())
         {
             return;
         }
@@ -152,11 +168,21 @@ public partial class MainForm : Form
     private void MainForm_Shown(object? sender, EventArgs e)
     {
         RefreshMonitorCards();
+        if (AppRuntime.SafeMode)
+        {
+            return;
+        }
+
         StartAutomaticPreviews();
     }
 
     private void MainForm_Resize(object? sender, EventArgs e)
     {
+        if (AppRuntime.SafeMode)
+        {
+            return;
+        }
+
         if (WindowState == FormWindowState.Minimized)
         {
             PausePreviews();
@@ -614,6 +640,17 @@ public partial class MainForm : Form
             return;
         }
 
+        if (AppRuntime.SafeMode)
+        {
+            MessageBox.Show(
+                this,
+                SafeModePreviewMessage,
+                "Preview indisponível",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
         if (!_monitorPreviewSupported)
         {
             ShowPreviewNotSupportedMessage();
@@ -672,8 +709,9 @@ public partial class MainForm : Form
 
     private void StartAutomaticPreviews()
     {
-        if (!_monitorPreviewSupported)
+        if (AppRuntime.SafeMode || !_monitorPreviewSupported)
         {
+            _previewsRequested = false;
             return;
         }
 
@@ -697,7 +735,7 @@ public partial class MainForm : Form
 
     private void PausePreviews()
     {
-        if (!_monitorPreviewSupported)
+        if (AppRuntime.SafeMode || !_monitorPreviewSupported)
         {
             return;
         }
@@ -762,6 +800,17 @@ public partial class MainForm : Form
 
     private void menuPreview_Click(object? sender, EventArgs e)
     {
+        if (AppRuntime.SafeMode)
+        {
+            MessageBox.Show(
+                this,
+                SafeModePreviewMessage,
+                "Preview indisponível",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
         if (!_monitorPreviewSupported)
         {
             ShowPreviewNotSupportedMessage();
@@ -1124,6 +1173,39 @@ public partial class MainForm : Form
         if (lblStatus is not null)
         {
             lblStatus.Text = message;
+        }
+    }
+
+    private void ConfigureSafeModeBanner()
+    {
+        if (panelSafeMode is not null)
+        {
+            panelSafeMode.Visible = AppRuntime.SafeMode;
+        }
+
+        if (lblSafeMode is not null)
+        {
+            lblSafeMode.Text = SafeModeStatusMessage;
+        }
+    }
+
+    private void UpdateLogDirectoryStatus()
+    {
+        if (lblLogDirectory is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var logDirectory = Program.GetLogDirectory();
+            lblLogDirectory.Text = $"Logs: {logDirectory}";
+            lblLogDirectory.ToolTipText = logDirectory;
+        }
+        catch
+        {
+            lblLogDirectory.Text = "Logs: (indisponível)";
+            lblLogDirectory.ToolTipText = string.Empty;
         }
     }
 

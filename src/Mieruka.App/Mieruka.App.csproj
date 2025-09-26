@@ -33,7 +33,7 @@
   <ItemGroup>
     <None Include="../../config/samples/appsettings.sample.json">
       <Link>config/appsettings.sample.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 </Project>

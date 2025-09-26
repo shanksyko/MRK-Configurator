@@ -37,6 +37,9 @@ partial class MainForm
     internal ErrorProvider errorProvider = null!;
     internal StatusStrip statusBar = null!;
     internal ToolStripStatusLabel lblStatus = null!;
+    internal ToolStripStatusLabel lblLogDirectory = null!;
+    internal Panel panelSafeMode = null!;
+    internal Label lblSafeMode = null!;
 
     protected override void Dispose(bool disposing)
     {
@@ -82,6 +85,9 @@ partial class MainForm
         errorProvider = new ErrorProvider(components);
         statusBar = new StatusStrip();
         lblStatus = new ToolStripStatusLabel();
+        lblLogDirectory = new ToolStripStatusLabel();
+        panelSafeMode = new Panel();
+        lblSafeMode = new Label();
         var colId = new DataGridViewTextBoxColumn();
         var colExecutavel = new DataGridViewTextBoxColumn();
         var colAutoStart = new DataGridViewCheckBoxColumn();
@@ -94,6 +100,7 @@ partial class MainForm
         painelBotoes.SuspendLayout();
         ((ISupportInitialize)errorProvider).BeginInit();
         statusBar.SuspendLayout();
+        panelSafeMode.SuspendLayout();
         SuspendLayout();
         //
         // menuPrincipal
@@ -419,18 +426,49 @@ partial class MainForm
         // statusBar
         //
         statusBar.ImageScalingSize = new System.Drawing.Size(24, 24);
-        statusBar.Items.AddRange(new ToolStripItem[] { lblStatus });
+        statusBar.Items.AddRange(new ToolStripItem[] { lblStatus, lblLogDirectory });
         statusBar.Location = new System.Drawing.Point(0, 678);
         statusBar.Name = "statusBar";
         statusBar.Size = new System.Drawing.Size(1180, 22);
-        statusBar.TabIndex = 3;
+        statusBar.TabIndex = 4;
         statusBar.Text = "statusBar";
         //
         // lblStatus
         //
         lblStatus.Name = "lblStatus";
         lblStatus.Size = new System.Drawing.Size(54, 17);
+        lblStatus.Spring = true;
         lblStatus.Text = "Pronto";
+        lblStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        //
+        // lblLogDirectory
+        //
+        lblLogDirectory.BorderSides = ToolStripStatusLabelBorderSides.Left;
+        lblLogDirectory.BorderStyle = Border3DStyle.Flat;
+        lblLogDirectory.Name = "lblLogDirectory";
+        lblLogDirectory.Size = new System.Drawing.Size(108, 17);
+        lblLogDirectory.Text = "Logs: (indisponível)";
+        lblLogDirectory.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+        //
+        // panelSafeMode
+        //
+        panelSafeMode.BackColor = System.Drawing.SystemColors.Info;
+        panelSafeMode.Controls.Add(lblSafeMode);
+        panelSafeMode.Dock = DockStyle.Top;
+        panelSafeMode.Location = new System.Drawing.Point(0, 30);
+        panelSafeMode.Name = "panelSafeMode";
+        panelSafeMode.Padding = new Padding(16, 8, 16, 8);
+        panelSafeMode.Size = new System.Drawing.Size(1180, 48);
+        panelSafeMode.TabIndex = 3;
+        panelSafeMode.Visible = false;
+        //
+        // lblSafeMode
+        //
+        lblSafeMode.AutoSize = true;
+        lblSafeMode.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
+        lblSafeMode.Name = "lblSafeMode";
+        lblSafeMode.Size = new System.Drawing.Size(0, 20);
+        lblSafeMode.Text = "Modo Seguro: ajuste configuração (Arquivo → Config), depois reinicie.";
         //
         // MainForm
         //
@@ -440,6 +478,7 @@ partial class MainForm
         Controls.Add(statusBar);
         Controls.Add(layoutPrincipal);
         Controls.Add(grpMonitores);
+        Controls.Add(panelSafeMode);
         Controls.Add(menuPrincipal);
         MainMenuStrip = menuPrincipal;
         MinimumSize = new System.Drawing.Size(960, 640);
@@ -462,6 +501,8 @@ partial class MainForm
         ((ISupportInitialize)errorProvider).EndInit();
         statusBar.ResumeLayout(false);
         statusBar.PerformLayout();
+        panelSafeMode.ResumeLayout(false);
+        panelSafeMode.PerformLayout();
         ResumeLayout(false);
         PerformLayout();
     }

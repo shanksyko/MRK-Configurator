@@ -39,9 +39,12 @@ internal static class Program
 
             Log.Information("Starting MRK Configurator");
 
-            if (!TryWarmUpConfiguration())
+            var warmOk = TryWarmUpConfiguration();
+            AppRuntime.SafeMode = !warmOk;
+
+            if (AppRuntime.SafeMode)
             {
-                return;
+                Log.Warning("Aplicativo iniciado em Safe Mode (falha de configuração).");
             }
 
             Application.Run(new MainForm());
@@ -266,6 +269,11 @@ internal static class Program
         return _logDirectory;
     }
 
+    internal static string GetLogDirectory()
+    {
+        return EnsureLogDirectory();
+    }
+
     private static bool TryWarmUpConfiguration()
     {
         try
@@ -276,7 +284,15 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            HandleFatalException("Falha ao inicializar a configuração.", ex);
+            try
+            {
+                Log.Error(ex, "Falha ao inicializar a configuração.");
+            }
+            catch
+            {
+                // Ignore logging failures.
+            }
+
             return false;
         }
     }
