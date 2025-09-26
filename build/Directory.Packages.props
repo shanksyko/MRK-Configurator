@@ -4,10 +4,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- WinRT via CsWinRT + Contracts -->
-    <PackageVersion Include="Microsoft.Windows.CsWinRT" Version="2.0.7" />
-    <PackageVersion Include="Microsoft.Windows.SDK.NET.Ref" Version="[10.0.22621.26, 10.0.22622)" />
-    <PackageVersion Include="Microsoft.Windows.SDK.Contracts" Version="[10.0.22621.1, 10.0.22622)" />
+    <!-- WinRT via Microsoft.Windows.SDK.NET.Ref -->
+    <PackageVersion Include="Microsoft.Windows.SDK.NET.Ref" Version="10.0.22621.56" />
 
     <!-- Serilog padrão -->
     <PackageVersion Include="Serilog" Version="3.1.1" />
