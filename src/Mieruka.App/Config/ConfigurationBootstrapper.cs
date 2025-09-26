@@ -1,8 +1,11 @@
 using System;
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.App.Config;
 
@@ -15,6 +18,7 @@ internal static class ConfigurationBootstrapper
     private const string SampleRelativePath = "config/appsettings.sample.json";
     private const string RootFolderName = "Mieruka";
     private const string ConfigFolderName = "config";
+    private const string MinimalConfigurationPayload = "{\"profiles\":[]}";
 
     /// <summary>
     /// Ensures the configuration file exists on disk and returns its path.
@@ -34,20 +38,33 @@ internal static class ConfigurationBootstrapper
         }
 
         var samplePath = Path.Combine(AppContext.BaseDirectory, SampleRelativePath);
-        if (!File.Exists(samplePath))
+        if (File.Exists(samplePath))
         {
-            throw new FileNotFoundException(
-                $"Sample configuration '{SampleRelativePath}' was not copied to the output directory.",
+            try
+            {
+                File.Copy(samplePath, configurationPath, overwrite: false);
+            }
+            catch (IOException) when (File.Exists(configurationPath))
+            {
+                // The configuration was created by another process concurrently. Nothing else to do.
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Não foi possível copiar o arquivo de configuração de exemplo. Um arquivo mínimo será criado.");
+                WriteMinimalConfiguration(configurationPath);
+            }
+        }
+        else
+        {
+            Log.Warning(
+                "Arquivo de configuração de exemplo não encontrado em '{SamplePath}'. Um arquivo mínimo será criado.",
                 samplePath);
+            WriteMinimalConfiguration(configurationPath);
         }
 
-        try
+        if (!File.Exists(configurationPath))
         {
-            File.Copy(samplePath, configurationPath, overwrite: false);
-        }
-        catch (IOException) when (File.Exists(configurationPath))
-        {
-            // The configuration was created by another process concurrently. Nothing else to do.
+            WriteMinimalConfiguration(configurationPath);
         }
 
         return configurationPath;
@@ -84,8 +101,51 @@ internal static class ConfigurationBootstrapper
         return Path.Combine(localAppData, RootFolderName, ConfigFolderName);
     }
 
-    private static string ResolveConfigurationPath()
+    public static string ResolveConfigurationPath()
     {
         return Path.Combine(ResolveConfigurationDirectory(), ConfigFileName);
+    }
+
+    /// <summary>
+    /// Validates the configuration file ensuring it contains valid JSON.
+    /// </summary>
+    /// <param name="configurationPath">Path to the configuration file.</param>
+    public static void ValidateConfigurationFile(string configurationPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(configurationPath);
+
+        if (!File.Exists(configurationPath))
+        {
+            throw new FileNotFoundException("Configuration file not found.", configurationPath);
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(configurationPath);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+            var payload = reader.ReadToEnd();
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                throw new JsonException($"Configuration file '{configurationPath}' is empty.");
+            }
+
+            using var document = JsonDocument.Parse(payload);
+        }
+        catch (JsonException ex)
+        {
+            throw new JsonException($"Invalid JSON in configuration file '{configurationPath}'.", ex);
+        }
+    }
+
+    private static void WriteMinimalConfiguration(string configurationPath)
+    {
+        try
+        {
+            File.WriteAllText(configurationPath, MinimalConfigurationPayload, Encoding.UTF8);
+        }
+        catch (IOException) when (File.Exists(configurationPath))
+        {
+            // Another process created the file concurrently. Nothing else to do.
+        }
     }
 }

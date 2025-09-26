@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Mieruka.App.Config;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Ui;
 using Mieruka.App.Services;
@@ -18,6 +19,7 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
+using Serilog;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
@@ -34,6 +36,8 @@ public partial class MainForm : Form
     private readonly List<MonitorPreviewHost> _monitorHosts = new();
     private readonly Dictionary<string, MonitorCardContext> _monitorCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly bool _safeMode;
+    private readonly bool _monitorPreviewSupported;
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
@@ -44,8 +48,6 @@ public partial class MainForm : Form
     private ProfileConfig? _currentProfile;
     private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
     private const string DefaultProfileId = "workspace";
-    private readonly bool _monitorPreviewSupported = MonitorPreviewHost.IsPreviewSupported();
-
     public string? SelectedMonitorId { get; private set; }
 
     public event EventHandler<string>? MonitorSelected;
@@ -54,6 +56,9 @@ public partial class MainForm : Form
     {
         InitializeComponent();
 
+        _safeMode = AppRuntime.SafeMode;
+        _monitorPreviewSupported = !_safeMode && MonitorPreviewHost.IsPreviewSupported();
+
         UpdateStatusText("Pronto");
 
         var grid = dgvProgramas ?? throw new InvalidOperationException("O DataGridView de programas não foi criado pelo designer.");
@@ -61,10 +66,19 @@ public partial class MainForm : Form
         _ = menuPreview ?? throw new InvalidOperationException("O menu de preview não foi criado.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi criado.");
 
+        panelSafeMode.Visible = _safeMode;
+
+        if (_safeMode)
+        {
+            ConfigureSafeModeUi();
+        }
+
         if (!_monitorPreviewSupported)
         {
             menuPreview.Enabled = false;
-            menuPreview.ToolTipText = "Preview indisponível: requer Windows 10 (build 19041) ou superior.";
+            menuPreview.ToolTipText = _safeMode
+                ? "Preview indisponível no modo seguro."
+                : "Preview indisponível: requer Windows 10 (build 19041) ou superior.";
         }
 
         source.DataSource = _programas;
@@ -86,6 +100,77 @@ public partial class MainForm : Form
         LoadInitialData();
         LoadProfileFromStore();
         UpdateButtonStates();
+    }
+
+    private void ConfigureSafeModeUi()
+    {
+        if (lblSafeMode is not null)
+        {
+            lblSafeMode.Text = "Modo seguro ativado: falha ao carregar a configuração. Corrija o arquivo e reinicie o aplicativo.";
+        }
+
+        if (btnSafeModeOpenConfig is not null)
+        {
+            btnSafeModeOpenConfig.Visible = true;
+        }
+
+        if (grpMonitores is not null)
+        {
+            grpMonitores.Enabled = false;
+            grpMonitores.Text = "Monitores (indisponível no modo seguro)";
+        }
+
+        menuPerfisExecutar.Enabled = false;
+        menuPerfisParar.Enabled = false;
+        menuPerfisTestar.Enabled = false;
+        menuPreview.Enabled = false;
+
+        btnExecutar.Enabled = false;
+        btnParar.Enabled = false;
+        btnExecutarPerfil.Enabled = false;
+        btnPararPerfil.Enabled = false;
+        btnTestarItem.Enabled = false;
+
+        UpdateStatusText("Modo seguro");
+    }
+
+    private void btnSafeModeOpenConfig_Click(object? sender, EventArgs e)
+    {
+        OpenConfigurationEditor();
+    }
+
+    private void OpenConfigurationEditor()
+    {
+        var store = ConfigurationBootstrapper.CreateStore();
+        GeneralConfig configuration;
+
+        try
+        {
+            configuration = ConfigurationBootstrapper.LoadAsync(store).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha ao carregar a configuração atual. Um modelo vazio será utilizado no editor.");
+
+            MessageBox.Show(
+                this,
+                "Não foi possível carregar a configuração atual. Um modelo vazio será carregado.",
+                Text,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            configuration = new GeneralConfig();
+        }
+
+        var monitorSnapshot = !_safeMode && _monitorSnapshot.Count > 0
+            ? _monitorSnapshot
+            : CaptureMonitorSnapshot();
+
+        var workspace = new ConfiguratorWorkspace(configuration, monitorSnapshot);
+        var migrator = new ConfigMigrator();
+
+        using var dialog = new ConfigForm(workspace, store, _safeMode ? null : _displayService, migrator, _telemetry);
+        dialog.ShowDialog(this);
     }
 
     private void LoadInitialData()
@@ -112,6 +197,11 @@ public partial class MainForm : Form
 
     private void InitializeMonitorInfrastructure()
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         if (!OperatingSystem.IsWindows())
         {
             return;
@@ -151,12 +241,22 @@ public partial class MainForm : Form
 
     private void MainForm_Shown(object? sender, EventArgs e)
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         RefreshMonitorCards();
         StartAutomaticPreviews();
     }
 
     private void MainForm_Resize(object? sender, EventArgs e)
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         if (WindowState == FormWindowState.Minimized)
         {
             PausePreviews();
@@ -171,6 +271,11 @@ public partial class MainForm : Form
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         StopAutomaticPreviews(clearManualState: true);
         DisposeMonitorCards();
 
@@ -209,6 +314,11 @@ public partial class MainForm : Form
 
     private void RefreshMonitorCards()
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         if (tlpMonitores is null)
         {
             return;
@@ -439,6 +549,11 @@ public partial class MainForm : Form
 
     private IReadOnlyList<MonitorInfo> CaptureMonitorSnapshot()
     {
+        if (_safeMode)
+        {
+            return Array.Empty<MonitorInfo>();
+        }
+
         try
         {
             var monitors = _displayService?.Monitors();
@@ -672,6 +787,11 @@ public partial class MainForm : Form
 
     private void StartAutomaticPreviews()
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         if (!_monitorPreviewSupported)
         {
             return;
@@ -697,6 +817,11 @@ public partial class MainForm : Form
 
     private void PausePreviews()
     {
+        if (_safeMode)
+        {
+            return;
+        }
+
         if (!_monitorPreviewSupported)
         {
             return;
@@ -710,6 +835,13 @@ public partial class MainForm : Form
 
     private void StopAutomaticPreviews(bool clearManualState)
     {
+        if (_safeMode)
+        {
+            _manuallyStoppedMonitors.Clear();
+            _previewsRequested = false;
+            return;
+        }
+
         _previewsRequested = false;
         PausePreviews();
 
@@ -721,6 +853,14 @@ public partial class MainForm : Form
 
     private void DisposeMonitorCards()
     {
+        if (_safeMode)
+        {
+            _monitorHosts.Clear();
+            _monitorCardOrder.Clear();
+            _monitorCards.Clear();
+            return;
+        }
+
         foreach (var host in _monitorHosts)
         {
             host.Dispose();

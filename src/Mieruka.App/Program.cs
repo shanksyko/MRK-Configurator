@@ -39,9 +39,12 @@ internal static class Program
 
             Log.Information("Starting MRK Configurator");
 
-            if (!TryWarmUpConfiguration())
+            var warmOk = TryWarmUpConfiguration();
+            AppRuntime.SafeMode = !warmOk;
+
+            if (!warmOk)
             {
-                return;
+                Log.Warning("Safe mode activated. A configuration issue was detected during startup.");
             }
 
             Application.Run(new MainForm());
@@ -268,15 +271,21 @@ internal static class Program
 
     private static bool TryWarmUpConfiguration()
     {
+        var configurationPath = ConfigurationBootstrapper.ResolveConfigurationPath();
+        Log.Information("Config path: {CfgPath}", configurationPath);
+
         try
         {
+            ConfigurationBootstrapper.EnsureConfigurationFile();
+            ConfigurationBootstrapper.ValidateConfigurationFile(configurationPath);
+
             var store = ConfigurationBootstrapper.CreateStore();
             _ = ConfigurationBootstrapper.LoadAsync(store).GetAwaiter().GetResult();
             return true;
         }
         catch (Exception ex)
         {
-            HandleFatalException("Falha ao inicializar a configuração.", ex);
+            Log.Fatal(ex, "Falha ao inicializar a configuração (detalhes acima).");
             return false;
         }
     }

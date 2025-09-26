@@ -37,6 +37,9 @@ partial class MainForm
     internal ErrorProvider errorProvider = null!;
     internal StatusStrip statusBar = null!;
     internal ToolStripStatusLabel lblStatus = null!;
+    internal Panel panelSafeMode = null!;
+    internal Label lblSafeMode = null!;
+    internal Button btnSafeModeOpenConfig = null!;
 
     protected override void Dispose(bool disposing)
     {
@@ -53,6 +56,10 @@ partial class MainForm
     private void InitializeComponent()
     {
         components = new Container();
+        panelSafeMode = new Panel();
+        var safeModeLayout = new FlowLayoutPanel();
+        lblSafeMode = new Label();
+        btnSafeModeOpenConfig = new Button();
         menuPrincipal = new MenuStrip();
         menuPerfis = new ToolStripMenuItem();
         menuPerfisSalvar = new ToolStripMenuItem();
@@ -85,6 +92,8 @@ partial class MainForm
         var colId = new DataGridViewTextBoxColumn();
         var colExecutavel = new DataGridViewTextBoxColumn();
         var colAutoStart = new DataGridViewCheckBoxColumn();
+        panelSafeMode.SuspendLayout();
+        safeModeLayout.SuspendLayout();
         menuPrincipal.SuspendLayout();
         layoutPrincipal.SuspendLayout();
         grpMonitores.SuspendLayout();
@@ -168,6 +177,54 @@ partial class MainForm
         menuPreview.Text = "Preview...";
         menuPreview.Click += menuPreview_Click;
         //
+        // panelSafeMode
+        //
+        panelSafeMode.BackColor = System.Drawing.Color.FromArgb(255, 244, 229);
+        panelSafeMode.BorderStyle = BorderStyle.FixedSingle;
+        panelSafeMode.Controls.Add(safeModeLayout);
+        panelSafeMode.Dock = DockStyle.Top;
+        panelSafeMode.Location = new System.Drawing.Point(0, 30);
+        panelSafeMode.Margin = new Padding(0);
+        panelSafeMode.Name = "panelSafeMode";
+        panelSafeMode.Padding = new Padding(12);
+        panelSafeMode.Size = new System.Drawing.Size(1180, 68);
+        panelSafeMode.TabIndex = 4;
+        panelSafeMode.Visible = false;
+        //
+        // safeModeLayout
+        //
+        safeModeLayout.AutoSize = true;
+        safeModeLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        safeModeLayout.Dock = DockStyle.Fill;
+        safeModeLayout.FlowDirection = FlowDirection.LeftToRight;
+        safeModeLayout.Location = new System.Drawing.Point(12, 12);
+        safeModeLayout.Margin = new Padding(0);
+        safeModeLayout.Name = "safeModeLayout";
+        safeModeLayout.Padding = new Padding(0);
+        safeModeLayout.WrapContents = false;
+        safeModeLayout.Controls.Add(lblSafeMode);
+        safeModeLayout.Controls.Add(btnSafeModeOpenConfig);
+        //
+        // lblSafeMode
+        //
+        lblSafeMode.AutoSize = true;
+        lblSafeMode.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point);
+        lblSafeMode.Margin = new Padding(0, 4, 16, 0);
+        lblSafeMode.Name = "lblSafeMode";
+        lblSafeMode.Size = new System.Drawing.Size(166, 20);
+        lblSafeMode.Text = "Modo seguro ativado.";
+        //
+        // btnSafeModeOpenConfig
+        //
+        btnSafeModeOpenConfig.AutoSize = true;
+        btnSafeModeOpenConfig.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnSafeModeOpenConfig.Margin = new Padding(0);
+        btnSafeModeOpenConfig.Name = "btnSafeModeOpenConfig";
+        btnSafeModeOpenConfig.Size = new System.Drawing.Size(153, 25);
+        btnSafeModeOpenConfig.Text = "Abrir Configuração";
+        btnSafeModeOpenConfig.UseVisualStyleBackColor = true;
+        btnSafeModeOpenConfig.Click += btnSafeModeOpenConfig_Click;
+        //
         // layoutPrincipal
         //
         layoutPrincipal.ColumnCount = 2;
@@ -189,7 +246,7 @@ partial class MainForm
         //
         grpMonitores.Controls.Add(tlpMonitores);
         grpMonitores.Dock = DockStyle.Top;
-        grpMonitores.Location = new System.Drawing.Point(0, 30);
+        grpMonitores.Location = new System.Drawing.Point(0, 98);
         grpMonitores.Margin = new Padding(8);
         grpMonitores.Name = "grpMonitores";
         grpMonitores.Padding = new Padding(8);
@@ -440,6 +497,7 @@ partial class MainForm
         Controls.Add(statusBar);
         Controls.Add(layoutPrincipal);
         Controls.Add(grpMonitores);
+        Controls.Add(panelSafeMode);
         Controls.Add(menuPrincipal);
         MainMenuStrip = menuPrincipal;
         MinimumSize = new System.Drawing.Size(960, 640);
@@ -447,6 +505,8 @@ partial class MainForm
         Padding = new Padding(0);
         StartPosition = FormStartPosition.CenterScreen;
         Text = "Mieruka Configurator";
+        safeModeLayout.ResumeLayout(false);
+        safeModeLayout.PerformLayout();
         menuPrincipal.ResumeLayout(false);
         menuPrincipal.PerformLayout();
         layoutPrincipal.ResumeLayout(false);
@@ -455,6 +515,8 @@ partial class MainForm
         tlpMonitores.PerformLayout();
         grpMonitores.ResumeLayout(false);
         grpMonitores.PerformLayout();
+        panelSafeMode.ResumeLayout(false);
+        panelSafeMode.PerformLayout();
         ((ISupportInitialize)dgvProgramas).EndInit();
         ((ISupportInitialize)bsProgramas).EndInit();
         painelBotoes.ResumeLayout(false);
