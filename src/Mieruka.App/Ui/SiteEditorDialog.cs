@@ -8,6 +8,7 @@ using Mieruka.App.Config;
 using Mieruka.App.Services;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
+using System.Text;
 
 namespace Mieruka.App.Ui;
 
@@ -25,6 +26,7 @@ internal sealed class SiteEditorDialog : Form
     private readonly TextBox _profileBox;
     private readonly TextBox _argsBox;
     private readonly TextBox _allowedHostsBox;
+    private readonly TextBox _commandPreviewBox;
     private readonly CheckBox _appModeCheck;
     private readonly CheckBox _kioskCheck;
     private readonly CheckBox _reloadCheck;
@@ -81,7 +83,9 @@ internal sealed class SiteEditorDialog : Form
         _titleBox = CreateTextBox(baseFont);
         _urlBox = CreateTextBox(baseFont);
         _userDataBox = CreateTextBox(baseFont);
+        _userDataBox.TextChanged += (_, _) => UpdateBrowserPreview();
         _profileBox = CreateTextBox(baseFont);
+        _profileBox.TextChanged += (_, _) => UpdateBrowserPreview();
 
         _browserBox = new ComboBox
         {
@@ -93,6 +97,7 @@ internal sealed class SiteEditorDialog : Form
         {
             _browserBox.Items.Add(browser);
         }
+        _browserBox.SelectedIndexChanged += (_, _) => UpdateBrowserPreview();
 
         _argsBox = new TextBox
         {
@@ -102,6 +107,7 @@ internal sealed class SiteEditorDialog : Form
             ScrollBars = ScrollBars.Vertical,
             Height = 80,
         };
+        _argsBox.TextChanged += (_, _) => UpdateBrowserPreview();
 
         _allowedHostsBox = new TextBox
         {
@@ -112,8 +118,20 @@ internal sealed class SiteEditorDialog : Form
             Height = 80,
         };
 
+        _commandPreviewBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font(FontFamily.GenericMonospace, 9f, FontStyle.Regular, GraphicsUnit.Point),
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Height = 60,
+        };
+
         _appModeCheck = new CheckBox { Text = "Modo aplicativo", Dock = DockStyle.Fill, Font = baseFont };
+        _appModeCheck.CheckedChanged += (_, _) => UpdateBrowserPreview();
         _kioskCheck = new CheckBox { Text = "Modo quiosque", Dock = DockStyle.Fill, Font = baseFont };
+        _kioskCheck.CheckedChanged += (_, _) => UpdateBrowserPreview();
         _reloadCheck = new CheckBox { Text = "Recarregar ao ativar", Dock = DockStyle.Fill, Font = baseFont };
         _reloadCheck.CheckedChanged += (_, _) => UpdateReloadState();
         _reloadIntervalBox = new NumericUpDown
@@ -170,10 +188,12 @@ internal sealed class SiteEditorDialog : Form
         AddRow(layout, "Nome", _nameBox);
         AddRow(layout, "Título da janela", _titleBox);
         AddRow(layout, "URL", _urlBox);
+        _urlBox.TextChanged += (_, _) => UpdateBrowserPreview();
         AddRow(layout, "Navegador", _browserBox);
         AddRow(layout, "User data dir", _userDataBox);
         AddRow(layout, "Profile dir", _profileBox);
         AddRow(layout, "Argumentos (um por linha)", _argsBox);
+        AddRow(layout, "Linha de comando", _commandPreviewBox);
         AddRow(layout, "Hosts permitidos (um por linha)", _allowedHostsBox);
         AddRow(layout, string.Empty, _appModeCheck);
         AddRow(layout, string.Empty, _kioskCheck);
@@ -257,6 +277,7 @@ internal sealed class SiteEditorDialog : Form
         PopulateZones(template?.TargetZonePresetId);
         LoadTemplate(template);
         UpdateReloadState();
+        UpdateBrowserPreview();
     }
 
     public Func<SiteConfig, Task<bool>>? TestHandler { get; set; }
@@ -469,11 +490,11 @@ internal sealed class SiteEditorDialog : Form
         {
             var match = _zoneOptions.FirstOrDefault(option =>
                 string.Equals(option.Identifier, template.TargetZonePresetId, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-            {
-                _zoneBox.SelectedItem = match;
-                return;
-            }
+        if (match is not null)
+        {
+            _zoneBox.SelectedItem = match;
+            return;
+        }
         }
 
         var monitor = ResolveSelectedMonitor();
@@ -483,6 +504,8 @@ internal sealed class SiteEditorDialog : Form
         {
             _zoneBox.SelectedItem = inferred;
         }
+
+        UpdateBrowserPreview();
     }
 
     private MonitorInfo ResolveSelectedMonitor()
@@ -493,6 +516,104 @@ internal sealed class SiteEditorDialog : Form
         }
 
         return _monitors.FirstOrDefault() ?? new MonitorInfo();
+    }
+
+    private void UpdateBrowserPreview()
+    {
+        if (_commandPreviewBox is null)
+        {
+            return;
+        }
+
+        var browser = _browserBox.SelectedItem is BrowserType selected
+            ? selected
+            : BrowserType.Chrome;
+        var enginePath = ResolveBrowserExecutable(browser);
+
+        var arguments = new List<string>();
+
+        void AddArgument(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            arguments.Add(value);
+        }
+
+        var userData = _userDataBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(userData))
+        {
+            AddArgument(FormatArgument("--user-data-dir", userData));
+        }
+
+        var profile = _profileBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(profile))
+        {
+            AddArgument(FormatArgument("--profile-directory", profile));
+        }
+
+        if (_kioskCheck.Checked)
+        {
+            AddArgument("--kiosk");
+        }
+
+        var url = _urlBox.Text.Trim();
+        if (_appModeCheck.Checked && !string.IsNullOrWhiteSpace(url))
+        {
+            AddArgument(FormatArgument("--app", url));
+        }
+
+        foreach (var line in _argsBox.Lines ?? Array.Empty<string>())
+        {
+            var trimmed = line.Trim();
+            if (!string.IsNullOrEmpty(trimmed))
+            {
+                AddArgument(trimmed);
+            }
+        }
+
+        if (!_appModeCheck.Checked && !string.IsNullOrWhiteSpace(url))
+        {
+            AddArgument(url);
+        }
+
+        var preview = new StringBuilder();
+        preview.Append('"').Append(enginePath).Append('"');
+
+        if (arguments.Count > 0)
+        {
+            preview.Append(' ').Append(string.Join(' ', arguments));
+        }
+
+        _commandPreviewBox.Text = preview.ToString().Trim();
+    }
+
+    private static string FormatArgument(string name, string value)
+    {
+        var sanitized = value.Replace("\"", "\\\"");
+        return $"{name}=\"{sanitized}\"";
+    }
+
+    private static string ResolveBrowserExecutable(BrowserType browser)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return browser switch
+            {
+                BrowserType.Chrome => "chrome.exe",
+                BrowserType.Edge => "msedge.exe",
+                _ => browser.ToString(),
+            };
+        }
+
+        return browser switch
+        {
+            BrowserType.Chrome => "google-chrome",
+            BrowserType.Edge => "microsoft-edge",
+            _ => browser.ToString().ToLowerInvariant(),
+        };
     }
 
     private void UpdateReloadState()

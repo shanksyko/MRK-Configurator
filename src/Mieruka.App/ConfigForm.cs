@@ -519,6 +519,12 @@ internal sealed class ConfigForm : Form
         try
         {
             var config = _workspace.BuildConfiguration();
+            if (!TryValidateBeforeSave(config, out var validationMessage))
+            {
+                MessageBox.Show(this, validationMessage, "Salvar Configuração", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             var migrated = _migrator.Migrate(config);
             _store.SaveAsync(migrated).GetAwaiter().GetResult();
             UpdateStatus("Configuração salva com sucesso.");
@@ -529,6 +535,56 @@ internal sealed class ConfigForm : Form
             Log.Error(ex, "Erro ao salvar a configuração manualmente.");
             MessageBox.Show(this, $"Não foi possível salvar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private bool TryValidateBeforeSave(GeneralConfig config, out string message)
+    {
+        foreach (var app in config.Applications)
+        {
+            if (string.IsNullOrWhiteSpace(app.Id))
+            {
+                message = "Existe um aplicativo sem nome. Informe um identificador antes de salvar.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(app.ExecutablePath) || !File.Exists(app.ExecutablePath))
+            {
+                message = $"O executável configurado para '{app.Id}' não foi encontrado.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(app.TargetMonitorStableId))
+            {
+                message = $"Selecione um monitor para o aplicativo '{app.Id}'.";
+                return false;
+            }
+        }
+
+        foreach (var site in config.Sites)
+        {
+            if (string.IsNullOrWhiteSpace(site.Id))
+            {
+                message = "Existe um site sem nome configurado. Ajuste o identificador antes de salvar.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(site.Url)
+                || !Uri.TryCreate(site.Url, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                message = $"Informe uma URL http/https válida para o site '{site.Id}'.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(site.TargetMonitorStableId))
+            {
+                message = $"Selecione um monitor para o site '{site.Id}'.";
+                return false;
+            }
+        }
+
+        message = string.Empty;
+        return true;
     }
 
     private void OnValidateConfigurationClicked(object? sender, EventArgs e)

@@ -61,6 +61,9 @@ public partial class AppEditorForm : Form
         appsTab.TestRequested += AppsTab_TestRequestedAsync;
         _ = appsTab.LoadInstalledAppsAsync();
 
+        txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
+        txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
+
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
 
@@ -78,6 +81,7 @@ public partial class AppEditorForm : Form
 
         appsTab.ExecutablePath = txtExecutavel.Text;
         appsTab.Arguments = txtArgumentos.Text;
+        UpdateExePreview();
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -763,17 +767,51 @@ public partial class AppEditorForm : Form
     {
         txtExecutavel.Text = e.ExecutablePath;
         appsTabControl!.ExecutablePath = e.ExecutablePath;
+        UpdateExePreview();
     }
 
     private void AppsTab_ExecutableCleared(object? sender, EventArgs e)
     {
         txtExecutavel.Text = string.Empty;
         appsTabControl!.ExecutablePath = string.Empty;
+        UpdateExePreview();
     }
 
     private void AppsTab_ArgumentsChanged(object? sender, string e)
     {
         txtArgumentos.Text = e;
+        UpdateExePreview();
+    }
+
+    private void UpdateExePreview()
+    {
+        if (txtCmdPreviewExe is null)
+        {
+            return;
+        }
+
+        var path = txtExecutavel?.Text?.Trim() ?? string.Empty;
+        var args = txtArgumentos?.Text?.Trim() ?? string.Empty;
+
+        string preview;
+        if (string.IsNullOrWhiteSpace(path) && string.IsNullOrWhiteSpace(args))
+        {
+            preview = string.Empty;
+        }
+        else if (string.IsNullOrWhiteSpace(path))
+        {
+            preview = args;
+        }
+        else if (string.IsNullOrWhiteSpace(args))
+        {
+            preview = $"\"{path}\"";
+        }
+        else
+        {
+            preview = $"\"{path}\" {args}";
+        }
+
+        txtCmdPreviewExe.Text = preview;
     }
 
     private async Task AppsTab_OpenRequestedAsync(object? sender, AppExecutionRequestEventArgs e)
