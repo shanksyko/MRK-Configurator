@@ -24,6 +24,7 @@ partial class AppEditorForm
     internal TextBox txtId = null!;
     internal TextBox txtExecutavel = null!;
     internal TextBox txtArgumentos = null!;
+    internal TextBox txtCmdPreviewExe = null!;
     internal CheckBox chkAutoStart = null!;
     internal NumericUpDown nudJanelaX = null!;
     internal NumericUpDown nudJanelaY = null!;
@@ -69,6 +70,8 @@ partial class AppEditorForm
         txtExecutavel = new TextBox();
         var lblArgumentos = new Label();
         txtArgumentos = new TextBox();
+        var lblCmdPreviewExe = new Label();
+        txtCmdPreviewExe = new TextBox();
         chkAutoStart = new CheckBox();
         var tlpJanela = new TableLayoutPanel();
         var lblMonitor = new Label();
@@ -162,16 +165,19 @@ partial class AppEditorForm
         tlpGeral.Controls.Add(txtExecutavel, 1, 1);
         tlpGeral.Controls.Add(lblArgumentos, 0, 2);
         tlpGeral.Controls.Add(txtArgumentos, 1, 2);
-        tlpGeral.Controls.Add(chkAutoStart, 1, 3);
+        tlpGeral.Controls.Add(lblCmdPreviewExe, 0, 3);
+        tlpGeral.Controls.Add(txtCmdPreviewExe, 1, 3);
+        tlpGeral.Controls.Add(chkAutoStart, 1, 4);
         tlpGeral.Dock = DockStyle.Fill;
         tlpGeral.Location = new System.Drawing.Point(8, 8);
         tlpGeral.Margin = new Padding(0);
         tlpGeral.Name = "tlpGeral";
         tlpGeral.Padding = new Padding(0, 0, 0, 8);
-        tlpGeral.RowCount = 4;
+        tlpGeral.RowCount = 5;
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.Size = new System.Drawing.Size(1016, 604);
         tlpGeral.TabIndex = 0;
@@ -228,10 +234,31 @@ partial class AppEditorForm
         txtArgumentos.Multiline = true;
         txtArgumentos.Name = "txtArgumentos";
         txtArgumentos.ScrollBars = ScrollBars.Vertical;
-        txtArgumentos.Size = new System.Drawing.Size(1016, 497);
+        txtArgumentos.Size = new System.Drawing.Size(1016, 441);
         txtArgumentos.TabIndex = 5;
         txtArgumentos.ReadOnly = true;
         txtArgumentos.TabStop = false;
+        //
+        // lblCmdPreviewExe
+        //
+        lblCmdPreviewExe.AutoSize = true;
+        lblCmdPreviewExe.Margin = new Padding(0, 0, 8, 8);
+        lblCmdPreviewExe.Name = "lblCmdPreviewExe";
+        lblCmdPreviewExe.Size = new System.Drawing.Size(123, 15);
+        lblCmdPreviewExe.TabIndex = 6;
+        lblCmdPreviewExe.Text = "Linha de comando";
+        //
+        // txtCmdPreviewExe
+        //
+        txtCmdPreviewExe.Dock = DockStyle.Fill;
+        txtCmdPreviewExe.Margin = new Padding(0, 0, 0, 8);
+        txtCmdPreviewExe.Multiline = true;
+        txtCmdPreviewExe.Name = "txtCmdPreviewExe";
+        txtCmdPreviewExe.ReadOnly = true;
+        txtCmdPreviewExe.ScrollBars = ScrollBars.Vertical;
+        txtCmdPreviewExe.Size = new System.Drawing.Size(1016, 104);
+        txtCmdPreviewExe.TabIndex = 7;
+        txtCmdPreviewExe.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9F);
         //
         // chkAutoStart
         //
