@@ -352,7 +352,7 @@ public sealed class MonitorPreviewHost : IDisposable
         try
         {
             using var graphics = Graphics.FromImage(bitmap);
-            using var font = SystemFonts.CaptionFont;
+            using var font = SystemFonts.CaptionFont ?? SystemFonts.MessageBoxFont ?? Control.DefaultFont;
             using var background = new SolidBrush(Color.FromArgb(160, Color.Black));
             using var foreground = new SolidBrush(Color.White);
 
@@ -371,10 +371,12 @@ public sealed class MonitorPreviewHost : IDisposable
                 text = string.Concat(text, " ", _orientation);
             }
 
-            var measured = graphics.MeasureString(text, font);
+            var safeFont = font ?? Control.DefaultFont;
+            var safeText = text ?? string.Empty;
+            var measured = graphics.MeasureString(safeText, safeFont);
             var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);
             graphics.FillRectangle(background, rect);
-            graphics.DrawString(text, font, foreground, new PointF(rect.Left + 4, rect.Top + 2));
+            graphics.DrawString(safeText, safeFont, foreground, new PointF(rect.Left + 4, rect.Top + 2));
         }
         catch
         {
