@@ -34,13 +34,13 @@ internal static class Program
 
             ApplicationConfiguration.Initialize();
 
-            var configuration = BuildConfiguration();
+            var warmOk = TryWarmUpConfiguration();
+            AppRuntime.SafeMode = !warmOk;
+
+            var configuration = BuildConfiguration(warmOk);
             TryConfigureLogger(configuration);
 
             Log.Information("Starting MRK Configurator");
-
-            var warmOk = TryWarmUpConfiguration();
-            AppRuntime.SafeMode = !warmOk;
 
             if (!warmOk)
             {
@@ -108,23 +108,26 @@ internal static class Program
         }
     }
 
-    private static IConfigurationRoot BuildConfiguration()
+    private static IConfigurationRoot BuildConfiguration(bool includePersistedConfiguration)
     {
         var builder = new ConfigurationBuilder();
 
-        var configurationDirectory = ConfigurationBootstrapper.ResolveConfigurationDirectory();
-        if (Directory.Exists(configurationDirectory))
+        if (includePersistedConfiguration)
         {
-            var persistedSource = new JsonConfigurationSource
+            var configurationDirectory = ConfigurationBootstrapper.ResolveConfigurationDirectory();
+            if (Directory.Exists(configurationDirectory))
             {
-                FileProvider = new PhysicalFileProvider(configurationDirectory),
-                Path = "appsettings.json",
-                Optional = true,
-                ReloadOnChange = false,
-            };
+                var persistedSource = new JsonConfigurationSource
+                {
+                    FileProvider = new PhysicalFileProvider(configurationDirectory),
+                    Path = "appsettings.json",
+                    Optional = true,
+                    ReloadOnChange = false,
+                };
 
-            persistedSource.ResolveFileProvider();
-            builder.Add(persistedSource);
+                persistedSource.ResolveFileProvider();
+                builder.Add(persistedSource);
+            }
         }
 
         var baseDirectory = AppContext.BaseDirectory;
