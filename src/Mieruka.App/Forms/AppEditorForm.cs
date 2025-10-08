@@ -8,12 +8,14 @@ using System.IO;
 using System.Linq;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Services;
+using Mieruka.App.Simulation;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
@@ -37,6 +39,11 @@ public partial class AppEditorForm : Form
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
+    private readonly AppCycleSimulator _cycleSimulator = new();
+    private readonly List<SimRectDisplay> _cycleDisplays = new();
+    private CancellationTokenSource? _cycleSimulationCts;
+    private SimRectDisplay? _activeCycleDisplay;
+    private int _nextSimRectIndex;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -117,6 +124,8 @@ public partial class AppEditorForm : Form
         appsTab.ExecutablePath = txtExecutavel.Text;
         appsTab.Arguments = txtArgumentos.Text;
         UpdateExePreview();
+
+        InitializeCycleSimulation();
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -226,6 +235,516 @@ public partial class AppEditorForm : Form
         }
 
         return candidato;
+    }
+
+    private void InitializeCycleSimulation()
+    {
+        if (flowCycleItems is null)
+        {
+            return;
+        }
+
+        _sites.ListChanged += Sites_ListChanged;
+
+        if (txtId is not null)
+        {
+            txtId.TextChanged += (_, _) => RebuildSimRects();
+        }
+
+        if (cycleToolTip is not null)
+        {
+            if (btnCyclePlay is not null)
+            {
+                cycleToolTip.SetToolTip(btnCyclePlay, "Executa a simulação do ciclo.");
+            }
+
+            if (btnCycleStep is not null)
+            {
+                cycleToolTip.SetToolTip(btnCycleStep, "Avança manualmente para o próximo item do ciclo.");
+            }
+
+            if (btnCycleStop is not null)
+            {
+                cycleToolTip.SetToolTip(btnCycleStop, "Interrompe a simulação atual.");
+            }
+
+            if (chkCycleRedeDisponivel is not null)
+            {
+                cycleToolTip.SetToolTip(chkCycleRedeDisponivel, "Simula a disponibilidade de rede para itens dependentes.");
+            }
+        }
+
+        RebuildSimRects();
+    }
+
+    private void Sites_ListChanged(object? sender, ListChangedEventArgs e)
+    {
+        RebuildSimRects();
+    }
+
+    private void RebuildSimRects()
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (_cycleSimulationCts is not null)
+        {
+            StopCycleSimulation();
+
+            if (IsHandleCreated)
+            {
+                BeginInvoke(new MethodInvoker(RebuildSimRects));
+            }
+
+            return;
+        }
+
+        _nextSimRectIndex = 0;
+        ClearActiveSimRect();
+
+        if (flowCycleItems is null)
+        {
+            return;
+        }
+
+        flowCycleItems.SuspendLayout();
+        try
+        {
+            flowCycleItems.Controls.Clear();
+        }
+        finally
+        {
+            flowCycleItems.ResumeLayout(false);
+        }
+
+        DisposeSimRectDisplays();
+
+        var items = BuildSimRectList();
+        if (items.Count == 0)
+        {
+            var placeholder = new Label
+            {
+                AutoSize = true,
+                Margin = new Padding(12),
+                Text = "Nenhum item disponível para simulação.",
+            };
+
+            flowCycleItems.Controls.Add(placeholder);
+            UpdateCycleControlsState();
+            return;
+        }
+
+        flowCycleItems.SuspendLayout();
+        try
+        {
+            foreach (var rect in items)
+            {
+                var display = CreateSimRectDisplay(rect);
+                _cycleDisplays.Add(display);
+                flowCycleItems.Controls.Add(display.Panel);
+                ApplySimRectTooltip(display);
+            }
+        }
+        finally
+        {
+            flowCycleItems.ResumeLayout(false);
+        }
+
+        UpdateCycleControlsState();
+    }
+
+    private IReadOnlyList<AppCycleSimulator.SimRect> BuildSimRectList()
+    {
+        var items = new List<AppCycleSimulator.SimRect>();
+
+        var appId = txtId?.Text?.Trim();
+        var appLabel = string.IsNullOrWhiteSpace(appId) ? "Aplicativo" : appId;
+        var appDetails = txtExecutavel is null
+            ? null
+            : (string.IsNullOrWhiteSpace(txtExecutavel.Text) ? null : txtExecutavel.Text.Trim());
+
+        items.Add(new AppCycleSimulator.SimRect(
+            "app",
+            $"Aplicativo: {appLabel}",
+            requiresNetwork: false,
+            DelayMs: 400,
+            Details: appDetails));
+
+        var index = 0;
+        foreach (var site in _sites)
+        {
+            index++;
+            var siteId = string.IsNullOrWhiteSpace(site.Id) ? $"Site {index}" : site.Id.Trim();
+            var details = string.IsNullOrWhiteSpace(site.Url) ? null : site.Url.Trim();
+
+            items.Add(new AppCycleSimulator.SimRect(
+                $"site:{index}",
+                $"Site: {siteId}",
+                requiresNetwork: true,
+                DelayMs: null,
+                Details: details));
+        }
+
+        return items;
+    }
+
+    private SimRectDisplay CreateSimRectDisplay(AppCycleSimulator.SimRect rect)
+    {
+        var panel = new Panel
+        {
+            Width = 200,
+            Height = 120,
+            Margin = new Padding(12),
+            Padding = new Padding(4),
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = SystemColors.ControlLightLight,
+        };
+
+        var label = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Text = rect.DisplayName,
+            AutoEllipsis = true,
+            Padding = new Padding(4),
+        };
+
+        panel.Controls.Add(label);
+        panel.Tag = rect;
+
+        return new SimRectDisplay(rect, panel, label);
+    }
+
+    private void ApplySimRectTooltip(SimRectDisplay display)
+    {
+        if (cycleToolTip is null)
+        {
+            return;
+        }
+
+        var builder = new StringBuilder();
+        builder.Append(display.Rect.DisplayName);
+        builder.AppendLine();
+        builder.Append("Rede necessária: ");
+        builder.Append(display.Rect.RequiresNetwork ? "Sim" : "Não");
+        builder.AppendLine();
+        builder.Append("Duração simulada: ");
+        var delay = display.Rect.DelayMs ?? AppCycleSimulator.DefaultDelayMs;
+        builder.Append(delay.ToString(CultureInfo.InvariantCulture));
+        builder.Append(" ms");
+
+        if (!string.IsNullOrWhiteSpace(display.Rect.Details))
+        {
+            builder.AppendLine();
+            builder.Append(display.Rect.Details);
+        }
+
+        if (display.LastResult == SimRectStatus.Completed && display.LastActivation is DateTime completed)
+        {
+            builder.AppendLine();
+            builder.Append("Última execução: ");
+            builder.Append(completed.ToString("T", CultureInfo.CurrentCulture));
+        }
+        else if (display.LastResult == SimRectStatus.Skipped && display.LastSkipped is DateTime skipped)
+        {
+            builder.AppendLine();
+            builder.Append("Ignorado às ");
+            builder.Append(skipped.ToString("T", CultureInfo.CurrentCulture));
+            builder.Append(" (rede indisponível)");
+        }
+
+        var tooltip = builder.ToString();
+        cycleToolTip.SetToolTip(display.Panel, tooltip);
+        cycleToolTip.SetToolTip(display.Label, tooltip);
+    }
+
+    private void RefreshSimRectTooltips()
+    {
+        foreach (var display in _cycleDisplays)
+        {
+            ApplySimRectTooltip(display);
+        }
+    }
+
+    private async Task RunContinuousSimulationAsync()
+    {
+        if (_cycleSimulationCts is not null || _cycleDisplays.Count == 0)
+        {
+            return;
+        }
+
+        var tokenSource = new CancellationTokenSource();
+        _cycleSimulationCts = tokenSource;
+        UpdateCycleControlsState();
+
+        try
+        {
+            var token = tokenSource.Token;
+
+            while (!token.IsCancellationRequested)
+            {
+                if (_cycleDisplays.Count == 0)
+                {
+                    break;
+                }
+
+                var display = _cycleDisplays[_nextSimRectIndex];
+                _nextSimRectIndex = (_nextSimRectIndex + 1) % _cycleDisplays.Count;
+
+                if (display.Rect.RequiresNetwork && !EvaluateNetworkAvailability())
+                {
+                    display.LastResult = SimRectStatus.Skipped;
+                    display.LastActivation = null;
+                    display.LastSkipped = DateTime.Now;
+                    ApplySimRectTooltip(display);
+
+                    if (_cycleDisplays.All(d => d.Rect.RequiresNetwork))
+                    {
+                        await Task.Delay(AppCycleSimulator.DefaultDelayMs, token);
+                    }
+
+                    continue;
+                }
+
+                display.LastResult = SimRectStatus.None;
+                display.LastActivation = null;
+                display.LastSkipped = null;
+                ApplySimRectTooltip(display);
+
+                await _cycleSimulator.SimulateAsync(
+                    new[] { display.Rect },
+                    EvaluateNetworkAvailability,
+                    OnSimRectStarted,
+                    OnSimRectEnded,
+                    token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignorar cancelamentos solicitados pelo usuário.
+        }
+        finally
+        {
+            _cycleSimulationCts = null;
+            tokenSource.Dispose();
+            UpdateCycleControlsState();
+            ClearActiveSimRect();
+        }
+    }
+
+    private async Task RunSingleStepAsync()
+    {
+        if (_cycleSimulationCts is not null || _cycleDisplays.Count == 0)
+        {
+            return;
+        }
+
+        if (btnCycleStep is not null)
+        {
+            btnCycleStep.Enabled = false;
+        }
+
+        try
+        {
+            var attempts = 0;
+            while (attempts < _cycleDisplays.Count)
+            {
+                var display = _cycleDisplays[_nextSimRectIndex];
+                _nextSimRectIndex = (_nextSimRectIndex + 1) % _cycleDisplays.Count;
+                attempts++;
+
+                if (display.Rect.RequiresNetwork && !EvaluateNetworkAvailability())
+                {
+                    display.LastResult = SimRectStatus.Skipped;
+                    display.LastActivation = null;
+                    display.LastSkipped = DateTime.Now;
+                    ApplySimRectTooltip(display);
+                    continue;
+                }
+
+                display.LastResult = SimRectStatus.None;
+                display.LastActivation = null;
+                display.LastSkipped = null;
+                ApplySimRectTooltip(display);
+
+                await _cycleSimulator.SimulateAsync(
+                    new[] { display.Rect },
+                    EvaluateNetworkAvailability,
+                    OnSimRectStarted,
+                    OnSimRectEnded);
+
+                break;
+            }
+        }
+        finally
+        {
+            UpdateCycleControlsState();
+        }
+    }
+
+    private void StopCycleSimulation()
+    {
+        var cts = _cycleSimulationCts;
+        if (cts is null)
+        {
+            return;
+        }
+
+        if (!cts.IsCancellationRequested)
+        {
+            cts.Cancel();
+        }
+
+        UpdateCycleControlsState();
+    }
+
+    private void UpdateCycleControlsState()
+    {
+        var hasItems = _cycleDisplays.Count > 0;
+        var isRunning = _cycleSimulationCts is not null;
+
+        if (btnCyclePlay is not null)
+        {
+            btnCyclePlay.Enabled = hasItems && !isRunning;
+        }
+
+        if (btnCycleStep is not null)
+        {
+            btnCycleStep.Enabled = hasItems && !isRunning;
+        }
+
+        if (btnCycleStop is not null)
+        {
+            btnCycleStop.Enabled = isRunning;
+        }
+    }
+
+    private void OnSimRectStarted(AppCycleSimulator.SimRect rect)
+    {
+        var display = FindDisplay(rect);
+        if (display is null)
+        {
+            return;
+        }
+
+        if (_activeCycleDisplay is not null && !ReferenceEquals(_activeCycleDisplay, display))
+        {
+            SetSimRectActive(_activeCycleDisplay, isActive: false);
+        }
+
+        SetSimRectActive(display, isActive: true);
+        _activeCycleDisplay = display;
+    }
+
+    private void OnSimRectEnded(AppCycleSimulator.SimRect rect)
+    {
+        var display = FindDisplay(rect);
+        if (display is null)
+        {
+            return;
+        }
+
+        display.LastResult = SimRectStatus.Completed;
+        display.LastActivation = DateTime.Now;
+        display.LastSkipped = null;
+        ApplySimRectTooltip(display);
+
+        if (_activeCycleDisplay is not null && ReferenceEquals(_activeCycleDisplay, display))
+        {
+            SetSimRectActive(display, isActive: false);
+            _activeCycleDisplay = null;
+        }
+    }
+
+    private SimRectDisplay? FindDisplay(AppCycleSimulator.SimRect rect)
+    {
+        return _cycleDisplays.FirstOrDefault(display => ReferenceEquals(display.Rect, rect));
+    }
+
+    private void SetSimRectActive(SimRectDisplay display, bool isActive)
+    {
+        if (display.Panel.IsDisposed)
+        {
+            return;
+        }
+
+        if (isActive)
+        {
+            display.Panel.BorderStyle = BorderStyle.Fixed3D;
+            display.Panel.BackColor = Color.FromArgb(32, 146, 204);
+            display.Label.ForeColor = Color.White;
+            display.Label.Font = display.BoldFont;
+        }
+        else
+        {
+            display.Panel.BorderStyle = BorderStyle.FixedSingle;
+            display.Panel.BackColor = SystemColors.ControlLightLight;
+            display.Label.ForeColor = SystemColors.ControlText;
+            display.Label.Font = display.NormalFont;
+        }
+    }
+
+    private void ClearActiveSimRect()
+    {
+        if (_activeCycleDisplay is null)
+        {
+            return;
+        }
+
+        SetSimRectActive(_activeCycleDisplay, isActive: false);
+        _activeCycleDisplay = null;
+    }
+
+    private bool EvaluateNetworkAvailability()
+    {
+        return chkCycleRedeDisponivel?.Checked ?? true;
+    }
+
+    private void DisposeSimRectDisplays()
+    {
+        ClearActiveSimRect();
+
+        foreach (var display in _cycleDisplays)
+        {
+            try
+            {
+                if (!display.Panel.IsDisposed)
+                {
+                    display.Panel.Dispose();
+                }
+            }
+            catch
+            {
+                // Ignorar falhas durante o descarte dos painéis.
+            }
+
+            display.Dispose();
+        }
+
+        _cycleDisplays.Clear();
+    }
+
+    private async void btnCyclePlay_Click(object? sender, EventArgs e)
+    {
+        await RunContinuousSimulationAsync();
+    }
+
+    private async void btnCycleStep_Click(object? sender, EventArgs e)
+    {
+        await RunSingleStepAsync();
+    }
+
+    private void btnCycleStop_Click(object? sender, EventArgs e)
+    {
+        StopCycleSimulation();
+    }
+
+    private void chkCycleRedeDisponivel_CheckedChanged(object? sender, EventArgs e)
+    {
+        RefreshSimRectTooltips();
     }
 
     private void RefreshMonitorSnapshot()
@@ -1113,6 +1632,8 @@ public partial class AppEditorForm : Form
 
     private void AppEditorForm_Disposed(object? sender, EventArgs e)
     {
+        StopCycleSimulation();
+        DisposeSimRectDisplays();
         _appRunner.BeforeMoveWindow -= AppRunnerOnBeforeMoveWindow;
         _appRunner.AfterMoveWindow -= AppRunnerOnAfterMoveWindow;
     }
@@ -1209,6 +1730,7 @@ public partial class AppEditorForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        StopCycleSimulation();
         base.OnFormClosing(e);
         monitorPreviewDisplay?.Unbind();
     }
@@ -1397,6 +1919,47 @@ public partial class AppEditorForm : Form
         public int dmReserved2;
         public int dmPanningWidth;
         public int dmPanningHeight;
+    }
+
+    private sealed class SimRectDisplay : IDisposable
+    {
+        public SimRectDisplay(AppCycleSimulator.SimRect rect, Panel panel, Label label)
+        {
+            Rect = rect;
+            Panel = panel;
+            Label = label;
+            NormalFont = label.Font;
+            BoldFont = new Font(label.Font, FontStyle.Bold);
+            LastResult = SimRectStatus.None;
+        }
+
+        public AppCycleSimulator.SimRect Rect { get; }
+
+        public Panel Panel { get; }
+
+        public Label Label { get; }
+
+        public Font NormalFont { get; }
+
+        public Font BoldFont { get; }
+
+        public DateTime? LastActivation { get; set; }
+
+        public DateTime? LastSkipped { get; set; }
+
+        public SimRectStatus LastResult { get; set; }
+
+        public void Dispose()
+        {
+            BoldFont.Dispose();
+        }
+    }
+
+    private enum SimRectStatus
+    {
+        None,
+        Completed,
+        Skipped,
     }
 
     private sealed class MonitorOption

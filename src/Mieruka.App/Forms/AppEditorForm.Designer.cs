@@ -23,6 +23,9 @@ partial class AppEditorForm
     internal Button btnCancelar = null!;
     internal Button btnTestarJanela = null!;
     internal Button btnTestReal = null!;
+    internal Button btnCyclePlay = null!;
+    internal Button btnCycleStep = null!;
+    internal Button btnCycleStop = null!;
     internal TextBox txtId = null!;
     internal TextBox txtExecutavel = null!;
     internal TextBox txtArgumentos = null!;
@@ -38,6 +41,10 @@ partial class AppEditorForm
     internal TableLayoutPanel tlpMonitorPreview = null!;
     internal Label lblMonitorCoordinates = null!;
     internal ErrorProvider errorProvider = null!;
+    internal FlowLayoutPanel flowCycleControls = null!;
+    internal FlowLayoutPanel flowCycleItems = null!;
+    internal CheckBox chkCycleRedeDisponivel = null!;
+    internal ToolTip cycleToolTip = null!;
 
     protected override void Dispose(bool disposing)
     {
@@ -93,14 +100,24 @@ partial class AppEditorForm
         var lblAltura = new Label();
         lblMonitorCoordinates = new Label();
         nudJanelaAltura = new NumericUpDown();
-        var lblCiclo = new Label();
+        var tlpCycle = new TableLayoutPanel();
+        flowCycleControls = new FlowLayoutPanel();
+        btnCyclePlay = new Button();
+        btnCycleStep = new Button();
+        btnCycleStop = new Button();
+        chkCycleRedeDisponivel = new CheckBox();
+        flowCycleItems = new FlowLayoutPanel();
         var lblAvancado = new Label();
         errorProvider = new ErrorProvider(components);
+        cycleToolTip = new ToolTip(components);
         tabEditor.SuspendLayout();
         tpGeral.SuspendLayout();
         tpAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
         tpSites.SuspendLayout();
+        tlpCycle.SuspendLayout();
+        flowCycleControls.SuspendLayout();
+        flowCycleItems.SuspendLayout();
         tpCiclo.SuspendLayout();
         tpAvancado.SuspendLayout();
         painelRodape.SuspendLayout();
@@ -512,9 +529,104 @@ partial class AppEditorForm
         sitesEditorControl.Size = new System.Drawing.Size(1016, 604);
         sitesEditorControl.TabIndex = 0;
         //
+        // tlpCycle
+        //
+        tlpCycle.ColumnCount = 1;
+        tlpCycle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpCycle.Controls.Add(flowCycleControls, 0, 0);
+        tlpCycle.Controls.Add(flowCycleItems, 0, 1);
+        tlpCycle.Dock = DockStyle.Fill;
+        tlpCycle.Location = new System.Drawing.Point(8, 8);
+        tlpCycle.Margin = new Padding(0);
+        tlpCycle.Name = "tlpCycle";
+        tlpCycle.RowCount = 2;
+        tlpCycle.RowStyles.Add(new RowStyle());
+        tlpCycle.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpCycle.Size = new System.Drawing.Size(1016, 604);
+        tlpCycle.TabIndex = 0;
+        //
+        // flowCycleControls
+        //
+        flowCycleControls.AutoSize = true;
+        flowCycleControls.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        flowCycleControls.Dock = DockStyle.Fill;
+        flowCycleControls.FlowDirection = FlowDirection.LeftToRight;
+        flowCycleControls.Margin = new Padding(0, 0, 0, 8);
+        flowCycleControls.Name = "flowCycleControls";
+        flowCycleControls.Padding = new Padding(0);
+        flowCycleControls.Size = new System.Drawing.Size(1016, 33);
+        flowCycleControls.TabIndex = 0;
+        flowCycleControls.WrapContents = false;
+        flowCycleControls.Controls.Add(btnCyclePlay);
+        flowCycleControls.Controls.Add(btnCycleStep);
+        flowCycleControls.Controls.Add(btnCycleStop);
+        flowCycleControls.Controls.Add(chkCycleRedeDisponivel);
+        //
+        // btnCyclePlay
+        //
+        btnCyclePlay.AutoSize = true;
+        btnCyclePlay.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnCyclePlay.Margin = new Padding(0, 0, 8, 0);
+        btnCyclePlay.Name = "btnCyclePlay";
+        btnCyclePlay.Size = new System.Drawing.Size(68, 25);
+        btnCyclePlay.TabIndex = 0;
+        btnCyclePlay.Text = "Executar";
+        btnCyclePlay.UseVisualStyleBackColor = true;
+        btnCyclePlay.Click += btnCyclePlay_Click;
+        //
+        // btnCycleStep
+        //
+        btnCycleStep.AutoSize = true;
+        btnCycleStep.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnCycleStep.Margin = new Padding(0, 0, 8, 0);
+        btnCycleStep.Name = "btnCycleStep";
+        btnCycleStep.Size = new System.Drawing.Size(64, 25);
+        btnCycleStep.TabIndex = 1;
+        btnCycleStep.Text = "Avançar";
+        btnCycleStep.UseVisualStyleBackColor = true;
+        btnCycleStep.Click += btnCycleStep_Click;
+        //
+        // btnCycleStop
+        //
+        btnCycleStop.AutoSize = true;
+        btnCycleStop.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnCycleStop.Enabled = false;
+        btnCycleStop.Margin = new Padding(0, 0, 16, 0);
+        btnCycleStop.Name = "btnCycleStop";
+        btnCycleStop.Size = new System.Drawing.Size(47, 25);
+        btnCycleStop.TabIndex = 2;
+        btnCycleStop.Text = "Parar";
+        btnCycleStop.UseVisualStyleBackColor = true;
+        btnCycleStop.Click += btnCycleStop_Click;
+        //
+        // chkCycleRedeDisponivel
+        //
+        chkCycleRedeDisponivel.AutoSize = true;
+        chkCycleRedeDisponivel.Checked = true;
+        chkCycleRedeDisponivel.CheckState = CheckState.Checked;
+        chkCycleRedeDisponivel.Margin = new Padding(0, 4, 0, 0);
+        chkCycleRedeDisponivel.Name = "chkCycleRedeDisponivel";
+        chkCycleRedeDisponivel.Size = new System.Drawing.Size(120, 19);
+        chkCycleRedeDisponivel.TabIndex = 3;
+        chkCycleRedeDisponivel.Text = "Rede disponível";
+        chkCycleRedeDisponivel.UseVisualStyleBackColor = true;
+        chkCycleRedeDisponivel.CheckedChanged += chkCycleRedeDisponivel_CheckedChanged;
+        //
+        // flowCycleItems
+        //
+        flowCycleItems.AutoScroll = true;
+        flowCycleItems.BackColor = System.Drawing.SystemColors.ControlLightLight;
+        flowCycleItems.Dock = DockStyle.Fill;
+        flowCycleItems.Location = new System.Drawing.Point(0, 41);
+        flowCycleItems.Margin = new Padding(0);
+        flowCycleItems.Name = "flowCycleItems";
+        flowCycleItems.Padding = new Padding(0, 0, 0, 8);
+        flowCycleItems.Size = new System.Drawing.Size(1016, 563);
+        flowCycleItems.TabIndex = 1;
+        //
         // tpCiclo
         //
-        tpCiclo.Controls.Add(lblCiclo);
+        tpCiclo.Controls.Add(tlpCycle);
         tpCiclo.Location = new System.Drawing.Point(4, 24);
         tpCiclo.Margin = new Padding(8);
         tpCiclo.Name = "tpCiclo";
@@ -523,17 +635,6 @@ partial class AppEditorForm
         tpCiclo.TabIndex = 4;
         tpCiclo.Text = "Ciclo";
         tpCiclo.UseVisualStyleBackColor = true;
-        //
-        // lblCiclo
-        //
-        lblCiclo.AutoSize = true;
-        lblCiclo.Dock = DockStyle.Top;
-        lblCiclo.Margin = new Padding(0);
-        lblCiclo.Name = "lblCiclo";
-        lblCiclo.Padding = new Padding(0, 0, 0, 8);
-        lblCiclo.Size = new System.Drawing.Size(276, 15);
-        lblCiclo.TabIndex = 0;
-        lblCiclo.Text = "Configurações de ciclo serão disponibilizadas aqui.";
         //
         // tpAvancado
         //
@@ -621,8 +722,12 @@ partial class AppEditorForm
         tpAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
         tpSites.ResumeLayout(false);
+        tlpCycle.ResumeLayout(false);
+        tlpCycle.PerformLayout();
+        flowCycleControls.ResumeLayout(false);
+        flowCycleControls.PerformLayout();
+        flowCycleItems.ResumeLayout(false);
         tpCiclo.ResumeLayout(false);
-        tpCiclo.PerformLayout();
         tpAvancado.ResumeLayout(false);
         tpAvancado.PerformLayout();
         painelRodape.ResumeLayout(false);
