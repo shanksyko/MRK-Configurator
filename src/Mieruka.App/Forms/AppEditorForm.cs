@@ -21,6 +21,7 @@ using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Services;
+using Mieruka.Core.Infra;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Logger = Serilog.Log;
 
@@ -1838,6 +1839,7 @@ public partial class AppEditorForm : Form
         }
         catch (Exception ex)
         {
+            Logger.Error("Falha ao testar a posição em modo simulado.", ex);
             MessageBox.Show(
                 this,
                 $"Não foi possível testar a posição: {ex.Message}",
@@ -1897,7 +1899,7 @@ public partial class AppEditorForm : Form
         }
         catch (Exception ex)
         {
-            Logger.Error("Falha no Testar app real", ex);
+            Logger.Error("Falha ao executar o aplicativo real durante o teste.", ex);
             MessageBox.Show(
                 this,
                 $"Não foi possível executar o aplicativo real: {ex.Message}",
