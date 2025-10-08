@@ -1619,7 +1619,7 @@ public partial class MainForm : Form
             ? _monitorSnapshot.ToList()
             : CaptureMonitorSnapshot().ToList();
 
-        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId, _appRunner);
+        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId, _appRunner, _programas);
         var resultado = editor.ShowDialog(this);
         if (resultado != DialogResult.OK)
         {

@@ -268,6 +268,8 @@ public sealed class ProfileStore
                 EnvironmentVariables = environment,
                 Watchdog = watchdog,
                 Window = window,
+                Order = Math.Max(0, app.Order),
+                DelayMs = Math.Max(0, app.DelayMs),
             });
         }
 
