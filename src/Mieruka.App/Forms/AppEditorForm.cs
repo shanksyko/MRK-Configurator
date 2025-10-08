@@ -2013,7 +2013,9 @@ public partial class AppEditorForm : Form
             Order = _editingMetadata?.Order ?? 0,
             DelayMs = _editingMetadata?.DelayMs ?? 0,
             AskBeforeLaunch = _editingMetadata?.AskBeforeLaunch ?? false,
-            NetworkRequired = _editingMetadata?.NetworkRequired,
+            RequiresNetwork = _editingMetadata?.RequiresNetwork
+                ?? _original?.RequiresNetwork
+                ?? false,
         };
     }
 
@@ -2340,7 +2342,7 @@ public partial class AppEditorForm : Form
                 Order = metadata.Order,
                 DelayMs = metadata.DelayMs,
                 AskBeforeLaunch = metadata.AskBeforeLaunch,
-                NetworkRequired = metadata.NetworkRequired,
+                RequiresNetwork = metadata.RequiresNetwork ?? current.RequiresNetwork,
             };
         }
     }
@@ -2704,7 +2706,7 @@ public partial class AppEditorForm : Form
         private int _order;
         private int _delayMs;
         private bool _askBeforeLaunch;
-        private bool? _networkRequired;
+        private bool? _requiresNetwork;
 
         public ProfileItemMetadata(AppConfig? source, bool isTarget, int defaultOrder)
         {
@@ -2715,7 +2717,7 @@ public partial class AppEditorForm : Form
             _order = initialOrder > 0 ? initialOrder : Math.Max(1, defaultOrder);
             _delayMs = source?.DelayMs ?? 0;
             _askBeforeLaunch = source?.AskBeforeLaunch ?? false;
-            _networkRequired = source?.NetworkRequired;
+            _requiresNetwork = source?.RequiresNetwork;
         }
 
         public AppConfig? Original { get; }
@@ -2777,15 +2779,15 @@ public partial class AppEditorForm : Form
             }
         }
 
-        public bool? NetworkRequired
+        public bool? RequiresNetwork
         {
-            get => _networkRequired;
+            get => _requiresNetwork;
             set
             {
-                if (_networkRequired != value)
+                if (_requiresNetwork != value)
                 {
-                    _networkRequired = value;
-                    OnPropertyChanged(nameof(NetworkRequired));
+                    _requiresNetwork = value;
+                    OnPropertyChanged(nameof(RequiresNetwork));
                 }
             }
         }
@@ -2798,7 +2800,7 @@ public partial class AppEditorForm : Form
             Order = app.Order > 0 ? app.Order : Order;
             DelayMs = app.DelayMs;
             AskBeforeLaunch = app.AskBeforeLaunch;
-            NetworkRequired = app.NetworkRequired;
+            RequiresNetwork = app.RequiresNetwork;
         }
 
         private void OnPropertyChanged(string propertyName)
