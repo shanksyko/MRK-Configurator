@@ -53,7 +53,7 @@ public sealed class AppsTab : UserControl
             PlaceholderText = "Buscar aplicativos instalados...",
             Dock = DockStyle.Fill,
         };
-        _txtSearch.TextChanged += (_, _) => ApplyFilter();
+        _txtSearch.TextChanged += TxtSearch_TextChanged;
 
         layout.Controls.Add(_txtSearch, 0, 0);
         layout.SetColumnSpan(_txtSearch, 2);
@@ -238,6 +238,28 @@ public sealed class AppsTab : UserControl
         }
     }
 
+    public void SetInstalledApps(IReadOnlyList<InstalledAppInfo> apps)
+    {
+        if (apps is null)
+        {
+            throw new ArgumentNullException(nameof(apps));
+        }
+
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => Populate(apps)));
+        }
+        else
+        {
+            Populate(apps);
+        }
+    }
+
     private void Populate(IReadOnlyList<InstalledAppInfo> apps)
     {
         _suppressSelectionNotifications = true;
@@ -249,7 +271,7 @@ public sealed class AppsTab : UserControl
                 _allApps.Add(app);
             }
 
-            ApplyFilterCore();
+            PopulateFilteredList(_allApps);
             ClearGridSelection();
         }
         finally
@@ -329,9 +351,35 @@ public sealed class AppsTab : UserControl
                 app.ExecutablePath.Contains(term, StringComparison.OrdinalIgnoreCase));
         }
 
+        PopulateFilteredList(filtered);
+    }
+
+    private void TxtSearch_TextChanged(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_txtSearch.Text))
+        {
+            _suppressSelectionNotifications = true;
+            try
+            {
+                PopulateFilteredList(_allApps);
+                ClearGridSelection();
+            }
+            finally
+            {
+                _suppressSelectionNotifications = false;
+            }
+
+            return;
+        }
+
+        ApplyFilter();
+    }
+
+    private void PopulateFilteredList(IEnumerable<InstalledAppInfo> apps)
+    {
         _filteredApps.RaiseListChangedEvents = false;
         _filteredApps.Clear();
-        foreach (var app in filtered)
+        foreach (var app in apps)
         {
             _filteredApps.Add(app);
         }
