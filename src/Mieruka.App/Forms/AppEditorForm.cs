@@ -7,6 +7,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -29,6 +30,8 @@ public partial class AppEditorForm : Form
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly MethodInfo? ClearAppsInventorySelectionMethod =
+        typeof(AppsTab).GetMethod("ClearSelection", BindingFlags.Instance | BindingFlags.NonPublic);
     private static readonly Color[] SimulationPalette =
     {
         Color.FromArgb(0x4A, 0x90, 0xE2),
@@ -41,6 +44,13 @@ public partial class AppEditorForm : Form
         Color.FromArgb(0x2E, 0x86, 0xAB),
     };
 
+    private enum ExecSourceMode
+    {
+        None,
+        Inventory,
+        Custom,
+    }
+
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
     private readonly IReadOnlyList<MonitorInfo>? _providedMonitors;
@@ -52,6 +62,8 @@ public partial class AppEditorForm : Form
     private ProfileItemMetadata? _editingMetadata;
     private bool _suppressCycleUpdates;
     private bool _suppressCycleSelectionEvents;
+    private ExecSourceMode _execSourceMode;
+    private bool _suppressListSelectionChanged;
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
@@ -2373,6 +2385,44 @@ public partial class AppEditorForm : Form
 
     private void AppsTab_ExecutableChosen(object? sender, AppSelectionEventArgs e)
     {
+        if (_suppressListSelectionChanged)
+        {
+            return;
+        }
+
+        if (e.App is null)
+        {
+            _execSourceMode = ExecSourceMode.Custom;
+            txtExecutavel.Text = e.ExecutablePath;
+            appsTabControl!.ExecutablePath = e.ExecutablePath;
+            UpdateExePreview();
+
+            if (ClearAppsInventorySelectionMethod is not null)
+            {
+                try
+                {
+                    _suppressListSelectionChanged = true;
+                    ClearAppsInventorySelectionMethod.Invoke(appsTabControl, Array.Empty<object>());
+                }
+                catch (TargetInvocationException)
+                {
+                    // Ignored: falha ao limpar a seleção não deve impedir a seleção personalizada.
+                }
+                finally
+                {
+                    _suppressListSelectionChanged = false;
+                }
+            }
+
+            return;
+        }
+
+        if (_execSourceMode == ExecSourceMode.Custom)
+        {
+            return;
+        }
+
+        _execSourceMode = ExecSourceMode.Inventory;
         txtExecutavel.Text = e.ExecutablePath;
         appsTabControl!.ExecutablePath = e.ExecutablePath;
         UpdateExePreview();
@@ -2380,6 +2430,12 @@ public partial class AppEditorForm : Form
 
     private void AppsTab_ExecutableCleared(object? sender, EventArgs e)
     {
+        if (_suppressListSelectionChanged)
+        {
+            return;
+        }
+
+        _execSourceMode = ExecSourceMode.None;
         txtExecutavel.Text = string.Empty;
         appsTabControl!.ExecutablePath = string.Empty;
         UpdateExePreview();
