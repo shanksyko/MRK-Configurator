@@ -219,7 +219,15 @@ public partial class AppEditorForm : Form
         UpdateExePreview();
 
         InitializeCycleSimulation();
-        ApplyAppTypeUI();
+
+        if (rbExe is not null && rbBrowser is not null)
+        {
+            var isBrowser = programa is not null && string.IsNullOrWhiteSpace(programa.ExecutablePath);
+            rbBrowser.Checked = isBrowser;
+            rbExe.Checked = !isBrowser;
+        }
+
+        ApplyTypeTabs();
     }
 
     private void ConfigureInstalledAppsSection(ListView installedAppsList)
@@ -435,9 +443,67 @@ public partial class AppEditorForm : Form
         RebuildSimRects();
     }
 
-    private void ApplyAppTypeUI()
+    private void ApplyTypeTabs()
     {
         var isExecutable = rbExe?.Checked ?? false;
+        var editorTabs = tabEditor;
+
+        if (editorTabs is not null)
+        {
+            if (isExecutable)
+            {
+                if (tpSites is not null && editorTabs.TabPages.Contains(tpSites))
+                {
+                    editorTabs.TabPages.Remove(tpSites);
+                }
+
+                if (tpAplicativos is not null && !editorTabs.TabPages.Contains(tpAplicativos))
+                {
+                    var insertIndex = 0;
+                    if (tpGeral is not null)
+                    {
+                        var generalIndex = editorTabs.TabPages.IndexOf(tpGeral);
+                        insertIndex = generalIndex >= 0 ? generalIndex + 1 : 0;
+                    }
+
+                    editorTabs.TabPages.Insert(Math.Min(insertIndex, editorTabs.TabPages.Count), tpAplicativos);
+                }
+
+                if (tpAplicativos is not null && editorTabs.TabPages.Contains(tpAplicativos))
+                {
+                    editorTabs.SelectedTab = tpAplicativos;
+                    tpAplicativos.Focus();
+                }
+            }
+            else
+            {
+                if (tpAplicativos is not null && editorTabs.TabPages.Contains(tpAplicativos))
+                {
+                    editorTabs.TabPages.Remove(tpAplicativos);
+                }
+
+                if (tpSites is not null && !editorTabs.TabPages.Contains(tpSites))
+                {
+                    var insertIndex = editorTabs.TabPages.Count;
+                    if (tpJanela is not null)
+                    {
+                        var janelaIndex = editorTabs.TabPages.IndexOf(tpJanela);
+                        if (janelaIndex >= 0)
+                        {
+                            insertIndex = janelaIndex + 1;
+                        }
+                    }
+
+                    editorTabs.TabPages.Insert(Math.Min(insertIndex, editorTabs.TabPages.Count), tpSites);
+                }
+
+                if (tpSites is not null && editorTabs.TabPages.Contains(tpSites))
+                {
+                    editorTabs.SelectedTab = tpSites;
+                    tpSites.Focus();
+                }
+            }
+        }
 
         if (grpInstalledApps is not null)
         {
@@ -470,6 +536,28 @@ public partial class AppEditorForm : Form
             txtArgumentos.Enabled = isExecutable;
             txtArgumentos.ReadOnly = !isExecutable;
             txtArgumentos.TabStop = isExecutable;
+        }
+
+        if (appsTabControl is not null)
+        {
+            appsTabControl.Enabled = isExecutable;
+            appsTabControl.Visible = isExecutable;
+        }
+
+        if (tpAplicativos is not null)
+        {
+            tpAplicativos.Enabled = isExecutable;
+        }
+
+        if (tpSites is not null)
+        {
+            tpSites.Enabled = !isExecutable;
+        }
+
+        if (sitesEditorControl is not null)
+        {
+            sitesEditorControl.Enabled = !isExecutable;
+            sitesEditorControl.Visible = !isExecutable;
         }
     }
 
@@ -512,7 +600,7 @@ public partial class AppEditorForm : Form
         {
             Cursor.Current = previousCursor;
             UseWaitCursor = false;
-            ApplyAppTypeUI();
+            ApplyTypeTabs();
         }
     }
 
@@ -1081,12 +1169,12 @@ public partial class AppEditorForm : Form
 
     private void rbExe_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyAppTypeUI();
+        ApplyTypeTabs();
     }
 
     private void rbBrowser_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyAppTypeUI();
+        ApplyTypeTabs();
     }
 
     private void chkCycleRedeDisponivel_CheckedChanged(object? sender, EventArgs e)
@@ -2748,15 +2836,23 @@ public partial class AppEditorForm : Form
             errorProvider.SetError(txtId, string.Empty);
         }
 
-        if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
+        var validarExecutavel = rbExe?.Checked ?? true;
+        if (validarExecutavel)
         {
-            errorProvider.SetError(txtExecutavel, "Informe o executável." );
-            valido = false;
-        }
-        else if (!File.Exists(txtExecutavel.Text))
-        {
-            errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
-            valido = false;
+            if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
+            {
+                errorProvider.SetError(txtExecutavel, "Informe o executável." );
+                valido = false;
+            }
+            else if (!File.Exists(txtExecutavel.Text))
+            {
+                errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
+                valido = false;
+            }
+            else
+            {
+                errorProvider.SetError(txtExecutavel, string.Empty);
+            }
         }
         else
         {
