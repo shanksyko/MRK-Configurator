@@ -17,7 +17,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly PictureBox _target;
     private readonly object _gate = new();
     private readonly object _frameTimingGate = new();
-    private static readonly TimeSpan FrameThrottle = TimeSpan.FromMilliseconds(300);
+    private TimeSpan _frameThrottle = TimeSpan.FromMilliseconds(300);
     private Bitmap? _currentFrame;
     private bool _disposed;
     private Rectangle _monitorBounds;
@@ -73,6 +73,32 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Gets the rotation of the monitor in degrees when available.
     /// </summary>
     public int Rotation => _rotation;
+
+    /// <summary>
+    /// Gets or sets the minimum interval between captured frames.
+    /// </summary>
+    public TimeSpan FrameThrottle
+    {
+        get
+        {
+            lock (_frameTimingGate)
+            {
+                return _frameThrottle;
+            }
+        }
+        set
+        {
+            var sanitized = value < TimeSpan.Zero ? TimeSpan.Zero : value;
+            lock (_frameTimingGate)
+            {
+                _frameThrottle = sanitized;
+                if (_frameThrottle <= TimeSpan.Zero)
+                {
+                    _nextFrameAt = DateTime.MinValue;
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Starts the preview using GPU capture when available.
@@ -265,7 +291,13 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private bool ShouldProcessFrame()
     {
-        if (FrameThrottle <= TimeSpan.Zero)
+        TimeSpan throttle;
+        lock (_frameTimingGate)
+        {
+            throttle = _frameThrottle;
+        }
+
+        if (throttle <= TimeSpan.Zero)
         {
             return true;
         }
@@ -278,7 +310,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 return false;
             }
 
-            _nextFrameAt = now + FrameThrottle;
+            _nextFrameAt = now + throttle;
             return true;
         }
     }
