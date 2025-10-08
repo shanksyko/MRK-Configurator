@@ -304,15 +304,6 @@ public partial class AppEditorForm : Form
         _selectedMonitorInfo = option.Monitor;
         _selectedMonitorId = option.MonitorId;
         _monitorPreviewHost = new MonitorPreviewHost(option.MonitorId, picMonitorPreview);
-
-        try
-        {
-            _monitorPreviewHost.Start(preferGpu: true);
-        }
-        catch
-        {
-            // The preview is best-effort only; ignore failures.
-        }
     }
 
     private MonitorInfo? GetSelectedMonitor()

@@ -569,12 +569,10 @@ public partial class MainForm : Form
 
         _manuallyStoppedMonitors.Remove(monitorId);
 
-        if (_monitorCards.TryGetValue(monitorId, out var context))
+        if (_monitorCards.ContainsKey(monitorId))
         {
-            context.Host.Start(preferGpu: true);
+            UpdateSelectedMonitor(monitorId);
         }
-
-        UpdateSelectedMonitor(monitorId);
     }
 
     private void OnMonitorCardStopRequested(object? sender, EventArgs e)
