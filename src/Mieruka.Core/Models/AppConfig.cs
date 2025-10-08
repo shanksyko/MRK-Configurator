@@ -28,6 +28,11 @@ public sealed record class AppConfig
     public bool AutoStart { get; init; } = true;
 
     /// <summary>
+    /// Requires operator confirmation before launching the application.
+    /// </summary>
+    public bool AskBeforeLaunch { get; init; }
+
+    /// <summary>
     /// Optional environment variables applied when launching the application.
     /// </summary>
     public IDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();

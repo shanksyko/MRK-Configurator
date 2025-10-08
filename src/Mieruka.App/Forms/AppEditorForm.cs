@@ -27,6 +27,17 @@ public partial class AppEditorForm : Form
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly Color[] SimulationPalette =
+    {
+        Color.FromArgb(0x4A, 0x90, 0xE2),
+        Color.FromArgb(0x50, 0xC8, 0x8D),
+        Color.FromArgb(0xF5, 0xA6, 0x2B),
+        Color.FromArgb(0xD4, 0x6A, 0x6A),
+        Color.FromArgb(0x9B, 0x59, 0xB6),
+        Color.FromArgb(0x1A, 0xBC, 0x9C),
+        Color.FromArgb(0xE6, 0x7E, 0x22),
+        Color.FromArgb(0x2E, 0x86, 0xAB),
+    };
 
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
@@ -34,6 +45,7 @@ public partial class AppEditorForm : Form
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
     private readonly IAppRunner _appRunner;
+    private readonly List<ProgramaConfig> _profileApplications;
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
@@ -42,7 +54,8 @@ public partial class AppEditorForm : Form
         ProgramaConfig? programa = null,
         IReadOnlyList<MonitorInfo>? monitors = null,
         string? selectedMonitorId = null,
-        IAppRunner? appRunner = null)
+        IAppRunner? appRunner = null,
+        IEnumerable<ProgramaConfig>? profileApps = null)
     {
         InitializeComponent();
 
@@ -67,6 +80,7 @@ public partial class AppEditorForm : Form
         _providedMonitors = monitors;
         _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
+        _profileApplications = new List<ProgramaConfig>();
 
         RefreshMonitorSnapshot();
 
@@ -85,6 +99,7 @@ public partial class AppEditorForm : Form
 
         txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
         txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
+        txtId.TextChanged += (_, _) => InvalidateWindowPreviewOverlay();
 
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
@@ -95,6 +110,27 @@ public partial class AppEditorForm : Form
         janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
 
         chkJanelaTelaCheia.CheckedChanged += chkJanelaTelaCheia_CheckedChanged;
+        chkAutoStart.CheckedChanged += (_, _) => InvalidateWindowPreviewOverlay();
+
+        if (nudJanelaX is not null)
+        {
+            nudJanelaX.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+        }
+
+        if (nudJanelaY is not null)
+        {
+            nudJanelaY.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+        }
+
+        if (nudJanelaLargura is not null)
+        {
+            nudJanelaLargura.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+        }
+
+        if (nudJanelaAltura is not null)
+        {
+            nudJanelaAltura.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+        }
 
         AdjustMonitorPreviewWidth();
         UpdateWindowInputsState();
@@ -117,6 +153,8 @@ public partial class AppEditorForm : Form
         appsTab.ExecutablePath = txtExecutavel.Text;
         appsTab.Arguments = txtArgumentos.Text;
         UpdateExePreview();
+
+        SetProfileApplications(profileApps);
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -124,6 +162,26 @@ public partial class AppEditorForm : Form
     public BindingList<SiteConfig> ResultadoSites => new(_sites.Select(site => site with { }).ToList());
 
     public string? SelectedMonitorId => _selectedMonitorId;
+
+    public void SetProfileApplications(IEnumerable<ProgramaConfig>? apps)
+    {
+        _profileApplications.Clear();
+
+        if (apps is not null)
+        {
+            foreach (var app in apps)
+            {
+                if (app is null)
+                {
+                    continue;
+                }
+
+                _profileApplications.Add(app with { });
+            }
+        }
+
+        RebuildSimulationOverlays();
+    }
 
     private void CarregarPrograma(ProgramaConfig programa)
     {
@@ -431,6 +489,7 @@ public partial class AppEditorForm : Form
         {
             monitorPreviewDisplay?.Unbind();
             UpdateMonitorCoordinateLabel(null);
+            monitorPreviewDisplay?.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
             return;
         }
 
@@ -445,6 +504,7 @@ public partial class AppEditorForm : Form
 
         monitorPreviewDisplay?.Bind(option.Monitor);
         UpdateMonitorCoordinateLabel(null);
+        RebuildSimulationOverlays();
     }
 
     private void chkJanelaTelaCheia_CheckedChanged(object? sender, EventArgs e)
@@ -604,8 +664,211 @@ public partial class AppEditorForm : Form
 
     private void InvalidateWindowPreviewOverlay()
     {
+        RebuildSimulationOverlays();
         monitorPreviewDisplay?.Invalidate();
         monitorPreviewDisplay?.Update();
+    }
+
+    private void RebuildSimulationOverlays()
+    {
+        if (monitorPreviewDisplay is null)
+        {
+            return;
+        }
+
+        var monitor = GetSelectedMonitor();
+        if (monitor is null)
+        {
+            monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+            return;
+        }
+
+        var monitorId = MonitorIdentifier.Create(monitor);
+        if (string.IsNullOrWhiteSpace(monitorId))
+        {
+            monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+            return;
+        }
+
+        var current = ConstruirPrograma();
+        var overlayApps = new List<ProgramaConfig>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var app in _profileApplications)
+        {
+            if (app is null)
+            {
+                continue;
+            }
+
+            var candidate = app;
+            if (!string.IsNullOrWhiteSpace(current.Id) &&
+                string.Equals(app.Id, current.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                candidate = current;
+            }
+
+            if (string.IsNullOrWhiteSpace(candidate.Id) || !seen.Add(candidate.Id))
+            {
+                continue;
+            }
+
+            overlayApps.Add(candidate);
+        }
+
+        if (!string.IsNullOrWhiteSpace(current.Id))
+        {
+            if (seen.Add(current.Id))
+            {
+                overlayApps.Add(current);
+            }
+        }
+        else
+        {
+            overlayApps.Add(current);
+        }
+
+        var overlays = new List<MonitorPreviewDisplay.SimRect>();
+        var order = 1;
+
+        foreach (var app in overlayApps)
+        {
+            var isCurrent = !string.IsNullOrWhiteSpace(current.Id) &&
+                string.Equals(app.Id, current.Id, StringComparison.OrdinalIgnoreCase);
+
+            if (!app.AutoStart && !isCurrent)
+            {
+                continue;
+            }
+
+            var resolvedMonitor = ResolveMonitorForApp(app);
+            if (resolvedMonitor is null && isCurrent)
+            {
+                resolvedMonitor = monitor;
+            }
+
+            if (resolvedMonitor is null)
+            {
+                continue;
+            }
+
+            var resolvedId = MonitorIdentifier.Create(resolvedMonitor);
+            if (string.IsNullOrWhiteSpace(resolvedId) ||
+                !string.Equals(resolvedId, monitorId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var relativeBounds = CalculateMonitorRelativeBounds(app.Window, resolvedMonitor);
+            if (relativeBounds.Width <= 0 || relativeBounds.Height <= 0)
+            {
+                continue;
+            }
+
+            var baseColor = ResolveSimulationColor(app.Id);
+            var label = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
+
+            overlays.Add(new MonitorPreviewDisplay.SimRect(
+                relativeBounds,
+                Color.FromArgb(96, baseColor),
+                Color.FromArgb(220, baseColor),
+                order,
+                label ?? string.Empty,
+                app.AskBeforeLaunch));
+
+            order++;
+        }
+
+        monitorPreviewDisplay.SetSimulationRects(overlays);
+    }
+
+    private MonitorInfo? ResolveMonitorForApp(ProgramaConfig app)
+    {
+        if (!string.IsNullOrWhiteSpace(app.TargetMonitorStableId))
+        {
+            var byStableId = WindowPlacementHelper.GetMonitorByStableId(_monitors, app.TargetMonitorStableId);
+            if (byStableId is not null)
+            {
+                return byStableId;
+            }
+        }
+
+        var monitorKeyId = MonitorIdentifier.Create(app.Window.Monitor);
+        if (!string.IsNullOrWhiteSpace(monitorKeyId))
+        {
+            return WindowPlacementHelper.ResolveMonitor(null, _monitors, app.Window);
+        }
+
+        return null;
+    }
+
+    private static Rectangle CalculateMonitorRelativeBounds(WindowConfig window, MonitorInfo monitor)
+    {
+        var monitorWidth = monitor.Width > 0 ? monitor.Width : monitor.Bounds.Width;
+        var monitorHeight = monitor.Height > 0 ? monitor.Height : monitor.Bounds.Height;
+
+        if (monitorWidth <= 0 || monitorHeight <= 0)
+        {
+            return Rectangle.Empty;
+        }
+
+        if (window.FullScreen)
+        {
+            return new Rectangle(0, 0, monitorWidth, monitorHeight);
+        }
+
+        var width = window.Width ?? monitorWidth;
+        var height = window.Height ?? monitorHeight;
+        width = Math.Clamp(width, 1, monitorWidth);
+        height = Math.Clamp(height, 1, monitorHeight);
+
+        var x = window.X ?? 0;
+        var y = window.Y ?? 0;
+        x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
+        y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
+
+        var relative = new Rectangle(x, y, width, height);
+
+        var bounds = monitor.Bounds;
+        var workArea = monitor.WorkArea;
+        if (bounds.Width > 0 && bounds.Height > 0 && workArea.Width > 0 && workArea.Height > 0)
+        {
+            var absolute = new Rectangle(bounds.Left + relative.X, bounds.Top + relative.Y, relative.Width, relative.Height);
+            var clamped = DisplayUtils.ClampToWorkArea(absolute, workArea);
+            relative = new Rectangle(
+                clamped.Left - bounds.Left,
+                clamped.Top - bounds.Top,
+                clamped.Width,
+                clamped.Height);
+        }
+
+        return relative;
+    }
+
+    private static Color ResolveSimulationColor(string? id)
+    {
+        if (SimulationPalette.Length == 0)
+        {
+            return Color.DodgerBlue;
+        }
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return SimulationPalette[0];
+        }
+
+        const uint basis = 2166136261u;
+        const uint prime = 16777619u;
+        uint hash = basis;
+
+        foreach (var ch in id)
+        {
+            hash ^= char.ToUpperInvariant(ch);
+            hash *= prime;
+        }
+
+        var index = (int)(hash % (uint)SimulationPalette.Length);
+        return SimulationPalette[index];
     }
 
     private void AdjustMonitorPreviewWidth()
