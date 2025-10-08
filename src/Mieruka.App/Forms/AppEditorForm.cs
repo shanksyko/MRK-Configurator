@@ -22,6 +22,7 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Services;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
+using Logger = Serilog.Log;
 
 namespace Mieruka.App.Forms;
 
@@ -1853,6 +1854,8 @@ public partial class AppEditorForm : Form
         }
     }
 
+    partial void OnBeforeMoveWindowUI();
+
     private async void btnTestReal_Click(object? sender, EventArgs e)
     {
         if (!OperatingSystem.IsWindows())
@@ -1874,6 +1877,11 @@ public partial class AppEditorForm : Form
         var button = btnTestReal;
         if (button is not null)
         {
+            if (!button.Enabled)
+            {
+                return;
+            }
+
             button.Enabled = false;
         }
 
@@ -1882,10 +1890,14 @@ public partial class AppEditorForm : Form
             UseWaitCursor = true;
             Cursor.Current = Cursors.WaitCursor;
 
+            SuspendPreviewCapture();
+            OnBeforeMoveWindowUI();
+
             await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
+            Logger.Error("Falha no Testar app real", ex);
             MessageBox.Show(
                 this,
                 $"Não foi possível executar o aplicativo real: {ex.Message}",
@@ -1896,6 +1908,7 @@ public partial class AppEditorForm : Form
         finally
         {
             Cursor.Current = Cursors.Default;
+            SchedulePreviewResume();
             UseWaitCursor = false;
 
             if (button is not null)
