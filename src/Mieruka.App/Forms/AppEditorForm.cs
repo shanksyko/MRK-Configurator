@@ -99,6 +99,12 @@ public partial class AppEditorForm : Form
         _ = btnCycleUp ?? throw new InvalidOperationException("O botão de mover para cima do ciclo não foi carregado.");
         _ = btnCycleDown ?? throw new InvalidOperationException("O botão de mover para baixo do ciclo não foi carregado.");
 
+        _ = rbExe ?? throw new InvalidOperationException("O seletor de executável não foi carregado.");
+        _ = rbBrowser ?? throw new InvalidOperationException("O seletor de navegador não foi carregado.");
+        _ = grpInstalledApps ?? throw new InvalidOperationException("O grupo de aplicativos instalados não foi carregado.");
+        _ = lvApps ?? throw new InvalidOperationException("A lista de aplicativos instalados não foi carregada.");
+        _ = btnBrowseExe ?? throw new InvalidOperationException("O botão de procurar executáveis não foi carregado.");
+
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
         _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
@@ -203,6 +209,7 @@ public partial class AppEditorForm : Form
         UpdateExePreview();
 
         InitializeCycleSimulation();
+        ApplyAppTypeUI();
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -392,6 +399,43 @@ public partial class AppEditorForm : Form
         }
 
         RebuildSimRects();
+    }
+
+    private void ApplyAppTypeUI()
+    {
+        var isExecutable = rbExe?.Checked ?? false;
+
+        if (grpInstalledApps is not null)
+        {
+            grpInstalledApps.Visible = isExecutable;
+            grpInstalledApps.Enabled = isExecutable;
+        }
+
+        if (lvApps is not null)
+        {
+            lvApps.Visible = isExecutable;
+            lvApps.Enabled = isExecutable;
+        }
+
+        if (btnBrowseExe is not null)
+        {
+            btnBrowseExe.Visible = isExecutable;
+            btnBrowseExe.Enabled = isExecutable;
+        }
+
+        if (txtExecutavel is not null)
+        {
+            txtExecutavel.Enabled = isExecutable;
+            txtExecutavel.ReadOnly = !isExecutable;
+            txtExecutavel.TabStop = isExecutable;
+        }
+
+        if (txtArgumentos is not null)
+        {
+            txtArgumentos.Enabled = isExecutable;
+            txtArgumentos.ReadOnly = !isExecutable;
+            txtArgumentos.TabStop = isExecutable;
+        }
     }
 
     private void Sites_ListChanged(object? sender, ListChangedEventArgs e)
@@ -857,6 +901,16 @@ public partial class AppEditorForm : Form
     private void btnCycleStop_Click(object? sender, EventArgs e)
     {
         StopCycleSimulation();
+    }
+
+    private void rbExe_CheckedChanged(object? sender, EventArgs e)
+    {
+        ApplyAppTypeUI();
+    }
+
+    private void rbBrowser_CheckedChanged(object? sender, EventArgs e)
+    {
+        ApplyAppTypeUI();
     }
 
     private void chkCycleRedeDisponivel_CheckedChanged(object? sender, EventArgs e)

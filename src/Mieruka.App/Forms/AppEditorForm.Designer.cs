@@ -30,6 +30,11 @@ partial class AppEditorForm
     internal TextBox txtExecutavel = null!;
     internal TextBox txtArgumentos = null!;
     internal TextBox txtCmdPreviewExe = null!;
+    internal RadioButton rbExe = null!;
+    internal RadioButton rbBrowser = null!;
+    internal GroupBox grpInstalledApps = null!;
+    internal ListView lvApps = null!;
+    internal Button btnBrowseExe = null!;
     internal CheckBox chkAutoStart = null!;
     internal NumericUpDown nudJanelaX = null!;
     internal NumericUpDown nudJanelaY = null!;
@@ -92,6 +97,13 @@ partial class AppEditorForm
         var lblCmdPreviewExe = new Label();
         txtCmdPreviewExe = new TextBox();
         chkAutoStart = new CheckBox();
+        rbExe = new RadioButton();
+        rbBrowser = new RadioButton();
+        grpInstalledApps = new GroupBox();
+        lvApps = new ListView();
+        btnBrowseExe = new Button();
+        var flowAppType = new FlowLayoutPanel();
+        var tlpExecutavel = new TableLayoutPanel();
         var tlpJanela = new TableLayoutPanel();
         tlpMonitorPreview = new TableLayoutPanel();
         var lblMonitor = new Label();
@@ -122,6 +134,9 @@ partial class AppEditorForm
         var lblAvancado = new Label();
         errorProvider = new ErrorProvider(components);
         cycleToolTip = new ToolTip(components);
+        grpInstalledApps.SuspendLayout();
+        tlpExecutavel.SuspendLayout();
+        flowAppType.SuspendLayout();
         ((ISupportInitialize)bsCycle).BeginInit();
         ((ISupportInitialize)dgvCycle).BeginInit();
         tabEditor.SuspendLayout();
@@ -201,22 +216,28 @@ partial class AppEditorForm
         tlpGeral.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tlpGeral.Controls.Add(lblId, 0, 0);
         tlpGeral.Controls.Add(txtId, 1, 0);
-        tlpGeral.Controls.Add(lblExecutavel, 0, 1);
-        tlpGeral.Controls.Add(txtExecutavel, 1, 1);
-        tlpGeral.Controls.Add(lblArgumentos, 0, 2);
-        tlpGeral.Controls.Add(txtArgumentos, 1, 2);
-        tlpGeral.Controls.Add(lblCmdPreviewExe, 0, 3);
-        tlpGeral.Controls.Add(txtCmdPreviewExe, 1, 3);
-        tlpGeral.Controls.Add(chkAutoStart, 1, 4);
+        tlpGeral.Controls.Add(flowAppType, 0, 1);
+        tlpGeral.Controls.Add(grpInstalledApps, 0, 2);
+        tlpGeral.Controls.Add(lblExecutavel, 0, 3);
+        tlpGeral.Controls.Add(tlpExecutavel, 1, 3);
+        tlpGeral.Controls.Add(lblArgumentos, 0, 4);
+        tlpGeral.Controls.Add(txtArgumentos, 1, 4);
+        tlpGeral.Controls.Add(lblCmdPreviewExe, 0, 5);
+        tlpGeral.Controls.Add(txtCmdPreviewExe, 1, 5);
+        tlpGeral.Controls.Add(chkAutoStart, 1, 6);
+        tlpGeral.SetColumnSpan(flowAppType, 2);
+        tlpGeral.SetColumnSpan(grpInstalledApps, 2);
         tlpGeral.Dock = DockStyle.Fill;
         tlpGeral.Location = new System.Drawing.Point(8, 8);
         tlpGeral.Margin = new Padding(0);
         tlpGeral.Name = "tlpGeral";
         tlpGeral.Padding = new Padding(0, 0, 0, 8);
-        tlpGeral.RowCount = 5;
+        tlpGeral.RowCount = 7;
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
+        tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.Size = new System.Drawing.Size(1016, 604);
@@ -239,24 +260,119 @@ partial class AppEditorForm
         txtId.Size = new System.Drawing.Size(1016, 23);
         txtId.TabIndex = 1;
         //
+        // flowAppType
+        //
+        flowAppType.AutoSize = true;
+        flowAppType.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        flowAppType.Dock = DockStyle.Fill;
+        flowAppType.FlowDirection = FlowDirection.LeftToRight;
+        flowAppType.Location = new System.Drawing.Point(0, 31);
+        flowAppType.Margin = new Padding(0, 0, 0, 8);
+        flowAppType.Name = "flowAppType";
+        flowAppType.Size = new System.Drawing.Size(1016, 27);
+        flowAppType.TabIndex = 2;
+        flowAppType.WrapContents = false;
+        flowAppType.Controls.Add(rbExe);
+        flowAppType.Controls.Add(rbBrowser);
+        //
+        // rbExe
+        //
+        rbExe.AutoSize = true;
+        rbExe.Checked = true;
+        rbExe.Margin = new Padding(0, 0, 16, 0);
+        rbExe.Name = "rbExe";
+        rbExe.Size = new System.Drawing.Size(83, 19);
+        rbExe.TabIndex = 0;
+        rbExe.TabStop = true;
+        rbExe.Text = "Executável";
+        rbExe.UseVisualStyleBackColor = true;
+        rbExe.CheckedChanged += rbExe_CheckedChanged;
+        //
+        // rbBrowser
+        //
+        rbBrowser.AutoSize = true;
+        rbBrowser.Margin = new Padding(0);
+        rbBrowser.Name = "rbBrowser";
+        rbBrowser.Size = new System.Drawing.Size(73, 19);
+        rbBrowser.TabIndex = 1;
+        rbBrowser.Text = "Navegador";
+        rbBrowser.UseVisualStyleBackColor = true;
+        rbBrowser.CheckedChanged += rbBrowser_CheckedChanged;
+        //
+        // grpInstalledApps
+        //
+        grpInstalledApps.Controls.Add(lvApps);
+        grpInstalledApps.Dock = DockStyle.Fill;
+        grpInstalledApps.Location = new System.Drawing.Point(0, 66);
+        grpInstalledApps.Margin = new Padding(0, 0, 0, 8);
+        grpInstalledApps.Name = "grpInstalledApps";
+        grpInstalledApps.Padding = new Padding(8);
+        grpInstalledApps.Size = new System.Drawing.Size(1016, 209);
+        grpInstalledApps.TabIndex = 3;
+        grpInstalledApps.TabStop = false;
+        grpInstalledApps.Text = "Aplicativos instalados";
+        //
+        // lvApps
+        //
+        lvApps.BackColor = System.Drawing.SystemColors.Window;
+        lvApps.Dock = DockStyle.Fill;
+        lvApps.ForeColor = System.Drawing.SystemColors.WindowText;
+        lvApps.FullRowSelect = true;
+        lvApps.HideSelection = false;
+        lvApps.Location = new System.Drawing.Point(8, 24);
+        lvApps.Margin = new Padding(0);
+        lvApps.Name = "lvApps";
+        lvApps.OwnerDraw = false;
+        lvApps.Size = new System.Drawing.Size(1000, 177);
+        lvApps.TabIndex = 0;
+        lvApps.UseCompatibleStateImageBehavior = false;
+        lvApps.View = View.Details;
+        //
         // lblExecutavel
         //
         lblExecutavel.AutoSize = true;
         lblExecutavel.Margin = new Padding(0, 0, 8, 8);
         lblExecutavel.Name = "lblExecutavel";
         lblExecutavel.Size = new System.Drawing.Size(66, 15);
-        lblExecutavel.TabIndex = 2;
+        lblExecutavel.TabIndex = 4;
         lblExecutavel.Text = "Executável";
+        //
+        // tlpExecutavel
+        //
+        tlpExecutavel.ColumnCount = 2;
+        tlpExecutavel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpExecutavel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpExecutavel.Controls.Add(txtExecutavel, 0, 0);
+        tlpExecutavel.Controls.Add(btnBrowseExe, 1, 0);
+        tlpExecutavel.Dock = DockStyle.Fill;
+        tlpExecutavel.Location = new System.Drawing.Point(74, 283);
+        tlpExecutavel.Margin = new Padding(0, 0, 0, 8);
+        tlpExecutavel.Name = "tlpExecutavel";
+        tlpExecutavel.RowCount = 1;
+        tlpExecutavel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpExecutavel.Size = new System.Drawing.Size(942, 31);
+        tlpExecutavel.TabIndex = 5;
         //
         // txtExecutavel
         //
         txtExecutavel.Dock = DockStyle.Fill;
-        txtExecutavel.Margin = new Padding(0, 0, 0, 8);
+        txtExecutavel.Margin = new Padding(0);
         txtExecutavel.Name = "txtExecutavel";
-        txtExecutavel.Size = new System.Drawing.Size(1016, 23);
-        txtExecutavel.TabIndex = 3;
         txtExecutavel.ReadOnly = true;
+        txtExecutavel.Size = new System.Drawing.Size(842, 23);
+        txtExecutavel.TabIndex = 0;
         txtExecutavel.TabStop = false;
+        //
+        // btnBrowseExe
+        //
+        btnBrowseExe.AutoSize = true;
+        btnBrowseExe.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnBrowseExe.Margin = new Padding(8, 0, 0, 0);
+        btnBrowseExe.Name = "btnBrowseExe";
+        btnBrowseExe.Size = new System.Drawing.Size(80, 25);
+        btnBrowseExe.TabIndex = 1;
+        btnBrowseExe.Text = "Procurar...";
+        btnBrowseExe.UseVisualStyleBackColor = true;
         //
         // lblArgumentos
         //
@@ -264,7 +380,7 @@ partial class AppEditorForm
         lblArgumentos.Margin = new Padding(0, 0, 8, 8);
         lblArgumentos.Name = "lblArgumentos";
         lblArgumentos.Size = new System.Drawing.Size(73, 15);
-        lblArgumentos.TabIndex = 4;
+        lblArgumentos.TabIndex = 6;
         lblArgumentos.Text = "Argumentos";
         //
         // txtArgumentos
@@ -274,8 +390,8 @@ partial class AppEditorForm
         txtArgumentos.Multiline = true;
         txtArgumentos.Name = "txtArgumentos";
         txtArgumentos.ScrollBars = ScrollBars.Vertical;
-        txtArgumentos.Size = new System.Drawing.Size(1016, 441);
-        txtArgumentos.TabIndex = 5;
+        txtArgumentos.Size = new System.Drawing.Size(942, 347);
+        txtArgumentos.TabIndex = 7;
         txtArgumentos.ReadOnly = true;
         txtArgumentos.TabStop = false;
         //
@@ -285,7 +401,7 @@ partial class AppEditorForm
         lblCmdPreviewExe.Margin = new Padding(0, 0, 8, 8);
         lblCmdPreviewExe.Name = "lblCmdPreviewExe";
         lblCmdPreviewExe.Size = new System.Drawing.Size(123, 15);
-        lblCmdPreviewExe.TabIndex = 6;
+        lblCmdPreviewExe.TabIndex = 8;
         lblCmdPreviewExe.Text = "Linha de comando";
         //
         // txtCmdPreviewExe
@@ -296,8 +412,8 @@ partial class AppEditorForm
         txtCmdPreviewExe.Name = "txtCmdPreviewExe";
         txtCmdPreviewExe.ReadOnly = true;
         txtCmdPreviewExe.ScrollBars = ScrollBars.Vertical;
-        txtCmdPreviewExe.Size = new System.Drawing.Size(1016, 104);
-        txtCmdPreviewExe.TabIndex = 7;
+        txtCmdPreviewExe.Size = new System.Drawing.Size(942, 96);
+        txtCmdPreviewExe.TabIndex = 9;
         txtCmdPreviewExe.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9F);
         //
         // chkAutoStart
@@ -306,7 +422,7 @@ partial class AppEditorForm
         chkAutoStart.Margin = new Padding(0, 0, 0, 8);
         chkAutoStart.Name = "chkAutoStart";
         chkAutoStart.Size = new System.Drawing.Size(127, 19);
-        chkAutoStart.TabIndex = 6;
+        chkAutoStart.TabIndex = 10;
         chkAutoStart.Text = "Executar ao iniciar";
         chkAutoStart.UseVisualStyleBackColor = true;
         //
@@ -867,6 +983,11 @@ partial class AppEditorForm
         painelRodape.PerformLayout();
         tlpGeral.ResumeLayout(false);
         tlpGeral.PerformLayout();
+        grpInstalledApps.ResumeLayout(false);
+        tlpExecutavel.ResumeLayout(false);
+        tlpExecutavel.PerformLayout();
+        flowAppType.ResumeLayout(false);
+        flowAppType.PerformLayout();
         tlpJanela.ResumeLayout(false);
         tlpJanela.PerformLayout();
         tlpMonitorPreview.ResumeLayout(false);
