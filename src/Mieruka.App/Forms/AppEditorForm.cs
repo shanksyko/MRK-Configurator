@@ -854,6 +854,9 @@ public partial class AppEditorForm : Form
 
         try
         {
+            UseWaitCursor = true;
+            Cursor.Current = Cursors.WaitCursor;
+
             await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -867,6 +870,9 @@ public partial class AppEditorForm : Form
         }
         finally
         {
+            Cursor.Current = Cursors.Default;
+            UseWaitCursor = false;
+
             if (button is not null)
             {
                 button.Enabled = true;
@@ -1239,7 +1245,18 @@ public partial class AppEditorForm : Form
         {
             if (hasExecutable)
             {
-                await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
+                UseWaitCursor = true;
+                Cursor.Current = Cursors.WaitCursor;
+
+                try
+                {
+                    await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
+                }
+                finally
+                {
+                    Cursor.Current = Cursors.Default;
+                    UseWaitCursor = false;
+                }
             }
             else
             {
