@@ -16,6 +16,8 @@ public sealed class MonitorPreviewHost : IDisposable
 {
     private readonly PictureBox _target;
     private readonly object _gate = new();
+    private readonly object _frameTimingGate = new();
+    private static readonly TimeSpan FrameThrottle = TimeSpan.FromMilliseconds(250);
     private Bitmap? _currentFrame;
     private bool _disposed;
     private Rectangle _monitorBounds;
@@ -23,6 +25,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
+    private DateTime _nextFrameAt;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
@@ -166,6 +169,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
+        if (!ShouldProcessFrame())
+        {
+            e.Dispose();
+            return;
+        }
+
         Bitmap? clone = null;
         try
         {
@@ -226,6 +235,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             _currentFrame?.Dispose();
             _currentFrame = null;
+            ResetFrameThrottle();
             return;
         }
 
@@ -250,6 +260,35 @@ public sealed class MonitorPreviewHost : IDisposable
 
         _currentFrame?.Dispose();
         _currentFrame = null;
+        ResetFrameThrottle();
+    }
+
+    private bool ShouldProcessFrame()
+    {
+        if (FrameThrottle <= TimeSpan.Zero)
+        {
+            return true;
+        }
+
+        var now = DateTime.UtcNow;
+        lock (_frameTimingGate)
+        {
+            if (now < _nextFrameAt)
+            {
+                return false;
+            }
+
+            _nextFrameAt = now + FrameThrottle;
+            return true;
+        }
+    }
+
+    private void ResetFrameThrottle()
+    {
+        lock (_frameTimingGate)
+        {
+            _nextFrameAt = DateTime.MinValue;
+        }
     }
 
     private static void SafeDispose(IMonitorCapture capture)
