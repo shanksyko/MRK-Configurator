@@ -17,7 +17,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly PictureBox _target;
     private readonly object _gate = new();
     private readonly object _frameTimingGate = new();
-    private static readonly TimeSpan FrameThrottle = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan FrameThrottle = TimeSpan.FromMilliseconds(300);
     private Bitmap? _currentFrame;
     private bool _disposed;
     private Rectangle _monitorBounds;

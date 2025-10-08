@@ -567,8 +567,6 @@ public partial class MainForm : Form
             return;
         }
 
-        _manuallyStoppedMonitors.Remove(monitorId);
-
         if (_monitorCards.ContainsKey(monitorId))
         {
             UpdateSelectedMonitor(monitorId);
@@ -585,6 +583,7 @@ public partial class MainForm : Form
         if (_monitorCards.TryGetValue(monitorId, out var context))
         {
             context.Host.Stop();
+            context.CloseTestWindow();
         }
 
         _manuallyStoppedMonitors.Add(monitorId);
@@ -604,8 +603,14 @@ public partial class MainForm : Form
 
         try
         {
-            var preview = new PreviewForm(new[] { context.Monitor });
-            preview.Show(this);
+            _manuallyStoppedMonitors.Remove(monitorId);
+
+            if (context.Host.Capture is null)
+            {
+                context.Host.Start(preferGpu: true);
+            }
+
+            ShowMonitorTestWindow(context);
         }
         catch (Exception ex)
         {
@@ -616,6 +621,108 @@ public partial class MainForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
+    }
+
+    private void ShowMonitorTestWindow(MonitorCardContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var displayName = LayoutHelpers.GetMonitorDisplayName(context.Monitor);
+        var bounds = ResolveMonitorTestArea(context);
+
+        if (context.TestWindow is not MonitorTestForm window || window.IsDisposed)
+        {
+            window = new MonitorTestForm(displayName);
+            context.SetTestWindow(window);
+            window.Bounds = bounds;
+            window.Show(this);
+            return;
+        }
+
+        window.UpdateMonitorName(displayName);
+        window.Bounds = bounds;
+
+        if (window.WindowState == FormWindowState.Minimized)
+        {
+            window.WindowState = FormWindowState.Normal;
+        }
+
+        window.Activate();
+    }
+
+    private Rectangle ResolveMonitorTestArea(MonitorCardContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var candidates = new[]
+        {
+            NormalizeRectangle(context.Host.MonitorWorkArea),
+            NormalizeRectangle(context.Monitor.WorkArea),
+            NormalizeRectangle(context.Host.MonitorBounds),
+            NormalizeRectangle(context.Monitor.Bounds),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (!candidate.IsEmpty)
+            {
+                return candidate;
+            }
+        }
+
+        var screen = FindScreenForMonitor(context);
+        if (screen is not null)
+        {
+            var working = NormalizeRectangle(screen.WorkingArea);
+            if (!working.IsEmpty)
+            {
+                return working;
+            }
+
+            var bounds = NormalizeRectangle(screen.Bounds);
+            if (!bounds.IsEmpty)
+            {
+                return bounds;
+            }
+        }
+
+        var fallbackLocation = Screen.PrimaryScreen?.WorkingArea.Location ?? new Point(100, 100);
+        const int fallbackWidth = 800;
+        const int fallbackHeight = 600;
+        return new Rectangle(fallbackLocation, new Size(fallbackWidth, fallbackHeight));
+    }
+
+    private static Rectangle NormalizeRectangle(Rectangle rectangle)
+    {
+        if (rectangle.Width <= 0 || rectangle.Height <= 0)
+        {
+            return Rectangle.Empty;
+        }
+
+        return rectangle;
+    }
+
+    private static Screen? FindScreenForMonitor(MonitorCardContext context)
+    {
+        if (!string.IsNullOrWhiteSpace(context.Monitor.DeviceName))
+        {
+            var byDevice = Screen.AllScreens.FirstOrDefault(screen =>
+                string.Equals(screen.DeviceName, context.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase));
+            if (byDevice is not null)
+            {
+                return byDevice;
+            }
+        }
+
+        foreach (var screen in Screen.AllScreens)
+        {
+            if (screen.Bounds == context.Monitor.Bounds || screen.WorkingArea == context.Monitor.WorkArea)
+            {
+                return screen;
+            }
+        }
+
+        return Screen.AllScreens.FirstOrDefault();
     }
 
     private void UpdateSelectedMonitor(string? monitorId, bool notify = true)
@@ -646,9 +753,16 @@ public partial class MainForm : Form
             var isSelected = SelectedMonitorId is not null &&
                 string.Equals(context.MonitorId, SelectedMonitorId, StringComparison.OrdinalIgnoreCase);
 
-            context.Card.BackColor = isSelected
-                ? System.Drawing.SystemColors.GradientInactiveCaption
-                : System.Drawing.SystemColors.Control;
+            if (context.Card is Forms.Controls.MonitorCardPanel monitorCard)
+            {
+                monitorCard.Selected = isSelected;
+            }
+            else
+            {
+                context.Card.BackColor = isSelected
+                    ? System.Drawing.SystemColors.GradientInactiveCaption
+                    : System.Drawing.SystemColors.Control;
+            }
         }
     }
 
@@ -693,6 +807,11 @@ public partial class MainForm : Form
 
     private void DisposeMonitorCards()
     {
+        foreach (var context in _monitorCardOrder)
+        {
+            context.CloseTestWindow();
+        }
+
         foreach (var host in _monitorHosts)
         {
             host.Dispose();
@@ -1552,6 +1671,55 @@ public partial class MainForm : Form
         public Panel Card { get; }
 
         public MonitorPreviewHost Host { get; }
+
+        public MonitorTestForm? TestWindow { get; private set; }
+
+        public void SetTestWindow(MonitorTestForm window)
+        {
+            ArgumentNullException.ThrowIfNull(window);
+
+            if (ReferenceEquals(TestWindow, window))
+            {
+                return;
+            }
+
+            CloseTestWindow();
+
+            TestWindow = window;
+            TestWindow.FormClosed += OnTestWindowClosed;
+        }
+
+        public void CloseTestWindow()
+        {
+            if (TestWindow is not { IsDisposed: false } window)
+            {
+                TestWindow = null;
+                return;
+            }
+
+            TestWindow = null;
+            window.FormClosed -= OnTestWindowClosed;
+
+            try
+            {
+                window.Close();
+            }
+            catch
+            {
+                // Ignorar falhas ao fechar a janela de teste.
+            }
+        }
+
+        private void OnTestWindowClosed(object? sender, FormClosedEventArgs e)
+        {
+            if (sender is not MonitorTestForm window || !ReferenceEquals(window, TestWindow))
+            {
+                return;
+            }
+
+            window.FormClosed -= OnTestWindowClosed;
+            TestWindow = null;
+        }
     }
 
     private sealed class NoOpComponent : IOrchestrationComponent
