@@ -27,6 +27,8 @@ public sealed class ProfileExecutor : IDisposable
     private readonly IDisplayService? _displayService;
     private readonly bool _ownsDisplayService;
     private readonly TimeSpan _windowTimeout;
+    private readonly INetworkAvailabilityService _networkAvailabilityService;
+    private readonly IDialogHost _dialogHost;
 
     private CancellationTokenSource? _executionCts;
     private Task? _executionTask;
@@ -37,7 +39,11 @@ public sealed class ProfileExecutor : IDisposable
     /// </summary>
     /// <param name="windowTimeout">Optional timeout applied when waiting for application windows.</param>
     /// <param name="displayService">Display service used to query monitor metadata.</param>
-    public ProfileExecutor(TimeSpan? windowTimeout = null, IDisplayService? displayService = null)
+    public ProfileExecutor(
+        TimeSpan? windowTimeout = null,
+        IDisplayService? displayService = null,
+        INetworkAvailabilityService? networkAvailabilityService = null,
+        IDialogHost? dialogHost = null)
     {
         _windowTimeout = windowTimeout ?? DefaultWindowTimeout;
 
@@ -46,6 +52,9 @@ public sealed class ProfileExecutor : IDisposable
             _displayService = displayService ?? new DisplayService();
             _ownsDisplayService = displayService is null;
         }
+
+        _networkAvailabilityService = networkAvailabilityService ?? new NetworkAvailabilityService();
+        _dialogHost = dialogHost ?? NullDialogHost.Instance;
     }
 
     /// <summary>
@@ -162,10 +171,28 @@ public sealed class ProfileExecutor : IDisposable
     {
         var monitorSnapshot = CaptureMonitorSnapshot();
 
-        foreach (var app in profile.Applications)
+        var orderedApps = profile
+            .Applications
+            .Select((application, index) => (application, index))
+            .OrderBy(tuple => tuple.application.Order)
+            .ThenBy(tuple => tuple.index)
+            .Select(tuple => tuple.application);
+
+        foreach (var app in orderedApps)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!await ShouldLaunchApplicationAsync(profile, app, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
+
             await LaunchAndPositionAppAsync(profile, app, monitorSnapshot, cancellationToken).ConfigureAwait(false);
+
+            if (app.DelayMs > 0)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(app.DelayMs), cancellationToken).ConfigureAwait(false);
+            }
         }
 
         foreach (var window in profile.Windows)
@@ -173,6 +200,66 @@ public sealed class ProfileExecutor : IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             ApplyStandaloneWindow(profile, window, monitorSnapshot);
         }
+    }
+
+    private async Task<bool> ShouldLaunchApplicationAsync(
+        ProfileConfig profile,
+        AppConfig app,
+        CancellationToken cancellationToken)
+    {
+        if (app.RequiresNetwork)
+        {
+            var isAvailable = true;
+
+            try
+            {
+                isAvailable = _networkAvailabilityService.IsNetworkAvailable();
+            }
+            catch (Exception ex)
+            {
+                Failed?.Invoke(this, new ProfileExecutionFailedEventArgs(profile, app, null, ex));
+                return false;
+            }
+
+            if (!isAvailable)
+            {
+                var exception = new InvalidOperationException($"Rede indisponível para '{app.Id}'.");
+                Failed?.Invoke(this, new ProfileExecutionFailedEventArgs(profile, app, null, exception));
+                return false;
+            }
+        }
+
+        if (app.AskBeforeLaunch)
+        {
+            bool shouldLaunch;
+            try
+            {
+                shouldLaunch = await _dialogHost
+                    .ShowConfirmationAsync(
+                        "Confirmação",
+                        $"Deseja iniciar '{app.Id}' agora?",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Failed?.Invoke(this, new ProfileExecutionFailedEventArgs(profile, app, null, ex));
+                return false;
+            }
+
+            if (!shouldLaunch)
+            {
+                var exception = new InvalidOperationException($"A execução de '{app.Id}' foi ignorada pelo operador.");
+                Failed?.Invoke(this, new ProfileExecutionFailedEventArgs(profile, app, null, exception));
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private IReadOnlyList<MonitorInfo> CaptureMonitorSnapshot()

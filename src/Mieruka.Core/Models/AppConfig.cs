@@ -13,6 +13,11 @@ public sealed record class AppConfig
     public string Id { get; init; } = string.Empty;
 
     /// <summary>
+    /// Ordering hint used to control the activation sequence.
+    /// </summary>
+    public int Order { get; init; }
+
+    /// <summary>
     /// Path to the executable.
     /// </summary>
     public string ExecutablePath { get; init; } = string.Empty;
@@ -28,24 +33,19 @@ public sealed record class AppConfig
     public bool AutoStart { get; init; } = true;
 
     /// <summary>
-    /// Determines the execution order within a launch profile.
-    /// </summary>
-    public int Order { get; init; }
-
-    /// <summary>
-    /// Optional delay applied before launching the application, in milliseconds.
-    /// </summary>
-    public int DelayMs { get; init; }
-
-    /// <summary>
-    /// When <see langword="true"/>, asks for confirmation before launching the application.
+    /// Indicates whether the executor should prompt before launching the application.
     /// </summary>
     public bool AskBeforeLaunch { get; init; }
 
     /// <summary>
-    /// Optional override indicating whether network connectivity is required before launch.
+    /// Indicates whether the application requires network connectivity to be launched.
     /// </summary>
-    public bool? NetworkRequired { get; init; }
+    public bool RequiresNetwork { get; init; }
+
+    /// <summary>
+    /// Optional delay applied after launching the application before continuing with the next entry.
+    /// </summary>
+    public int DelayMs { get; init; }
 
     /// <summary>
     /// Optional environment variables applied when launching the application.

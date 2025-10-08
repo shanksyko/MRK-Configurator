@@ -1434,7 +1434,12 @@ public partial class MainForm : Form
 
     private ProfileExecutor CreateProfileExecutor()
     {
-        var executor = new ProfileExecutor();
+        var networkService = new NetworkAvailabilityService();
+        var dialogHost = new WinFormsDialogHost(this);
+        var executor = new ProfileExecutor(
+            displayService: _displayService,
+            networkAvailabilityService: networkService,
+            dialogHost: dialogHost);
         executor.AppStarted += ProfileExecutor_AppStarted;
         executor.AppPositioned += ProfileExecutor_AppPositioned;
         executor.Completed += ProfileExecutor_Completed;
