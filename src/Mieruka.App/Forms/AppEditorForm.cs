@@ -82,7 +82,7 @@ public partial class AppEditorForm : Form
     private CancellationTokenSource? _hoverThrottleCts;
     private readonly IInstalledAppsProvider _installedAppsProvider = new RegistryInstalledAppsProvider();
     private readonly List<InstalledAppInfo> _allApps = new();
-    private readonly Label _installedAppsStatusLabel;
+    private readonly Label _installedAppsStatusLabel = new();
     private TextBox? _installedAppsSearchBox;
     private bool _installedAppsLoaded;
 
@@ -224,16 +224,14 @@ public partial class AppEditorForm : Form
 
     private void ConfigureInstalledAppsSection(ListView installedAppsList)
     {
-        _installedAppsStatusLabel = new Label
-        {
-            Dock = DockStyle.Bottom,
-            Height = 20,
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = SystemColors.GrayText,
-            Padding = new Padding(0, 4, 0, 0),
-            Visible = false,
-        };
-        grpInstalledApps.Controls.Add(_installedAppsStatusLabel);
+        var statusLabel = _installedAppsStatusLabel;
+        statusLabel.Dock = DockStyle.Bottom;
+        statusLabel.Height = 20;
+        statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        statusLabel.ForeColor = SystemColors.GrayText;
+        statusLabel.Padding = new Padding(0, 4, 0, 0);
+        statusLabel.Visible = false;
+        grpInstalledApps.Controls.Add(statusLabel);
 
         _installedAppsSearchBox = new TextBox
         {
