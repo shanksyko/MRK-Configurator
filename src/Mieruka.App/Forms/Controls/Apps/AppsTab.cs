@@ -24,6 +24,7 @@ public sealed class AppsTab : UserControl
     private readonly TextBox _txtPreview;
     private readonly BindingList<InstalledAppInfo> _allApps = new();
     private readonly BindingList<InstalledAppInfo> _filteredApps = new();
+    private bool _suppressSelectionNotifications;
     private string _currentExecutablePath = string.Empty;
     private InstalledAppInfo? _selectedApp;
 
@@ -239,16 +240,83 @@ public sealed class AppsTab : UserControl
 
     private void Populate(IReadOnlyList<InstalledAppInfo> apps)
     {
-        _allApps.Clear();
-        foreach (var app in apps)
+        _suppressSelectionNotifications = true;
+        try
         {
-            _allApps.Add(app);
-        }
+            _allApps.Clear();
+            foreach (var app in apps)
+            {
+                _allApps.Add(app);
+            }
 
-        ApplyFilter();
+            ApplyFilterCore();
+            ClearGridSelection();
+        }
+        finally
+        {
+            _suppressSelectionNotifications = false;
+        }
     }
 
     private void ApplyFilter()
+    {
+        _suppressSelectionNotifications = true;
+        try
+        {
+            ApplyFilterCore();
+            ClearGridSelection();
+        }
+        finally
+        {
+            _suppressSelectionNotifications = false;
+        }
+    }
+
+    private void NotifySelection()
+    {
+        if (_suppressSelectionNotifications)
+        {
+            return;
+        }
+
+        if (_grid.CurrentRow?.DataBoundItem is InstalledAppInfo app)
+        {
+            _selectedApp = app;
+            ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(app.Name, app.ExecutablePath, app));
+        }
+    }
+
+    private void ApplySelection()
+    {
+        if (_suppressSelectionNotifications)
+        {
+            return;
+        }
+
+        if (_grid.CurrentRow?.DataBoundItem is InstalledAppInfo app)
+        {
+            _selectedApp = app;
+            ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(app.Name, app.ExecutablePath, app));
+        }
+    }
+
+    private void ClearSelection()
+    {
+        _suppressSelectionNotifications = true;
+        try
+        {
+            ClearGridSelection();
+        }
+        finally
+        {
+            _suppressSelectionNotifications = false;
+        }
+
+        _selectedApp = null;
+        ExecutableCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ApplyFilterCore()
     {
         var term = _txtSearch.Text?.Trim();
         IEnumerable<InstalledAppInfo> filtered = _allApps;
@@ -271,28 +339,15 @@ public sealed class AppsTab : UserControl
         _filteredApps.ResetBindings();
     }
 
-    private void NotifySelection()
+    private void ClearGridSelection()
     {
-        if (_grid.CurrentRow?.DataBoundItem is InstalledAppInfo app)
+        if (_grid.IsDisposed)
         {
-            _selectedApp = app;
-            ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(app.Name, app.ExecutablePath, app));
+            return;
         }
-    }
 
-    private void ApplySelection()
-    {
-        if (_grid.CurrentRow?.DataBoundItem is InstalledAppInfo app)
-        {
-            _selectedApp = app;
-            ExecutableChosen?.Invoke(this, new AppSelectionEventArgs(app.Name, app.ExecutablePath, app));
-        }
-    }
-
-    private void ClearSelection()
-    {
-        _selectedApp = null;
-        ExecutableCleared?.Invoke(this, EventArgs.Empty);
+        _grid.ClearSelection();
+        _grid.CurrentCell = null;
     }
 
     private void FocusArgs()
@@ -346,6 +401,16 @@ public sealed class AppsTab : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
+        }
+
+        _suppressSelectionNotifications = true;
+        try
+        {
+            ClearGridSelection();
+        }
+        finally
+        {
+            _suppressSelectionNotifications = false;
         }
 
         _selectedApp = null;
