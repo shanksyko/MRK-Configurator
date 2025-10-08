@@ -33,6 +33,8 @@ partial class AppEditorForm
     internal CheckBox chkJanelaTelaCheia = null!;
     internal ComboBox cboMonitores = null!;
     internal PictureBox picMonitorPreview = null!;
+    internal TableLayoutPanel tlpMonitorPreview = null!;
+    internal Label lblMonitorCoordinates = null!;
     internal ErrorProvider errorProvider = null!;
 
     protected override void Dispose(bool disposing)
@@ -74,6 +76,7 @@ partial class AppEditorForm
         txtCmdPreviewExe = new TextBox();
         chkAutoStart = new CheckBox();
         var tlpJanela = new TableLayoutPanel();
+        tlpMonitorPreview = new TableLayoutPanel();
         var lblMonitor = new Label();
         cboMonitores = new ComboBox();
         picMonitorPreview = new PictureBox();
@@ -85,6 +88,7 @@ partial class AppEditorForm
         var lblLargura = new Label();
         nudJanelaLargura = new NumericUpDown();
         var lblAltura = new Label();
+        lblMonitorCoordinates = new Label();
         nudJanelaAltura = new NumericUpDown();
         var lblCiclo = new Label();
         var lblAvancado = new Label();
@@ -99,6 +103,7 @@ partial class AppEditorForm
         painelRodape.SuspendLayout();
         tlpGeral.SuspendLayout();
         tlpJanela.SuspendLayout();
+        tlpMonitorPreview.SuspendLayout();
         ((ISupportInitialize)picMonitorPreview).BeginInit();
         ((ISupportInitialize)nudJanelaX).BeginInit();
         ((ISupportInitialize)nudJanelaY).BeginInit();
@@ -272,6 +277,7 @@ partial class AppEditorForm
         //
         // tpJanela
         //
+        tpJanela.Controls.Add(tlpMonitorPreview);
         tpJanela.Controls.Add(tlpJanela);
         tpJanela.Location = new System.Drawing.Point(4, 24);
         tpJanela.Margin = new Padding(8);
@@ -284,13 +290,11 @@ partial class AppEditorForm
         //
         // tlpJanela
         //
-        tlpJanela.ColumnCount = 3;
+        tlpJanela.ColumnCount = 2;
         tlpJanela.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         tlpJanela.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tlpJanela.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220F));
         tlpJanela.Controls.Add(lblMonitor, 0, 0);
         tlpJanela.Controls.Add(cboMonitores, 1, 0);
-        tlpJanela.Controls.Add(picMonitorPreview, 2, 0);
         tlpJanela.Controls.Add(chkJanelaTelaCheia, 0, 1);
         tlpJanela.SetColumnSpan(chkJanelaTelaCheia, 2);
         tlpJanela.Controls.Add(lblX, 0, 2);
@@ -302,7 +306,6 @@ partial class AppEditorForm
         tlpJanela.Controls.Add(lblAltura, 0, 5);
         tlpJanela.Controls.Add(nudJanelaAltura, 1, 5);
         tlpJanela.Controls.Add(btnTestarJanela, 1, 6);
-        tlpJanela.SetRowSpan(picMonitorPreview, 7);
         tlpJanela.Dock = DockStyle.Fill;
         tlpJanela.Location = new System.Drawing.Point(8, 8);
         tlpJanela.Margin = new Padding(0);
@@ -333,22 +336,53 @@ partial class AppEditorForm
         cboMonitores.Dock = DockStyle.Fill;
         cboMonitores.DropDownStyle = ComboBoxStyle.DropDownList;
         cboMonitores.FormattingEnabled = true;
-        cboMonitores.Margin = new Padding(0, 0, 8, 8);
+        cboMonitores.Margin = new Padding(0, 0, 0, 8);
         cboMonitores.Name = "cboMonitores";
         cboMonitores.Size = new System.Drawing.Size(768, 23);
         cboMonitores.TabIndex = 0;
         //
+        // tlpMonitorPreview
+        //
+        tlpMonitorPreview.ColumnCount = 1;
+        tlpMonitorPreview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpMonitorPreview.Controls.Add(picMonitorPreview, 0, 0);
+        tlpMonitorPreview.Controls.Add(lblMonitorCoordinates, 0, 1);
+        tlpMonitorPreview.Dock = DockStyle.Right;
+        tlpMonitorPreview.Location = new System.Drawing.Point(592, 8);
+        tlpMonitorPreview.Margin = new Padding(8, 0, 0, 8);
+        tlpMonitorPreview.MinimumSize = new System.Drawing.Size(420, 0);
+        tlpMonitorPreview.Name = "tlpMonitorPreview";
+        tlpMonitorPreview.Padding = new Padding(8);
+        tlpMonitorPreview.RowCount = 2;
+        tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpMonitorPreview.Size = new System.Drawing.Size(440, 604);
+        tlpMonitorPreview.TabIndex = 10;
+        //
         // picMonitorPreview
         //
-        picMonitorPreview.BackColor = System.Drawing.SystemColors.AppWorkspace;
+        picMonitorPreview.BackColor = System.Drawing.Color.FromArgb(176, 176, 176);
         picMonitorPreview.Dock = DockStyle.Fill;
-        picMonitorPreview.Location = new System.Drawing.Point(776, 0);
-        picMonitorPreview.Margin = new Padding(8, 0, 0, 8);
+        picMonitorPreview.Location = new System.Drawing.Point(8, 8);
+        picMonitorPreview.Margin = new Padding(0, 0, 0, 8);
         picMonitorPreview.Name = "picMonitorPreview";
-        picMonitorPreview.Size = new System.Drawing.Size(240, 288);
+        picMonitorPreview.Size = new System.Drawing.Size(424, 552);
         picMonitorPreview.SizeMode = PictureBoxSizeMode.Zoom;
         picMonitorPreview.TabIndex = 6;
         picMonitorPreview.TabStop = false;
+        //
+        // lblMonitorCoordinates
+        //
+        lblMonitorCoordinates.AutoSize = true;
+        lblMonitorCoordinates.Dock = DockStyle.Fill;
+        lblMonitorCoordinates.Location = new System.Drawing.Point(8, 568);
+        lblMonitorCoordinates.Margin = new Padding(0);
+        lblMonitorCoordinates.Name = "lblMonitorCoordinates";
+        lblMonitorCoordinates.Padding = new Padding(0, 4, 0, 0);
+        lblMonitorCoordinates.Size = new System.Drawing.Size(424, 28);
+        lblMonitorCoordinates.TabIndex = 7;
+        lblMonitorCoordinates.Text = "X=–, Y=–";
+        lblMonitorCoordinates.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
         //
         // chkJanelaTelaCheia
         //
@@ -582,6 +616,8 @@ partial class AppEditorForm
         tlpGeral.PerformLayout();
         tlpJanela.ResumeLayout(false);
         tlpJanela.PerformLayout();
+        tlpMonitorPreview.ResumeLayout(false);
+        tlpMonitorPreview.PerformLayout();
         ((ISupportInitialize)picMonitorPreview).EndInit();
         ((ISupportInitialize)nudJanelaX).EndInit();
         ((ISupportInitialize)nudJanelaY).EndInit();

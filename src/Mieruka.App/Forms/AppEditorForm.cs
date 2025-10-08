@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -11,7 +12,6 @@ using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Services;
-using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
@@ -26,10 +26,10 @@ public partial class AppEditorForm : Form
     private readonly ProgramaConfig? _original;
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
-    private MonitorPreviewHost? _monitorPreviewHost;
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
+    private Bitmap? _monitorPreviewBitmap;
 
     public AppEditorForm(ProgramaConfig? programa = null, IReadOnlyList<MonitorInfo>? monitors = null, string? selectedMonitorId = null)
     {
@@ -41,6 +41,11 @@ public partial class AppEditorForm : Form
         var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites não foi carregado.");
         var appsTab = appsTabControl ?? throw new InvalidOperationException("A aba de aplicativos não foi carregada.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi configurado.");
+
+        _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
+        var previewPicture = picMonitorPreview ?? throw new InvalidOperationException("A pré-visualização do monitor não foi configurada.");
+        _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
+        var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
 
         AcceptButton = salvar;
         CancelButton = btnCancelar;
@@ -66,6 +71,21 @@ public partial class AppEditorForm : Form
 
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
+
+        previewPicture.MouseMove += picMonitorPreview_MouseMove;
+        previewPicture.MouseLeave += picMonitorPreview_MouseLeave;
+
+        janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
+
+        nudJanelaX.ValueChanged += WindowInputs_ValueChanged;
+        nudJanelaY.ValueChanged += WindowInputs_ValueChanged;
+        nudJanelaLargura.ValueChanged += WindowInputs_ValueChanged;
+        nudJanelaAltura.ValueChanged += WindowInputs_ValueChanged;
+        chkJanelaTelaCheia.CheckedChanged += chkJanelaTelaCheia_CheckedChanged;
+
+        AdjustMonitorPreviewWidth();
+        UpdateWindowInputsState();
+        UpdateMonitorCoordinateLabel(null);
 
         if (programa is not null)
         {
@@ -121,6 +141,9 @@ public partial class AppEditorForm : Form
 
         appsTabControl!.ExecutablePath = programa.ExecutablePath;
         appsTabControl.Arguments = programa.Arguments ?? string.Empty;
+
+        UpdateWindowInputsState();
+        RenderMonitorPreview();
     }
 
     private static decimal AjustarRange(NumericUpDown control, int value)
@@ -286,24 +309,305 @@ public partial class AppEditorForm : Form
 
     private void UpdateMonitorPreview()
     {
-        _monitorPreviewHost?.Dispose();
-        _monitorPreviewHost = null;
         _selectedMonitorInfo = null;
         _selectedMonitorId = null;
 
-        if (cboMonitores?.SelectedItem is not MonitorOption option || option.Monitor is null || option.MonitorId is null || picMonitorPreview is null)
+        if (cboMonitores?.SelectedItem is not MonitorOption option || option.Monitor is null || option.MonitorId is null)
         {
-            if (picMonitorPreview is not null)
-            {
-                picMonitorPreview.Image = null;
-            }
-
+            ClearMonitorPreview();
             return;
         }
 
         _selectedMonitorInfo = option.Monitor;
         _selectedMonitorId = option.MonitorId;
-        _monitorPreviewHost = new MonitorPreviewHost(option.MonitorId, picMonitorPreview);
+        RenderMonitorPreview();
+    }
+
+    private void ClearMonitorPreview()
+    {
+        if (picMonitorPreview is not null)
+        {
+            picMonitorPreview.Image = null;
+        }
+
+        UpdateMonitorCoordinateLabel(null);
+        DisposeMonitorPreviewBitmap();
+    }
+
+    private void RenderMonitorPreview()
+    {
+        if (picMonitorPreview is null)
+        {
+            return;
+        }
+
+        var monitor = _selectedMonitorInfo;
+        if (monitor is null)
+        {
+            ClearMonitorPreview();
+            return;
+        }
+
+        UpdateMonitorCoordinateLabel(null);
+        var bitmap = CreateMonitorPreviewBitmap(monitor);
+        var previous = _monitorPreviewBitmap;
+        _monitorPreviewBitmap = bitmap;
+        picMonitorPreview.Image = bitmap;
+
+        if (previous is not null && !ReferenceEquals(previous, bitmap))
+        {
+            previous.Dispose();
+        }
+    }
+
+    private Bitmap? CreateMonitorPreviewBitmap(MonitorInfo monitor)
+    {
+        var bounds = monitor.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return null;
+        }
+
+        var width = Math.Max(1, bounds.Width);
+        var height = Math.Max(1, bounds.Height);
+        var bitmap = new Bitmap(width, height);
+
+        using var graphics = Graphics.FromImage(bitmap);
+        var boundsRect = new Rectangle(0, 0, width, height);
+
+        using (var boundsBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+        {
+            graphics.FillRectangle(boundsBrush, boundsRect);
+        }
+
+        var workArea = monitor.WorkArea;
+        var workRect = new Rectangle(
+            workArea.X - bounds.X,
+            workArea.Y - bounds.Y,
+            workArea.Width,
+            workArea.Height);
+        workRect.Intersect(boundsRect);
+        if (workRect.Width > 0 && workRect.Height > 0)
+        {
+            using var workBrush = new SolidBrush(Color.FromArgb(200, 200, 200));
+            graphics.FillRectangle(workBrush, workRect);
+        }
+
+        using (var borderPen = new Pen(Color.Black, Math.Max(1f, Math.Min(width, height) / 200f)))
+        {
+            graphics.DrawRectangle(borderPen, new Rectangle(0, 0, width - 1, height - 1));
+        }
+
+        var windowRect = GetWindowPreviewRectangle(monitor);
+        if (!windowRect.IsEmpty)
+        {
+            using var windowBrush = new SolidBrush(Color.FromArgb(220, 0, 0, 0));
+            graphics.FillRectangle(windowBrush, windowRect);
+
+            if (windowRect.Width > 2 && windowRect.Height > 2)
+            {
+                using var windowBorderPen = new Pen(Color.White, Math.Max(1f, Math.Min(width, height) / 300f));
+                var borderRect = new Rectangle(windowRect.X, windowRect.Y, windowRect.Width - 1, windowRect.Height - 1);
+                graphics.DrawRectangle(windowBorderPen, borderRect);
+            }
+        }
+
+        return bitmap;
+    }
+
+    private Rectangle GetWindowPreviewRectangle(MonitorInfo monitor)
+    {
+        var bounds = monitor.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return Rectangle.Empty;
+        }
+
+        var window = BuildWindowConfigurationFromInputs();
+        if (window.FullScreen)
+        {
+            return new Rectangle(0, 0, bounds.Width, bounds.Height);
+        }
+
+        var clamped = ClampWindowBounds(window, monitor);
+        if (clamped.X is not int x ||
+            clamped.Y is not int y ||
+            clamped.Width is not int width ||
+            clamped.Height is not int height)
+        {
+            return Rectangle.Empty;
+        }
+
+        var rect = new Rectangle(x, y, width, height);
+        var monitorRect = new Rectangle(0, 0, bounds.Width, bounds.Height);
+        rect.Intersect(monitorRect);
+        return rect;
+    }
+
+    private void WindowInputs_ValueChanged(object? sender, EventArgs e)
+    {
+        RenderMonitorPreview();
+    }
+
+    private void chkJanelaTelaCheia_CheckedChanged(object? sender, EventArgs e)
+    {
+        UpdateWindowInputsState();
+        RenderMonitorPreview();
+    }
+
+    private void UpdateWindowInputsState()
+    {
+        var enabled = !chkJanelaTelaCheia.Checked;
+
+        if (nudJanelaX is not null)
+        {
+            nudJanelaX.Enabled = enabled;
+        }
+
+        if (nudJanelaY is not null)
+        {
+            nudJanelaY.Enabled = enabled;
+        }
+
+        if (nudJanelaLargura is not null)
+        {
+            nudJanelaLargura.Enabled = enabled;
+        }
+
+        if (nudJanelaAltura is not null)
+        {
+            nudJanelaAltura.Enabled = enabled;
+        }
+    }
+
+    private void picMonitorPreview_MouseMove(object? sender, MouseEventArgs e)
+    {
+        if (_selectedMonitorInfo is null || picMonitorPreview?.Image is null)
+        {
+            UpdateMonitorCoordinateLabel(null);
+            return;
+        }
+
+        var displayRect = GetImageDisplayRectangle(picMonitorPreview);
+        if (displayRect.Width <= 0 || displayRect.Height <= 0 || !displayRect.Contains(e.Location))
+        {
+            UpdateMonitorCoordinateLabel(null);
+            return;
+        }
+
+        var relativeX = (e.X - displayRect.X) / displayRect.Width;
+        var relativeY = (e.Y - displayRect.Y) / displayRect.Height;
+
+        relativeX = Math.Clamp(relativeX, 0f, 1f);
+        relativeY = Math.Clamp(relativeY, 0f, 1f);
+
+        var bounds = _selectedMonitorInfo.Bounds;
+        var monitorX = (int)Math.Round(relativeX * bounds.Width, MidpointRounding.AwayFromZero);
+        var monitorY = (int)Math.Round(relativeY * bounds.Height, MidpointRounding.AwayFromZero);
+
+        monitorX = Math.Clamp(monitorX, 0, Math.Max(0, bounds.Width));
+        monitorY = Math.Clamp(monitorY, 0, Math.Max(0, bounds.Height));
+
+        UpdateMonitorCoordinateLabel(new Point(monitorX, monitorY));
+    }
+
+    private void picMonitorPreview_MouseLeave(object? sender, EventArgs e)
+    {
+        UpdateMonitorCoordinateLabel(null);
+    }
+
+    private void UpdateMonitorCoordinateLabel(Point? coordinates)
+    {
+        if (lblMonitorCoordinates is null)
+        {
+            return;
+        }
+
+        lblMonitorCoordinates.Text = coordinates is null
+            ? "X=–, Y=–"
+            : $"X={coordinates.Value.X}, Y={coordinates.Value.Y}";
+    }
+
+    private void AdjustMonitorPreviewWidth()
+    {
+        if (tlpMonitorPreview is null || tpJanela is null)
+        {
+            return;
+        }
+
+        var availableWidth = tpJanela.ClientSize.Width;
+        if (availableWidth <= 0)
+        {
+            return;
+        }
+
+        var minimumWidth = tlpMonitorPreview.MinimumSize.Width > 0 ? tlpMonitorPreview.MinimumSize.Width : 420;
+        if (availableWidth <= minimumWidth)
+        {
+            tlpMonitorPreview.Width = availableWidth;
+            return;
+        }
+
+        var desired = Math.Max(minimumWidth, availableWidth / 2);
+        var maxAllowed = Math.Max(minimumWidth, availableWidth - 320);
+        var width = Math.Min(desired, maxAllowed);
+        width = Math.Max(minimumWidth, Math.Min(width, availableWidth));
+        tlpMonitorPreview.Width = width;
+    }
+
+    private static RectangleF GetImageDisplayRectangle(PictureBox pictureBox)
+    {
+        var image = pictureBox.Image;
+        if (image is null)
+        {
+            return RectangleF.Empty;
+        }
+
+        return pictureBox.SizeMode switch
+        {
+            PictureBoxSizeMode.Normal or PictureBoxSizeMode.AutoSize => new RectangleF(0, 0, image.Width, image.Height),
+            PictureBoxSizeMode.StretchImage => new RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
+            PictureBoxSizeMode.CenterImage => new RectangleF(
+                (pictureBox.ClientSize.Width - image.Width) / 2f,
+                (pictureBox.ClientSize.Height - image.Height) / 2f,
+                image.Width,
+                image.Height),
+            PictureBoxSizeMode.Zoom =>
+                CalculateZoomRectangle(pictureBox, image),
+            _ => new RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
+        };
+    }
+
+    private static RectangleF CalculateZoomRectangle(PictureBox pictureBox, Image image)
+    {
+        if (image.Width <= 0 || image.Height <= 0)
+        {
+            return RectangleF.Empty;
+        }
+
+        var clientSize = pictureBox.ClientSize;
+        if (clientSize.Width <= 0 || clientSize.Height <= 0)
+        {
+            return RectangleF.Empty;
+        }
+
+        var ratio = Math.Min((float)clientSize.Width / image.Width, (float)clientSize.Height / image.Height);
+        var width = image.Width * ratio;
+        var height = image.Height * ratio;
+        var x = (clientSize.Width - width) / 2f;
+        var y = (clientSize.Height - height) / 2f;
+        return new RectangleF(x, y, width, height);
+    }
+
+    private void DisposeMonitorPreviewBitmap()
+    {
+        if (_monitorPreviewBitmap is null)
+        {
+            return;
+        }
+
+        _monitorPreviewBitmap.Dispose();
+        _monitorPreviewBitmap = null;
     }
 
     private MonitorInfo? GetSelectedMonitor()
@@ -750,8 +1054,7 @@ public partial class AppEditorForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
-        _monitorPreviewHost?.Dispose();
-        _monitorPreviewHost = null;
+        DisposeMonitorPreviewBitmap();
     }
 
     private void AppsTab_ExecutableChosen(object? sender, AppSelectionEventArgs e)
