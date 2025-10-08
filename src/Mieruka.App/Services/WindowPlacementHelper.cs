@@ -32,6 +32,10 @@ internal static class WindowPlacementHelper
     private const uint SwpShowWindow = 0x0040;
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint SwpNoActivate = 0x0010;
+    private static readonly TimeSpan ForegroundActivationCooldown = TimeSpan.FromSeconds(2);
+    private static readonly object ForegroundActivationLock = new();
+    private static IntPtr s_lastForegroundHandle;
+    private static DateTime s_lastForegroundActivationUtc = DateTime.MinValue;
 
     /// <summary>
     /// Represents a rectangular region defined as percentages of a monitor surface.
@@ -596,6 +600,36 @@ internal static class WindowPlacementHelper
         throw new TimeoutException("MainWindowHandle não apareceu.");
     }
 
+    private static bool CanBringToFront(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var utcNow = DateTime.UtcNow;
+
+        lock (ForegroundActivationLock)
+        {
+            if (handle == s_lastForegroundHandle &&
+                utcNow - s_lastForegroundActivationUtc < ForegroundActivationCooldown)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void RecordForegroundActivation(IntPtr handle)
+    {
+        lock (ForegroundActivationLock)
+        {
+            s_lastForegroundHandle = handle;
+            s_lastForegroundActivationUtc = DateTime.UtcNow;
+        }
+    }
+
     private static void TryBringToFront(IntPtr handle)
     {
         if (!OperatingSystem.IsWindows() || handle == IntPtr.Zero)
@@ -608,14 +642,21 @@ internal static class WindowPlacementHelper
             return;
         }
 
+        if (!CanBringToFront(handle))
+        {
+            return;
+        }
+
         if (SetForegroundWindow(handle))
         {
+            RecordForegroundActivation(handle);
             return;
         }
 
         keybd_event(VkMenu, 0, 0, UIntPtr.Zero);
         keybd_event(VkMenu, 0, KeyeventfKeyup, UIntPtr.Zero);
         SetForegroundWindow(handle);
+        RecordForegroundActivation(handle);
     }
 
     private static Rectangle ClampToWorkArea(Rectangle target, Rectangle workArea)
