@@ -64,6 +64,8 @@ public partial class AppEditorForm : Form
     private readonly IList<ProgramaConfig>? _profileApps;
     private readonly BindingList<ProfileItemMetadata> _profileItems = new();
     private ProfileItemMetadata? _editingMetadata;
+    private readonly int _tabAplicativosIndex;
+    private readonly int _tabSitesIndex;
     private bool _suppressCycleUpdates;
     private bool _suppressCycleSelectionEvents;
     private ExecSourceMode _execSourceMode;
@@ -95,7 +97,10 @@ public partial class AppEditorForm : Form
     {
         InitializeComponent();
 
-        _ = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
+        var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
+        var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos não foi configurada.");
+        var sitesTabPage = tabSites ?? throw new InvalidOperationException("A aba de sites não foi configurada.");
+        _ = pnlBrowserOptions ?? throw new InvalidOperationException("O painel de opções de navegador não foi configurado.");
         var salvar = btnSalvar ?? throw new InvalidOperationException("O botão Salvar não foi carregado.");
         _ = btnCancelar ?? throw new InvalidOperationException("O botão Cancelar não foi carregado.");
         var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites não foi carregado.");
@@ -120,6 +125,18 @@ public partial class AppEditorForm : Form
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
         _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
         var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
+
+        _tabAplicativosIndex = editorTabs.TabPages.IndexOf(appsTabPage);
+        if (_tabAplicativosIndex < 0)
+        {
+            throw new InvalidOperationException("A aba de aplicativos não foi adicionada ao controle de abas.");
+        }
+
+        _tabSitesIndex = editorTabs.TabPages.IndexOf(sitesTabPage);
+        if (_tabSitesIndex < 0)
+        {
+            throw new InvalidOperationException("A aba de sites não foi adicionada ao controle de abas.");
+        }
 
         AcceptButton = salvar;
         CancelButton = btnCancelar;
@@ -457,6 +474,50 @@ public partial class AppEditorForm : Form
         var isExecutable = rbExe?.Checked ?? false;
         var isBrowser = rbBrowser?.Checked ?? false;
 
+        var tabControl = tabEditor;
+        var appsTabPage = tabAplicativos;
+        var sitesTabPage = tabSites;
+
+        if (tabControl is not null && appsTabPage is not null && sitesTabPage is not null)
+        {
+            SetTabVisibility(tabControl, appsTabPage, _tabAplicativosIndex, isExecutable);
+            SetTabVisibility(tabControl, sitesTabPage, _tabSitesIndex, !isExecutable);
+
+            if (isExecutable && ReferenceEquals(tabControl.SelectedTab, sitesTabPage))
+            {
+                tabControl.SelectedTab = tabControl.TabPages.Contains(appsTabPage)
+                    ? appsTabPage
+                    : (tabControl.TabPages.Count > 0 ? tabControl.TabPages[0] : null);
+            }
+            else if (!isExecutable && ReferenceEquals(tabControl.SelectedTab, appsTabPage))
+            {
+                tabControl.SelectedTab = tabControl.TabPages.Contains(sitesTabPage)
+                    ? sitesTabPage
+                    : (tabControl.TabPages.Count > 0 ? tabControl.TabPages[0] : null);
+            }
+
+            if (tabControl.SelectedTab is not null && !tabControl.TabPages.Contains(tabControl.SelectedTab))
+            {
+                tabControl.SelectedTab = tabControl.TabPages.Count > 0 ? tabControl.TabPages[0] : null;
+            }
+        }
+
+        if (appsTabControl is not null)
+        {
+            appsTabControl.Enabled = isExecutable;
+        }
+
+        if (sitesEditorControl is not null)
+        {
+            sitesEditorControl.Enabled = !isExecutable;
+        }
+
+        if (pnlBrowserOptions is not null)
+        {
+            pnlBrowserOptions.Visible = !isExecutable;
+            pnlBrowserOptions.Enabled = !isExecutable;
+        }
+
         if (grpInstalledApps is not null)
         {
             grpInstalledApps.Visible = isExecutable;
@@ -534,7 +595,33 @@ public partial class AppEditorForm : Form
         }
     }
 
-    private async Task EnsureAppsListAsync()
+    private static void SetTabVisibility(TabControl tabControl, TabPage tabPage, int originalIndex, bool visible)
+    {
+        var pages = tabControl.TabPages;
+        var contains = pages.Contains(tabPage);
+
+        if (visible)
+        {
+            if (contains)
+            {
+                return;
+            }
+
+            var insertIndex = originalIndex;
+            if (insertIndex < 0 || insertIndex > pages.Count)
+            {
+                insertIndex = pages.Count;
+            }
+
+            pages.Insert(insertIndex, tabPage);
+        }
+        else if (contains)
+        {
+            pages.Remove(tabPage);
+        }
+    }
+
+    private async Task SafeLoadAppsAsync()
     {
         if (_appsListLoaded)
         {

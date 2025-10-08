@@ -12,9 +12,9 @@ partial class AppEditorForm
     private IContainer? components = null;
     internal TabControl tabEditor = null!;
     internal TabPage tpGeral = null!;
-    internal TabPage tpAplicativos = null!;
+    internal TabPage tabAplicativos = null!;
     internal TabPage tpJanela = null!;
-    internal TabPage tpSites = null!;
+    internal TabPage tabSites = null!;
     internal TabPage tpCiclo = null!;
     internal TabPage tpAvancado = null!;
     internal SitesEditorControl sitesEditorControl = null!;
@@ -22,6 +22,7 @@ partial class AppEditorForm
     internal Label lblBrowserDetected = null!;
     internal Panel pnlBrowserOptions = null!;
     internal AppsTab appsTabControl = null!;
+    internal Panel pnlBrowserOptions = null!;
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
     internal Button btnTestarJanela = null!;
@@ -78,9 +79,9 @@ partial class AppEditorForm
         bsCycle = new BindingSource(components);
         tabEditor = new TabControl();
         tpGeral = new TabPage();
-        tpAplicativos = new TabPage();
+        tabAplicativos = new TabPage();
         tpJanela = new TabPage();
-        tpSites = new TabPage();
+        tabSites = new TabPage();
         tpCiclo = new TabPage();
         tpAvancado = new TabPage();
         sitesEditorControl = new SitesEditorControl();
@@ -88,7 +89,7 @@ partial class AppEditorForm
         lblBrowserDetected = new Label();
         pnlBrowserOptions = new Panel();
         appsTabControl = new AppsTab();
-        var tlpAplicativos = new TableLayoutPanel();
+        pnlBrowserOptions = new Panel();
         var painelRodape = new FlowLayoutPanel();
         btnSalvar = new Button();
         btnCancelar = new Button();
@@ -148,15 +149,9 @@ partial class AppEditorForm
         ((ISupportInitialize)dgvCycle).BeginInit();
         tabEditor.SuspendLayout();
         tpGeral.SuspendLayout();
-        tpAplicativos.SuspendLayout();
-        tlpAplicativos.SuspendLayout();
+        tabAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
-        tpSites.SuspendLayout();
-        var tlpSites = new TableLayoutPanel();
-        var flowBrowserHeader = new FlowLayoutPanel();
-        var lblBrowserEngine = new Label();
-        tlpSites.SuspendLayout();
-        flowBrowserHeader.SuspendLayout();
+        tabSites.SuspendLayout();
         pnlBrowserOptions.SuspendLayout();
         tlpCycle.SuspendLayout();
         tlpCycleList.SuspendLayout();
@@ -179,9 +174,9 @@ partial class AppEditorForm
         // tabEditor
         //
         tabEditor.Controls.Add(tpGeral);
-        tabEditor.Controls.Add(tpAplicativos);
+        tabEditor.Controls.Add(tabAplicativos);
         tabEditor.Controls.Add(tpJanela);
-        tabEditor.Controls.Add(tpSites);
+        tabEditor.Controls.Add(tabSites);
         tabEditor.Controls.Add(tpCiclo);
         tabEditor.Controls.Add(tpAvancado);
         tabEditor.Dock = DockStyle.Fill;
@@ -204,17 +199,17 @@ partial class AppEditorForm
         tpGeral.Text = "Geral";
         tpGeral.UseVisualStyleBackColor = true;
         //
-        // tpAplicativos
+        // tabAplicativos
         //
-        tpAplicativos.Controls.Add(tlpAplicativos);
-        tpAplicativos.Location = new System.Drawing.Point(4, 24);
-        tpAplicativos.Margin = new Padding(8);
-        tpAplicativos.Name = "tpAplicativos";
-        tpAplicativos.Padding = new Padding(8);
-        tpAplicativos.Size = new System.Drawing.Size(1032, 620);
-        tpAplicativos.TabIndex = 1;
-        tpAplicativos.Text = "Aplicativos";
-        tpAplicativos.UseVisualStyleBackColor = true;
+        tabAplicativos.Controls.Add(appsTabControl);
+        tabAplicativos.Location = new System.Drawing.Point(4, 24);
+        tabAplicativos.Margin = new Padding(8);
+        tabAplicativos.Name = "tabAplicativos";
+        tabAplicativos.Padding = new Padding(8);
+        tabAplicativos.Size = new System.Drawing.Size(1032, 620);
+        tabAplicativos.TabIndex = 1;
+        tabAplicativos.Text = "Aplicativos";
+        tabAplicativos.UseVisualStyleBackColor = true;
         //
         // appsTabControl
         //
@@ -667,17 +662,27 @@ partial class AppEditorForm
         btnTestReal.UseVisualStyleBackColor = true;
         btnTestReal.Click += btnTestReal_Click;
         //
-        // tpSites
+        // tabSites
         //
-        tpSites.Controls.Add(tlpSites);
-        tpSites.Location = new System.Drawing.Point(4, 24);
-        tpSites.Margin = new Padding(8);
-        tpSites.Name = "tpSites";
-        tpSites.Padding = new Padding(8);
-        tpSites.Size = new System.Drawing.Size(1032, 620);
-        tpSites.TabIndex = 3;
-        tpSites.Text = "Sites";
-        tpSites.UseVisualStyleBackColor = true;
+        tabSites.Controls.Add(pnlBrowserOptions);
+        tabSites.Location = new System.Drawing.Point(4, 24);
+        tabSites.Margin = new Padding(8);
+        tabSites.Name = "tabSites";
+        tabSites.Padding = new Padding(8);
+        tabSites.Size = new System.Drawing.Size(1032, 620);
+        tabSites.TabIndex = 3;
+        tabSites.Text = "Sites";
+        tabSites.UseVisualStyleBackColor = true;
+        //
+        // pnlBrowserOptions
+        //
+        pnlBrowserOptions.Controls.Add(sitesEditorControl);
+        pnlBrowserOptions.Dock = DockStyle.Fill;
+        pnlBrowserOptions.Location = new System.Drawing.Point(8, 8);
+        pnlBrowserOptions.Margin = new Padding(0);
+        pnlBrowserOptions.Name = "pnlBrowserOptions";
+        pnlBrowserOptions.Size = new System.Drawing.Size(1016, 604);
+        pnlBrowserOptions.TabIndex = 0;
         //
         // tlpSites
         //
@@ -1061,15 +1066,10 @@ partial class AppEditorForm
         Text = "Editor de Programa";
         tabEditor.ResumeLayout(false);
         tpGeral.ResumeLayout(false);
-        tpAplicativos.ResumeLayout(false);
-        tlpAplicativos.ResumeLayout(false);
+        tabAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
-        tpSites.ResumeLayout(false);
+        tabSites.ResumeLayout(false);
         pnlBrowserOptions.ResumeLayout(false);
-        flowBrowserHeader.ResumeLayout(false);
-        flowBrowserHeader.PerformLayout();
-        tlpSites.ResumeLayout(false);
-        tlpSites.PerformLayout();
         tlpCycleList.ResumeLayout(false);
         tlpCycleList.PerformLayout();
         tlpCycle.ResumeLayout(false);
