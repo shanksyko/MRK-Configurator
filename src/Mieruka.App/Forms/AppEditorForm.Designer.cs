@@ -22,6 +22,7 @@ partial class AppEditorForm
     internal Label lblBrowserDetected = null!;
     internal Panel pnlBrowserPanel = null!;
     internal AppsTab appsTabControl = null!;
+    internal TableLayoutPanel tlpAplicativos = null!;
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
     internal Button btnTestarJanela = null!;
@@ -88,6 +89,7 @@ partial class AppEditorForm
         lblBrowserDetected = new Label();
         pnlBrowserPanel = new Panel();
         appsTabControl = new AppsTab();
+        tlpAplicativos = new TableLayoutPanel();
         var tlpSites = new TableLayoutPanel();
         var flowBrowserHeader = new FlowLayoutPanel();
         var lblBrowserEngine = new Label();
@@ -202,7 +204,7 @@ partial class AppEditorForm
         //
         // tabAplicativos
         //
-        tabAplicativos.Controls.Add(appsTabControl);
+        tabAplicativos.Controls.Add(tlpAplicativos);
         tabAplicativos.Location = new System.Drawing.Point(4, 24);
         tabAplicativos.Margin = new Padding(8);
         tabAplicativos.Name = "tabAplicativos";
@@ -211,13 +213,6 @@ partial class AppEditorForm
         tabAplicativos.TabIndex = 1;
         tabAplicativos.Text = "Aplicativos";
         tabAplicativos.UseVisualStyleBackColor = true;
-        //
-        // appsTabControl
-        //
-        appsTabControl.Dock = DockStyle.Fill;
-        appsTabControl.Margin = new Padding(0);
-        appsTabControl.Name = "appsTabControl";
-        appsTabControl.TabIndex = 1;
         //
         // tlpAplicativos
         //
@@ -234,6 +229,13 @@ partial class AppEditorForm
         tlpAplicativos.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
         tlpAplicativos.Size = new System.Drawing.Size(1016, 604);
         tlpAplicativos.TabIndex = 0;
+        //
+        // appsTabControl
+        //
+        appsTabControl.Dock = DockStyle.Fill;
+        appsTabControl.Margin = new Padding(0);
+        appsTabControl.Name = "appsTabControl";
+        appsTabControl.TabIndex = 1;
         //
         // tlpGeral
         //
