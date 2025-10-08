@@ -100,7 +100,7 @@ public partial class AppEditorForm : Form
         var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
         var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos não foi configurada.");
         var sitesTabPage = tabSites ?? throw new InvalidOperationException("A aba de sites não foi configurada.");
-        _ = pnlBrowserOptions ?? throw new InvalidOperationException("O painel de opções de navegador não foi configurado.");
+        _ = pnlBrowserPanel ?? throw new InvalidOperationException("O painel de opções de navegador não foi configurado.");
         var salvar = btnSalvar ?? throw new InvalidOperationException("O botão Salvar não foi carregado.");
         _ = btnCancelar ?? throw new InvalidOperationException("O botão Cancelar não foi carregado.");
         var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites não foi carregado.");
@@ -119,7 +119,7 @@ public partial class AppEditorForm : Form
         _ = btnBrowseExe ?? throw new InvalidOperationException("O botão de procurar executáveis não foi carregado.");
         _ = cmbBrowserEngine ?? throw new InvalidOperationException("O seletor de motor de navegador não foi carregado.");
         _ = lblBrowserDetected ?? throw new InvalidOperationException("O rótulo de navegadores detectados não foi carregado.");
-        _ = pnlBrowserOptions ?? throw new InvalidOperationException("O painel de opções de navegador não foi carregado.");
+        _ = pnlBrowserPanel ?? throw new InvalidOperationException("O painel de opções de navegador não foi carregado.");
 
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
@@ -512,10 +512,10 @@ public partial class AppEditorForm : Form
             sitesEditorControl.Enabled = !isExecutable;
         }
 
-        if (pnlBrowserOptions is not null)
+        if (pnlBrowserPanel is not null)
         {
-            pnlBrowserOptions.Visible = !isExecutable;
-            pnlBrowserOptions.Enabled = !isExecutable;
+            pnlBrowserPanel.Visible = !isExecutable;
+            pnlBrowserPanel.Enabled = !isExecutable;
         }
 
         if (grpInstalledApps is not null)
@@ -562,9 +562,9 @@ public partial class AppEditorForm : Form
                 cmbBrowserEngine.Enabled = false;
             }
 
-            if (pnlBrowserOptions is not null)
+            if (pnlBrowserPanel is not null)
             {
-                pnlBrowserOptions.Enabled = false;
+                pnlBrowserPanel.Enabled = false;
             }
 
             if (sitesEditorControl is not null)
@@ -584,9 +584,9 @@ public partial class AppEditorForm : Form
             lblBrowserDetected.Visible = isBrowser && !string.IsNullOrWhiteSpace(lblBrowserDetected.Text);
         }
 
-        if (pnlBrowserOptions is not null)
+        if (pnlBrowserPanel is not null)
         {
-            pnlBrowserOptions.Visible = isBrowser;
+            pnlBrowserPanel.Visible = isBrowser;
         }
 
         if (sitesEditorControl is not null)
@@ -674,7 +674,7 @@ public partial class AppEditorForm : Form
 
     private void BindDetectedBrowsers()
     {
-        if (cmbBrowserEngine is null || lblBrowserDetected is null || pnlBrowserOptions is null)
+        if (cmbBrowserEngine is null || lblBrowserDetected is null || pnlBrowserPanel is null)
         {
             return;
         }
@@ -722,7 +722,7 @@ public partial class AppEditorForm : Form
 
         var hasSupported = items.Count > 0;
         cmbBrowserEngine.Enabled = hasSupported;
-        pnlBrowserOptions.Enabled = hasSupported;
+        pnlBrowserPanel.Enabled = hasSupported;
 
         if (sitesEditorControl is not null)
         {

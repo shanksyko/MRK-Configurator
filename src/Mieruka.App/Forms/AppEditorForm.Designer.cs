@@ -20,9 +20,8 @@ partial class AppEditorForm
     internal SitesEditorControl sitesEditorControl = null!;
     internal ComboBox cmbBrowserEngine = null!;
     internal Label lblBrowserDetected = null!;
-    internal Panel pnlBrowserOptions = null!;
+    internal Panel pnlBrowserPanel = null!;
     internal AppsTab appsTabControl = null!;
-    internal Panel pnlBrowserOptions = null!;
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
     internal Button btnTestarJanela = null!;
@@ -87,9 +86,11 @@ partial class AppEditorForm
         sitesEditorControl = new SitesEditorControl();
         cmbBrowserEngine = new ComboBox();
         lblBrowserDetected = new Label();
-        pnlBrowserOptions = new Panel();
+        pnlBrowserPanel = new Panel();
         appsTabControl = new AppsTab();
-        pnlBrowserOptions = new Panel();
+        var tlpSites = new TableLayoutPanel();
+        var flowBrowserHeader = new FlowLayoutPanel();
+        var lblBrowserEngine = new Label();
         var painelRodape = new FlowLayoutPanel();
         btnSalvar = new Button();
         btnCancelar = new Button();
@@ -152,7 +153,7 @@ partial class AppEditorForm
         tabAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
         tabSites.SuspendLayout();
-        pnlBrowserOptions.SuspendLayout();
+        pnlBrowserPanel.SuspendLayout();
         tlpCycle.SuspendLayout();
         tlpCycleList.SuspendLayout();
         flowCycleControls.SuspendLayout();
@@ -664,7 +665,7 @@ partial class AppEditorForm
         //
         // tabSites
         //
-        tabSites.Controls.Add(pnlBrowserOptions);
+        tabSites.Controls.Add(tlpSites);
         tabSites.Location = new System.Drawing.Point(4, 24);
         tabSites.Margin = new Padding(8);
         tabSites.Name = "tabSites";
@@ -674,23 +675,13 @@ partial class AppEditorForm
         tabSites.Text = "Sites";
         tabSites.UseVisualStyleBackColor = true;
         //
-        // pnlBrowserOptions
-        //
-        pnlBrowserOptions.Controls.Add(sitesEditorControl);
-        pnlBrowserOptions.Dock = DockStyle.Fill;
-        pnlBrowserOptions.Location = new System.Drawing.Point(8, 8);
-        pnlBrowserOptions.Margin = new Padding(0);
-        pnlBrowserOptions.Name = "pnlBrowserOptions";
-        pnlBrowserOptions.Size = new System.Drawing.Size(1016, 604);
-        pnlBrowserOptions.TabIndex = 0;
-        //
         // tlpSites
         //
         tlpSites.ColumnCount = 1;
         tlpSites.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tlpSites.Controls.Add(flowBrowserHeader, 0, 0);
         tlpSites.Controls.Add(lblBrowserDetected, 0, 1);
-        tlpSites.Controls.Add(pnlBrowserOptions, 0, 2);
+        tlpSites.Controls.Add(pnlBrowserPanel, 0, 2);
         tlpSites.Dock = DockStyle.Fill;
         tlpSites.Location = new System.Drawing.Point(8, 8);
         tlpSites.Margin = new Padding(0);
@@ -744,15 +735,15 @@ partial class AppEditorForm
         lblBrowserDetected.TabIndex = 1;
         lblBrowserDetected.Visible = false;
         //
-        // pnlBrowserOptions
+        // pnlBrowserPanel
         //
-        pnlBrowserOptions.Controls.Add(sitesEditorControl);
-        pnlBrowserOptions.Dock = DockStyle.Fill;
-        pnlBrowserOptions.Location = new System.Drawing.Point(0, 46);
-        pnlBrowserOptions.Margin = new Padding(0);
-        pnlBrowserOptions.Name = "pnlBrowserOptions";
-        pnlBrowserOptions.Size = new System.Drawing.Size(1016, 558);
-        pnlBrowserOptions.TabIndex = 2;
+        pnlBrowserPanel.Controls.Add(sitesEditorControl);
+        pnlBrowserPanel.Dock = DockStyle.Fill;
+        pnlBrowserPanel.Location = new System.Drawing.Point(0, 46);
+        pnlBrowserPanel.Margin = new Padding(0);
+        pnlBrowserPanel.Name = "pnlBrowserPanel";
+        pnlBrowserPanel.Size = new System.Drawing.Size(1016, 558);
+        pnlBrowserPanel.TabIndex = 2;
         //
         // sitesEditorControl
         //
@@ -1069,7 +1060,7 @@ partial class AppEditorForm
         tabAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
         tabSites.ResumeLayout(false);
-        pnlBrowserOptions.ResumeLayout(false);
+        pnlBrowserPanel.ResumeLayout(false);
         tlpCycleList.ResumeLayout(false);
         tlpCycleList.PerformLayout();
         tlpCycle.ResumeLayout(false);
