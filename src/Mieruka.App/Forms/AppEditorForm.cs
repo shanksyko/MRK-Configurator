@@ -84,7 +84,7 @@ public partial class AppEditorForm : Form
     private readonly List<InstalledAppInfo> _allApps = new();
     private readonly Label _installedAppsStatusLabel = new();
     private TextBox? _installedAppsSearchBox;
-    private bool _installedAppsLoaded;
+    private bool _appsListLoaded;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -201,7 +201,13 @@ public partial class AppEditorForm : Form
         UpdateMonitorCoordinateLabel(null);
 
         Disposed += AppEditorForm_Disposed;
-        Shown += async (_, __) => await SafeLoadAppsAsync().ConfigureAwait(true);
+        Shown += async (_, __) =>
+        {
+            if (rbExe?.Checked == true)
+            {
+                await EnsureAppsListAsync().ConfigureAwait(true);
+            }
+        };
 
         InitializeCycleMetadata(profileApps, programa);
 
@@ -528,19 +534,24 @@ public partial class AppEditorForm : Form
         }
     }
 
-    private async Task SafeLoadAppsAsync()
+    private async Task EnsureAppsListAsync()
     {
-        if (_installedAppsLoaded)
+        if (_appsListLoaded)
         {
             return;
         }
 
-        _installedAppsLoaded = true;
+        if (rbExe?.Checked != true)
+        {
+            return;
+        }
 
         if (IsDisposed || !IsHandleCreated)
         {
             return;
         }
+
+        _appsListLoaded = true;
 
         UseWaitCursor = true;
         var previousCursor = Cursor.Current;
@@ -548,6 +559,7 @@ public partial class AppEditorForm : Form
 
         try
         {
+            UpdateInstalledAppsStatus("Carregando aplicativos instalados...", isError: false);
             var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
             _allApps.Clear();
             _allApps.AddRange(apps);
@@ -555,6 +567,7 @@ public partial class AppEditorForm : Form
             PopulateInstalledApps(_allApps);
             appsTabControl?.SetInstalledApps(apps);
             UpdateInstalledAppsStatus(string.Empty, isError: false);
+            _appsListLoaded = true;
         }
         catch (Exception ex)
         {
@@ -562,6 +575,7 @@ public partial class AppEditorForm : Form
             _allApps.Clear();
             PopulateInstalledApps(Array.Empty<InstalledAppInfo>());
             UpdateInstalledAppsStatus("Não foi possível carregar a lista de aplicativos instalados.", isError: true);
+            _appsListLoaded = false;
         }
         finally
         {
@@ -1273,9 +1287,10 @@ public partial class AppEditorForm : Form
         StopCycleSimulation();
     }
 
-    private void rbExe_CheckedChanged(object? sender, EventArgs e)
+    private async void rbExe_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyTypeTabs();
+        ApplyAppTypeUI();
+        await EnsureAppsListAsync().ConfigureAwait(true);
     }
 
     private void rbBrowser_CheckedChanged(object? sender, EventArgs e)
