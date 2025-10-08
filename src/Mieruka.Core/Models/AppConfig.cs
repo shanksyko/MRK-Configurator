@@ -13,6 +13,11 @@ public sealed record class AppConfig
     public string Id { get; init; } = string.Empty;
 
     /// <summary>
+    /// Friendly name for the application.
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>
     /// Ordering hint used to control the activation sequence.
     /// </summary>
     public int Order { get; init; }

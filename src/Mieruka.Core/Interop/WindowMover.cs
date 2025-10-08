@@ -6,8 +6,26 @@ using Mieruka.Core.Models;
 
 namespace Mieruka.Core.Interop;
 
+public enum WindowMoveMode
+{
+    Absolute,
+    MonitorRelative,
+}
+
 public static class WindowMover
 {
+    public static void MoveTo(
+        IntPtr hwnd,
+        MonitorInfo monitor,
+        Rectangle boundsPx,
+        bool topMost,
+        WindowMoveMode mode,
+        bool relativeToMonitor,
+        bool restoreIfMinimized)
+    {
+        MoveTo(hwnd, boundsPx, topMost, restoreIfMinimized);
+    }
+
     public static void MoveTo(IntPtr hwnd, Rectangle boundsPx, bool topMost, bool restoreIfMinimized)
     {
         if (!OperatingSystem.IsWindows())
