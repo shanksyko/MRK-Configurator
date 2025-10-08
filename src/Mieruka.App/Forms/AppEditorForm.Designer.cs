@@ -22,6 +22,7 @@ partial class AppEditorForm
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
     internal Button btnTestarJanela = null!;
+    internal Button btnTestReal = null!;
     internal TextBox txtId = null!;
     internal TextBox txtExecutavel = null!;
     internal TextBox txtArgumentos = null!;
@@ -66,6 +67,7 @@ partial class AppEditorForm
         btnSalvar = new Button();
         btnCancelar = new Button();
         btnTestarJanela = new Button();
+        btnTestReal = new Button();
         var tlpGeral = new TableLayoutPanel();
         var lblId = new Label();
         txtId = new TextBox();
@@ -306,12 +308,14 @@ partial class AppEditorForm
         tlpJanela.Controls.Add(lblAltura, 0, 5);
         tlpJanela.Controls.Add(nudJanelaAltura, 1, 5);
         tlpJanela.Controls.Add(btnTestarJanela, 1, 6);
+        tlpJanela.Controls.Add(btnTestReal, 1, 7);
         tlpJanela.Dock = DockStyle.Fill;
         tlpJanela.Location = new System.Drawing.Point(8, 8);
         tlpJanela.Margin = new Padding(0);
         tlpJanela.Name = "tlpJanela";
         tlpJanela.Padding = new Padding(0, 0, 0, 8);
-        tlpJanela.RowCount = 7;
+        tlpJanela.RowCount = 8;
+        tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpJanela.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -474,6 +478,18 @@ partial class AppEditorForm
         btnTestarJanela.Text = "Testar";
         btnTestarJanela.UseVisualStyleBackColor = true;
         btnTestarJanela.Click += btnTestarJanela_Click;
+        //
+        // btnTestReal
+        //
+        btnTestReal.AutoSize = true;
+        btnTestReal.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnTestReal.Margin = new Padding(0, 0, 8, 8);
+        btnTestReal.Name = "btnTestReal";
+        btnTestReal.Size = new System.Drawing.Size(88, 25);
+        btnTestReal.TabIndex = 10;
+        btnTestReal.Text = "Executar real";
+        btnTestReal.UseVisualStyleBackColor = true;
+        btnTestReal.Click += btnTestReal_Click;
         //
         // tpSites
         //
