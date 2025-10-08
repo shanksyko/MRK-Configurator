@@ -28,6 +28,26 @@ public sealed record class AppConfig
     public bool AutoStart { get; init; } = true;
 
     /// <summary>
+    /// Determines the execution order within a launch profile.
+    /// </summary>
+    public int Order { get; init; }
+
+    /// <summary>
+    /// Optional delay applied before launching the application, in milliseconds.
+    /// </summary>
+    public int DelayMs { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/>, asks for confirmation before launching the application.
+    /// </summary>
+    public bool AskBeforeLaunch { get; init; }
+
+    /// <summary>
+    /// Optional override indicating whether network connectivity is required before launch.
+    /// </summary>
+    public bool? NetworkRequired { get; init; }
+
+    /// <summary>
     /// Optional environment variables applied when launching the application.
     /// </summary>
     public IDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();

@@ -34,6 +34,11 @@ public partial class AppEditorForm : Form
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
     private readonly IAppRunner _appRunner;
+    private readonly IList<ProgramaConfig>? _profileApps;
+    private readonly BindingList<ProfileItemMetadata> _profileItems = new();
+    private ProfileItemMetadata? _editingMetadata;
+    private bool _suppressCycleUpdates;
+    private bool _suppressCycleSelectionEvents;
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
@@ -42,7 +47,8 @@ public partial class AppEditorForm : Form
         ProgramaConfig? programa = null,
         IReadOnlyList<MonitorInfo>? monitors = null,
         string? selectedMonitorId = null,
-        IAppRunner? appRunner = null)
+        IAppRunner? appRunner = null,
+        IList<ProgramaConfig>? profileApps = null)
     {
         InitializeComponent();
 
@@ -52,6 +58,11 @@ public partial class AppEditorForm : Form
         var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites não foi carregado.");
         var appsTab = appsTabControl ?? throw new InvalidOperationException("A aba de aplicativos não foi carregada.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi configurado.");
+        var cycleSource = bsCycle ?? throw new InvalidOperationException("A fonte de dados do ciclo não foi configurada.");
+        var cycleGrid = dgvCycle ?? throw new InvalidOperationException("O grid de ciclo não foi carregado.");
+        _ = tlpCycle ?? throw new InvalidOperationException("O layout do ciclo não foi carregado.");
+        _ = btnCycleUp ?? throw new InvalidOperationException("O botão de mover para cima do ciclo não foi carregado.");
+        _ = btnCycleDown ?? throw new InvalidOperationException("O botão de mover para baixo do ciclo não foi carregado.");
 
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
@@ -67,6 +78,20 @@ public partial class AppEditorForm : Form
         _providedMonitors = monitors;
         _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
+        _profileApps = profileApps;
+
+        cycleSource.DataSource = _profileItems;
+        cycleGrid.AutoGenerateColumns = false;
+        cycleGrid.EditMode = DataGridViewEditMode.EditOnEnter;
+        _profileItems.ListChanged += (_, _) =>
+        {
+            if (_suppressCycleUpdates)
+            {
+                return;
+            }
+
+            UpdateCycleButtons();
+        };
 
         RefreshMonitorSnapshot();
 
@@ -85,6 +110,7 @@ public partial class AppEditorForm : Form
 
         txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
         txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
+        txtId.TextChanged += txtId_TextChanged;
 
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
@@ -101,6 +127,8 @@ public partial class AppEditorForm : Form
         UpdateMonitorCoordinateLabel(null);
 
         Disposed += AppEditorForm_Disposed;
+
+        InitializeCycleMetadata(profileApps, programa);
 
         if (programa is not null)
         {
@@ -1126,6 +1154,7 @@ public partial class AppEditorForm : Form
         }
 
         Resultado = ConstruirPrograma();
+        CommitProfileMetadata();
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -1158,6 +1187,11 @@ public partial class AppEditorForm : Form
             janela = janela with { Monitor = monitorInfo.Key };
         }
 
+        if (_editingMetadata is not null)
+        {
+            _editingMetadata.Id = id;
+        }
+
         return (_original ?? new ProgramaConfig()) with
         {
             Id = id,
@@ -1166,7 +1200,352 @@ public partial class AppEditorForm : Form
             AutoStart = chkAutoStart.Checked,
             Window = janela,
             TargetMonitorStableId = monitorInfo?.StableId ?? string.Empty,
+            Order = _editingMetadata?.Order ?? 0,
+            DelayMs = _editingMetadata?.DelayMs ?? 0,
+            AskBeforeLaunch = _editingMetadata?.AskBeforeLaunch ?? false,
+            NetworkRequired = _editingMetadata?.NetworkRequired,
         };
+    }
+
+    private void InitializeCycleMetadata(IList<ProgramaConfig>? profileApps, ProgramaConfig? programa)
+    {
+        if (bsCycle is null || dgvCycle is null)
+        {
+            return;
+        }
+
+        var items = new List<ProfileItemMetadata>();
+
+        if (profileApps is not null)
+        {
+            foreach (var app in profileApps)
+            {
+                var isTarget = programa is not null && ReferenceEquals(app, programa);
+                var metadata = new ProfileItemMetadata(app, isTarget, items.Count + 1);
+                items.Add(metadata);
+                if (isTarget)
+                {
+                    _editingMetadata = metadata;
+                }
+            }
+        }
+
+        if (_editingMetadata is null)
+        {
+            var defaultOrder = items.Count > 0 ? items.Max(item => item.Order) + 1 : 1;
+            var metadata = new ProfileItemMetadata(programa, isTarget: true, defaultOrder);
+            items.Add(metadata);
+            _editingMetadata = metadata;
+        }
+
+        _suppressCycleUpdates = true;
+        try
+        {
+            foreach (var item in _profileItems)
+            {
+                item.PropertyChanged -= ProfileItem_PropertyChanged;
+            }
+
+            _profileItems.RaiseListChangedEvents = false;
+            _profileItems.Clear();
+            foreach (var item in items
+                         .OrderBy(i => i.Order)
+                         .ThenBy(i => i.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                item.PropertyChanged += ProfileItem_PropertyChanged;
+                _profileItems.Add(item);
+            }
+            _profileItems.RaiseListChangedEvents = true;
+            _profileItems.ResetBindings();
+
+            RenumberCycleOrders();
+        }
+        finally
+        {
+            _suppressCycleUpdates = false;
+        }
+
+        bsCycle.DataSource = _profileItems;
+        RefreshCyclePreviewNumbers();
+        SelectCycleItem(_editingMetadata);
+    }
+
+    private void ProfileItem_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_suppressCycleUpdates)
+        {
+            return;
+        }
+
+        RefreshCyclePreviewNumbers();
+    }
+
+    private void RenumberCycleOrders()
+    {
+        _suppressCycleUpdates = true;
+        try
+        {
+            for (var index = 0; index < _profileItems.Count; index++)
+            {
+                var item = _profileItems[index];
+                item.Order = index + 1;
+            }
+        }
+        finally
+        {
+            _suppressCycleUpdates = false;
+        }
+
+        RefreshCyclePreviewNumbers();
+    }
+
+    private void RefreshCyclePreviewNumbers()
+    {
+        if (_suppressCycleUpdates)
+        {
+            return;
+        }
+
+        UpdateCycleButtons();
+        monitorPreviewDisplay?.Invalidate();
+    }
+
+    private void UpdateCycleButtons()
+    {
+        if (btnCycleUp is null || btnCycleDown is null || dgvCycle is null)
+        {
+            return;
+        }
+
+        if (dgvCycle.Rows.Count == 0)
+        {
+            btnCycleUp.Enabled = false;
+            btnCycleDown.Enabled = false;
+            return;
+        }
+
+        var index = dgvCycle.CurrentCell?.RowIndex ?? (dgvCycle.SelectedRows.Count > 0 ? dgvCycle.SelectedRows[0].Index : -1);
+        btnCycleUp.Enabled = index > 0;
+        btnCycleDown.Enabled = index >= 0 && index < dgvCycle.Rows.Count - 1;
+    }
+
+    private void SelectCycleItem(ProfileItemMetadata? item)
+    {
+        if (dgvCycle is null)
+        {
+            return;
+        }
+
+        if (item is null)
+        {
+            UpdateCycleButtons();
+            return;
+        }
+
+        var index = _profileItems.IndexOf(item);
+        if (index < 0 || index >= dgvCycle.Rows.Count)
+        {
+            UpdateCycleButtons();
+            return;
+        }
+
+        _suppressCycleSelectionEvents = true;
+        try
+        {
+            dgvCycle.ClearSelection();
+            dgvCycle.CurrentCell = dgvCycle.Rows[index].Cells[0];
+            dgvCycle.Rows[index].Selected = true;
+        }
+        finally
+        {
+            _suppressCycleSelectionEvents = false;
+        }
+
+        UpdateCycleButtons();
+    }
+
+    private void txtId_TextChanged(object? sender, EventArgs e)
+    {
+        if (_editingMetadata is null)
+        {
+            return;
+        }
+
+        _editingMetadata.Id = txtId.Text?.Trim() ?? string.Empty;
+    }
+
+    private void dgvCycle_SelectionChanged(object? sender, EventArgs e)
+    {
+        if (_suppressCycleSelectionEvents)
+        {
+            return;
+        }
+
+        UpdateCycleButtons();
+    }
+
+    private void dgvCycle_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
+    {
+        if (dgvCycle?.IsCurrentCellDirty == true)
+        {
+            dgvCycle.CommitEdit(DataGridViewDataErrorContexts.Commit);
+        }
+    }
+
+    private void dgvCycle_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0)
+        {
+            return;
+        }
+
+        if (dgvCycle is null)
+        {
+            return;
+        }
+
+        var columnName = dgvCycle.Columns[e.ColumnIndex].Name;
+        var metadata = e.RowIndex < _profileItems.Count ? _profileItems[e.RowIndex] : null;
+
+        if (string.Equals(columnName, "colCycleOrder", StringComparison.Ordinal))
+        {
+            SortCycleItemsByOrder();
+            RenumberCycleOrders();
+            SelectCycleItem(metadata);
+        }
+
+        RefreshCyclePreviewNumbers();
+    }
+
+    private void dgvCycle_DataError(object? sender, DataGridViewDataErrorEventArgs e)
+    {
+        e.ThrowException = false;
+    }
+
+    private void SortCycleItemsByOrder()
+    {
+        _suppressCycleUpdates = true;
+        try
+        {
+            var ordered = _profileItems
+                .OrderBy(item => item.Order)
+                .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _profileItems.RaiseListChangedEvents = false;
+            _profileItems.Clear();
+            foreach (var item in ordered)
+            {
+                _profileItems.Add(item);
+            }
+            _profileItems.RaiseListChangedEvents = true;
+            _profileItems.ResetBindings();
+        }
+        finally
+        {
+            _suppressCycleUpdates = false;
+        }
+
+        RefreshCyclePreviewNumbers();
+    }
+
+    private void btnCycleUp_Click(object? sender, EventArgs e)
+    {
+        if (dgvCycle is null)
+        {
+            return;
+        }
+
+        var index = dgvCycle.CurrentCell?.RowIndex ?? (dgvCycle.SelectedRows.Count > 0 ? dgvCycle.SelectedRows[0].Index : -1);
+        if (index <= 0)
+        {
+            return;
+        }
+
+        var item = _profileItems[index];
+
+        _profileItems.RaiseListChangedEvents = false;
+        _profileItems.RemoveAt(index);
+        _profileItems.Insert(index - 1, item);
+        _profileItems.RaiseListChangedEvents = true;
+        _profileItems.ResetBindings();
+
+        RenumberCycleOrders();
+        SelectCycleItem(item);
+    }
+
+    private void btnCycleDown_Click(object? sender, EventArgs e)
+    {
+        if (dgvCycle is null)
+        {
+            return;
+        }
+
+        var index = dgvCycle.CurrentCell?.RowIndex ?? (dgvCycle.SelectedRows.Count > 0 ? dgvCycle.SelectedRows[0].Index : -1);
+        if (index < 0 || index >= _profileItems.Count - 1)
+        {
+            return;
+        }
+
+        var item = _profileItems[index];
+
+        _profileItems.RaiseListChangedEvents = false;
+        _profileItems.RemoveAt(index);
+        _profileItems.Insert(index + 1, item);
+        _profileItems.RaiseListChangedEvents = true;
+        _profileItems.ResetBindings();
+
+        RenumberCycleOrders();
+        SelectCycleItem(item);
+    }
+
+    private void CommitProfileMetadata()
+    {
+        if (_profileApps is null)
+        {
+            return;
+        }
+
+        foreach (var metadata in _profileItems)
+        {
+            if (metadata.Original is null)
+            {
+                continue;
+            }
+
+            if (_original is not null && ReferenceEquals(metadata.Original, _original))
+            {
+                continue;
+            }
+
+            var index = FindProfileIndex(metadata.Original);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            var current = _profileApps[index];
+            _profileApps[index] = current with
+            {
+                Order = metadata.Order,
+                DelayMs = metadata.DelayMs,
+                AskBeforeLaunch = metadata.AskBeforeLaunch,
+                NetworkRequired = metadata.NetworkRequired,
+            };
+        }
+    }
+
+    private int FindProfileIndex(ProgramaConfig target)
+    {
+        for (var i = 0; i < _profileApps!.Count; i++)
+        {
+            if (ReferenceEquals(_profileApps[i], target))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private bool ValidarCampos()
@@ -1421,5 +1800,112 @@ public partial class AppEditorForm : Form
             => new(null, null, "Nenhum monitor disponível");
 
         public override string ToString() => DisplayName;
+    }
+
+    private sealed class ProfileItemMetadata : INotifyPropertyChanged
+    {
+        private string _id;
+        private int _order;
+        private int _delayMs;
+        private bool _askBeforeLaunch;
+        private bool? _networkRequired;
+
+        public ProfileItemMetadata(AppConfig? source, bool isTarget, int defaultOrder)
+        {
+            Original = source;
+            IsTarget = isTarget;
+            _id = source?.Id ?? string.Empty;
+            var initialOrder = source?.Order ?? 0;
+            _order = initialOrder > 0 ? initialOrder : Math.Max(1, defaultOrder);
+            _delayMs = source?.DelayMs ?? 0;
+            _askBeforeLaunch = source?.AskBeforeLaunch ?? false;
+            _networkRequired = source?.NetworkRequired;
+        }
+
+        public AppConfig? Original { get; }
+
+        public bool IsTarget { get; }
+
+        public string Id
+        {
+            get => _id;
+            set
+            {
+                var normalized = value ?? string.Empty;
+                if (_id != normalized)
+                {
+                    _id = normalized;
+                    OnPropertyChanged(nameof(Id));
+                }
+            }
+        }
+
+        public int Order
+        {
+            get => _order;
+            set
+            {
+                var normalized = value < 0 ? 0 : value;
+                if (_order != normalized)
+                {
+                    _order = normalized;
+                    OnPropertyChanged(nameof(Order));
+                }
+            }
+        }
+
+        public int DelayMs
+        {
+            get => _delayMs;
+            set
+            {
+                var normalized = value < 0 ? 0 : value;
+                if (_delayMs != normalized)
+                {
+                    _delayMs = normalized;
+                    OnPropertyChanged(nameof(DelayMs));
+                }
+            }
+        }
+
+        public bool AskBeforeLaunch
+        {
+            get => _askBeforeLaunch;
+            set
+            {
+                if (_askBeforeLaunch != value)
+                {
+                    _askBeforeLaunch = value;
+                    OnPropertyChanged(nameof(AskBeforeLaunch));
+                }
+            }
+        }
+
+        public bool? NetworkRequired
+        {
+            get => _networkRequired;
+            set
+            {
+                if (_networkRequired != value)
+                {
+                    _networkRequired = value;
+                    OnPropertyChanged(nameof(NetworkRequired));
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void UpdateFrom(AppConfig app)
+        {
+            Id = app.Id;
+            Order = app.Order > 0 ? app.Order : Order;
+            DelayMs = app.DelayMs;
+            AskBeforeLaunch = app.AskBeforeLaunch;
+            NetworkRequired = app.NetworkRequired;
+        }
+
+        private void OnPropertyChanged(string propertyName)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
