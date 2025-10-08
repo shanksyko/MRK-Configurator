@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Mieruka.Core;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
@@ -114,11 +115,7 @@ internal static class WindowPlacementHelper
     /// <returns>Absolute screen coordinates used for the window placement.</returns>
     public static Rectangle ResolveBounds(WindowConfig window, MonitorInfo monitor)
     {
-        ArgumentNullException.ThrowIfNull(window);
-        ArgumentNullException.ThrowIfNull(monitor);
-
-        var monitorBounds = GetMonitorBounds(monitor);
-        return CalculateBounds(window, monitor, monitorBounds);
+        return AppRunner.ResolveBounds(window, monitor);
     }
 
     /// <summary>

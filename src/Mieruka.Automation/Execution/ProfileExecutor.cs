@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -9,6 +8,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Mieruka.Core;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
@@ -27,6 +27,7 @@ public sealed class ProfileExecutor : IDisposable
     private readonly IDisplayService? _displayService;
     private readonly bool _ownsDisplayService;
     private readonly TimeSpan _windowTimeout;
+    private readonly AppRunner _appRunner;
 
     private CancellationTokenSource? _executionCts;
     private Task? _executionTask;
@@ -37,7 +38,7 @@ public sealed class ProfileExecutor : IDisposable
     /// </summary>
     /// <param name="windowTimeout">Optional timeout applied when waiting for application windows.</param>
     /// <param name="displayService">Display service used to query monitor metadata.</param>
-    public ProfileExecutor(TimeSpan? windowTimeout = null, IDisplayService? displayService = null)
+    public ProfileExecutor(TimeSpan? windowTimeout = null, IDisplayService? displayService = null, AppRunner? appRunner = null)
     {
         _windowTimeout = windowTimeout ?? DefaultWindowTimeout;
 
@@ -46,6 +47,8 @@ public sealed class ProfileExecutor : IDisposable
             _displayService = displayService ?? new DisplayService();
             _ownsDisplayService = displayService is null;
         }
+
+        _appRunner = appRunner ?? new AppRunner(_windowTimeout);
     }
 
     /// <summary>
@@ -209,7 +212,7 @@ public sealed class ProfileExecutor : IDisposable
             return;
         }
 
-        Process? process = null;
+        int? processId = null;
 
         try
         {
@@ -219,18 +222,23 @@ public sealed class ProfileExecutor : IDisposable
             }
 
             var startInfo = BuildStartInfo(app);
-            process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to launch process.");
-
-            AppStarted?.Invoke(this, new AppExecutionEventArgs(profile, app, process.Id, null));
-
-            var handle = await WaitForMainWindowAsync(process, _windowTimeout, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-
             var monitor = ResolveMonitor(profile, app.Window, app.TargetMonitorStableId, monitors);
-            var bounds = ResolveBounds(app.Window, monitor);
-            WindowMover.MoveTo(handle, bounds, app.Window.AlwaysOnTop, restoreIfMinimized: true);
 
-            AppPositioned?.Invoke(this, new AppExecutionEventArgs(profile, app, process.Id, monitor));
+            var positioned = await _appRunner.RunAndPositionAsync(
+                startInfo,
+                monitor,
+                app.Window,
+                cancellationToken,
+                process =>
+                {
+                    processId = process.Id;
+                    AppStarted?.Invoke(this, new AppExecutionEventArgs(profile, app, process.Id, null));
+                }).ConfigureAwait(false);
+
+            if (positioned)
+            {
+                AppPositioned?.Invoke(this, new AppExecutionEventArgs(profile, app, processId, monitor));
+            }
         }
         catch (OperationCanceledException)
         {
@@ -239,10 +247,6 @@ public sealed class ProfileExecutor : IDisposable
         catch (Exception ex)
         {
             Failed?.Invoke(this, new ProfileExecutionFailedEventArgs(profile, app, null, ex));
-        }
-        finally
-        {
-            process?.Dispose();
         }
     }
 
@@ -262,7 +266,7 @@ public sealed class ProfileExecutor : IDisposable
             }
 
             var monitor = ResolveMonitor(profile, window, profile.DefaultMonitorId, monitors);
-            var bounds = ResolveBounds(window, monitor);
+            var bounds = AppRunner.ResolveBounds(window, monitor);
             WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: false);
 
             AppPositioned?.Invoke(this, new AppExecutionEventArgs(profile, null, null, monitor, window.Title));
@@ -304,37 +308,6 @@ public sealed class ProfileExecutor : IDisposable
         }
 
         return startInfo;
-    }
-
-    private static async Task<IntPtr> WaitForMainWindowAsync(Process process, TimeSpan timeout, CancellationToken cancellationToken)
-    {
-        process.Refresh();
-        var handle = process.MainWindowHandle;
-        if (handle != IntPtr.Zero)
-        {
-            return handle;
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-        while (stopwatch.Elapsed < timeout)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (process.HasExited)
-            {
-                throw new InvalidOperationException("The process exited before the main window was ready.");
-            }
-
-            await Task.Delay(150, cancellationToken).ConfigureAwait(false);
-            process.Refresh();
-            handle = process.MainWindowHandle;
-            if (handle != IntPtr.Zero)
-            {
-                return handle;
-            }
-        }
-
-        throw new TimeoutException("The main window was not detected within the timeout interval.");
     }
 
     private MonitorInfo ResolveMonitor(
@@ -403,156 +376,6 @@ public sealed class ProfileExecutor : IDisposable
         return value.Trim();
     }
 
-    private static Rectangle ResolveBounds(WindowConfig window, MonitorInfo monitor)
-    {
-        var monitorBounds = GetMonitorBounds(monitor);
-        if (monitorBounds.Width <= 0 || monitorBounds.Height <= 0)
-        {
-            monitorBounds = new Rectangle(0, 0, Math.Max(1, monitor.Width), Math.Max(1, monitor.Height));
-        }
-
-        if (window.FullScreen)
-        {
-            return monitorBounds;
-        }
-
-        var scale = monitor.Scale > 0 ? monitor.Scale : 1.0;
-        var left = window.X.HasValue
-            ? monitorBounds.Left + ScaleValue(window.X.Value, scale)
-            : monitorBounds.Left;
-        var top = window.Y.HasValue
-            ? monitorBounds.Top + ScaleValue(window.Y.Value, scale)
-            : monitorBounds.Top;
-        var width = window.Width.HasValue
-            ? ScaleValue(window.Width.Value, scale)
-            : monitorBounds.Width;
-        var height = window.Height.HasValue
-            ? ScaleValue(window.Height.Value, scale)
-            : monitorBounds.Height;
-
-        if (width <= 0)
-        {
-            width = monitorBounds.Width;
-        }
-
-        if (height <= 0)
-        {
-            height = monitorBounds.Height;
-        }
-
-        var target = new Rectangle(left, top, width, height);
-
-        if (TryGetMonitorAreas(monitor, out _, out var workArea))
-        {
-            target = ClampToWorkArea(target, workArea);
-        }
-
-        return target;
-    }
-
-    private static Rectangle ClampToWorkArea(Rectangle target, Rectangle workArea)
-    {
-        if (workArea.Width <= 0 || workArea.Height <= 0)
-        {
-            return target;
-        }
-
-        var width = Math.Min(target.Width, workArea.Width);
-        var height = Math.Min(target.Height, workArea.Height);
-
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
-        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
-
-        var x = Math.Clamp(target.Left, workArea.Left, maxLeft);
-        var y = Math.Clamp(target.Top, workArea.Top, maxTop);
-
-        return new Rectangle(x, y, width, height);
-    }
-
-    private static Rectangle GetMonitorBounds(MonitorInfo monitor)
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return new Rectangle(0, 0, Math.Max(1, monitor.Width), Math.Max(1, monitor.Height));
-        }
-
-        if (!string.IsNullOrWhiteSpace(monitor.DeviceName) && TryGetDeviceBounds(monitor.DeviceName, out var bounds))
-        {
-            return bounds;
-        }
-
-        if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId) && TryGetDeviceBounds(monitor.Key.DeviceId, out bounds))
-        {
-            return bounds;
-        }
-
-        return new Rectangle(0, 0, Math.Max(1, monitor.Width), Math.Max(1, monitor.Height));
-    }
-
-    private static bool TryGetMonitorAreas(MonitorInfo monitor, out Rectangle bounds, out Rectangle workArea)
-    {
-        bounds = Rectangle.Empty;
-        workArea = Rectangle.Empty;
-
-        if (!OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
-        var baseBounds = GetMonitorBounds(monitor);
-        if (baseBounds.Width <= 0 || baseBounds.Height <= 0)
-        {
-            return false;
-        }
-
-        var point = new POINT
-        {
-            X = baseBounds.Left + (baseBounds.Width / 2),
-            Y = baseBounds.Top + (baseBounds.Height / 2),
-        };
-
-        var handle = MonitorFromPoint(point, MonitorDefaultToNearest);
-        if (handle == IntPtr.Zero)
-        {
-            return false;
-        }
-
-        var info = MONITORINFOEX.Create();
-        if (!GetMonitorInfo(handle, ref info))
-        {
-            return false;
-        }
-
-        bounds = Rectangle.FromLTRB(info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom);
-        workArea = Rectangle.FromLTRB(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom);
-        return true;
-    }
-
-    private static bool TryGetDeviceBounds(string deviceName, out Rectangle bounds)
-    {
-        bounds = Rectangle.Empty;
-
-        if (!OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
-        var devMode = new DEVMODE
-        {
-            dmSize = (ushort)Marshal.SizeOf<DEVMODE>(),
-        };
-
-        if (!EnumDisplaySettingsEx(deviceName, EnumCurrentSettings, ref devMode, 0))
-        {
-            return false;
-        }
-
-        var width = ClampToInt(devMode.dmPelsWidth);
-        var height = ClampToInt(devMode.dmPelsHeight);
-        bounds = new Rectangle(devMode.dmPositionX, devMode.dmPositionY, width, height);
-        return width > 0 && height > 0;
-    }
-
     private static IntPtr FindWindowHandle(string title)
     {
         if (string.IsNullOrWhiteSpace(title))
@@ -604,12 +427,6 @@ public sealed class ProfileExecutor : IDisposable
             && left.TargetId == right.TargetId;
     }
 
-    private static int ScaleValue(int value, double scale)
-        => (int)Math.Round(value * scale, MidpointRounding.AwayFromZero);
-
-    private static int ClampToInt(uint value)
-        => value > int.MaxValue ? int.MaxValue : (int)value;
-
     private void EnsureNotDisposed()
     {
         if (_disposed)
@@ -619,18 +436,6 @@ public sealed class ProfileExecutor : IDisposable
     }
 
     private delegate bool EnumWindowsCallback(IntPtr hWnd, IntPtr lParam);
-
-    private const int EnumCurrentSettings = -1;
-    private const uint MonitorDefaultToNearest = 0x00000002;
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool EnumDisplaySettingsEx(string lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode, int dwFlags);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX info);
 
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsCallback lpEnumFunc, IntPtr lParam);
@@ -645,84 +450,6 @@ public sealed class ProfileExecutor : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr hWnd);
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct DEVMODE
-    {
-        private const int CchDeviceName = 32;
-        private const int CchFormName = 32;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchDeviceName)]
-        public string dmDeviceName;
-        public ushort dmSpecVersion;
-        public ushort dmDriverVersion;
-        public ushort dmSize;
-        public ushort dmDriverExtra;
-        public uint dmFields;
-        public int dmPositionX;
-        public int dmPositionY;
-        public uint dmDisplayOrientation;
-        public uint dmDisplayFixedOutput;
-        public short dmColor;
-        public short dmDuplex;
-        public short dmYResolution;
-        public short dmTTOption;
-        public short dmCollate;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchFormName)]
-        public string dmFormName;
-        public ushort dmLogPixels;
-        public uint dmBitsPerPel;
-        public uint dmPelsWidth;
-        public uint dmPelsHeight;
-        public uint dmDisplayFlags;
-        public uint dmDisplayFrequency;
-        public uint dmICMMethod;
-        public uint dmICMIntent;
-        public uint dmMediaType;
-        public uint dmDitherType;
-        public uint dmReserved1;
-        public uint dmReserved2;
-        public uint dmPanningWidth;
-        public uint dmPanningHeight;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct MONITORINFOEX
-    {
-        private const int CchDevicename = 32;
-
-        public uint cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
-        public uint dwFlags;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchDevicename)]
-        public string szDevice;
-
-        public static MONITORINFOEX Create()
-        {
-            return new MONITORINFOEX
-            {
-                cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>(),
-                szDevice = string.Empty,
-            };
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int left;
-        public int top;
-        public int right;
-        public int bottom;
-    }
 }
 
 /// <summary>

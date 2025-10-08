@@ -15,6 +15,7 @@ using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Services;
 using Mieruka.App.Ui.PreviewBindings;
+using Mieruka.Core;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Services;
@@ -35,8 +36,13 @@ public partial class AppEditorForm : Form
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
+    private readonly AppRunner _appRunner;
 
-    public AppEditorForm(ProgramaConfig? programa = null, IReadOnlyList<MonitorInfo>? monitors = null, string? selectedMonitorId = null)
+    public AppEditorForm(
+        ProgramaConfig? programa = null,
+        IReadOnlyList<MonitorInfo>? monitors = null,
+        string? selectedMonitorId = null,
+        AppRunner? appRunner = null)
     {
         InitializeComponent();
 
@@ -58,6 +64,7 @@ public partial class AppEditorForm : Form
         _providedMonitors = monitors;
         _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
+        _appRunner = appRunner ?? new AppRunner(WindowTestTimeout);
 
         RefreshMonitorSnapshot();
 
@@ -703,7 +710,8 @@ public partial class AppEditorForm : Form
                 }
                 else
                 {
-                    await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, window).ConfigureAwait(true);
+                    var startInfo = CreateStartInfo(executablePath, arguments);
+                    await _appRunner.RunAndPositionAsync(startInfo, monitor, window, CancellationToken.None).ConfigureAwait(true);
                 }
             }
             else
@@ -746,11 +754,7 @@ public partial class AppEditorForm : Form
         };
     }
 
-    private async Task LaunchAndPositionProcessAsync(
-        string executablePath,
-        string? arguments,
-        MonitorInfo monitor,
-        WindowConfig window)
+    private static ProcessStartInfo CreateStartInfo(string executablePath, string? arguments)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -769,41 +773,12 @@ public partial class AppEditorForm : Form
             startInfo.WorkingDirectory = workingDirectory;
         }
 
-        var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            throw new InvalidOperationException("Não foi possível iniciar o processo para teste.");
-        }
-
-        try
-        {
-            var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
-            ApplyWindowPosition(handle, monitor, window);
-        }
-        finally
-        {
-            process.Dispose();
-        }
+        return startInfo;
     }
 
     private static void LaunchExecutable(string executablePath, string? arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = executablePath,
-            UseShellExecute = false,
-        };
-
-        if (!string.IsNullOrWhiteSpace(arguments))
-        {
-            startInfo.Arguments = arguments;
-        }
-
-        var workingDirectory = Path.GetDirectoryName(executablePath);
-        if (!string.IsNullOrWhiteSpace(workingDirectory))
-        {
-            startInfo.WorkingDirectory = workingDirectory;
-        }
+        var startInfo = CreateStartInfo(executablePath, arguments);
 
         using var process = Process.Start(startInfo);
         if (process is null)
@@ -823,9 +798,10 @@ public partial class AppEditorForm : Form
         var handle = process.MainWindowHandle;
         if (handle == IntPtr.Zero)
         {
-            handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
+            handle = await _appRunner.WaitForMainWindowAsync(process, CancellationToken.None).ConfigureAwait(true);
         }
 
+        handle = await _appRunner.RetryFindUncloakedAsync(process, handle, CancellationToken.None).ConfigureAwait(true);
         ApplyWindowPosition(handle, monitor, window);
     }
 
@@ -845,7 +821,8 @@ public partial class AppEditorForm : Form
 
         try
         {
-            var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
+            var handle = await _appRunner.WaitForMainWindowAsync(process, CancellationToken.None).ConfigureAwait(true);
+            handle = await _appRunner.RetryFindUncloakedAsync(process, handle, CancellationToken.None).ConfigureAwait(true);
             ApplyWindowPosition(handle, monitor, window);
             await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
         }
@@ -878,7 +855,7 @@ public partial class AppEditorForm : Form
             throw new InvalidOperationException("A janela de destino não foi localizada.");
         }
 
-        var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
+        var bounds = AppRunner.ResolveBounds(window, monitor);
         WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
     }
 
@@ -1175,7 +1152,8 @@ public partial class AppEditorForm : Form
                 }
                 else
                 {
-                    await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, window).ConfigureAwait(true);
+                    var startInfo = CreateStartInfo(executablePath, arguments);
+                    await _appRunner.RunAndPositionAsync(startInfo, monitor, window, CancellationToken.None).ConfigureAwait(true);
                 }
             }
             else

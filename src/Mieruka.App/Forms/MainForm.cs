@@ -18,6 +18,7 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
+using Mieruka.Core;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
@@ -34,6 +35,7 @@ public partial class MainForm : Form
     private readonly List<MonitorPreviewHost> _monitorHosts = new();
     private readonly Dictionary<string, MonitorCardContext> _monitorCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AppRunner _appRunner;
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
@@ -68,6 +70,7 @@ public partial class MainForm : Form
         grid.CellDoubleClick += (_, _) => btnEditar_Click(this, EventArgs.Empty);
         grid.KeyDown += dgvProgramas_KeyDown;
 
+        _appRunner = new AppRunner();
         _orchestrator = CreateOrchestrator();
         _orchestrator.StateChanged += Orchestrator_StateChanged;
 
@@ -1427,7 +1430,7 @@ public partial class MainForm : Form
 
     private ProfileExecutor CreateProfileExecutor()
     {
-        var executor = new ProfileExecutor();
+        var executor = new ProfileExecutor(displayService: _displayService, appRunner: _appRunner);
         executor.AppStarted += ProfileExecutor_AppStarted;
         executor.AppPositioned += ProfileExecutor_AppPositioned;
         executor.Completed += ProfileExecutor_Completed;
@@ -1607,7 +1610,7 @@ public partial class MainForm : Form
             ? _monitorSnapshot.ToList()
             : CaptureMonitorSnapshot().ToList();
 
-        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId);
+        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId, _appRunner);
         var resultado = editor.ShowDialog(this);
         if (resultado != DialogResult.OK)
         {
