@@ -76,12 +76,11 @@ internal static class LayoutHelpers
         ArgumentNullException.ThrowIfNull(pararHandler);
         ArgumentNullException.ThrowIfNull(testarHandler);
 
-        var card = new Panel
+        var card = new MonitorCardPanel
         {
             Dock = DockStyle.Fill,
             Margin = new Padding(8),
             Padding = new Padding(8),
-            BorderStyle = BorderStyle.FixedSingle,
         };
 
         var baseFont = SystemFonts.CaptionFont ?? Control.DefaultFont;
