@@ -253,7 +253,7 @@ public partial class AppEditorForm : Form
             rbExe.Checked = !isBrowser;
         }
 
-        ApplyTypeTabs();
+        ApplyAppTypeUI();
     }
 
     private void ConfigureInstalledAppsSection(ListView installedAppsList)
@@ -469,7 +469,7 @@ public partial class AppEditorForm : Form
         RebuildSimRects();
     }
 
-    private void ApplyTypeTabs()
+    private void ApplyAppTypeUI()
     {
         var isExecutable = rbExe?.Checked ?? false;
         var isBrowser = rbBrowser?.Checked ?? false;
@@ -507,17 +507,6 @@ public partial class AppEditorForm : Form
             appsTabControl.Enabled = isExecutable;
         }
 
-        if (sitesEditorControl is not null)
-        {
-            sitesEditorControl.Enabled = !isExecutable;
-        }
-
-        if (pnlBrowserPanel is not null)
-        {
-            pnlBrowserPanel.Visible = !isExecutable;
-            pnlBrowserPanel.Enabled = !isExecutable;
-        }
-
         if (grpInstalledApps is not null)
         {
             grpInstalledApps.Visible = isExecutable;
@@ -525,16 +514,25 @@ public partial class AppEditorForm : Form
             grpInstalledApps.Refresh();
         }
 
+        if (_installedAppsSearchBox is not null)
+        {
+            _installedAppsSearchBox.Visible = isExecutable;
+            _installedAppsSearchBox.Enabled = isExecutable;
+            _installedAppsSearchBox.TabStop = isExecutable;
+        }
+
         if (lvApps is not null)
         {
             lvApps.Visible = isExecutable;
             lvApps.Enabled = isExecutable;
+            lvApps.TabStop = isExecutable;
         }
 
         if (btnBrowseExe is not null)
         {
             btnBrowseExe.Visible = isExecutable;
             btnBrowseExe.Enabled = isExecutable;
+            btnBrowseExe.TabStop = isExecutable;
         }
 
         if (txtExecutavel is not null)
@@ -549,6 +547,11 @@ public partial class AppEditorForm : Form
             txtArgumentos.Enabled = isExecutable;
             txtArgumentos.ReadOnly = !isExecutable;
             txtArgumentos.TabStop = isExecutable;
+        }
+
+        if (!isExecutable)
+        {
+            SetInstalledAppsStatus(string.Empty, isError: false);
         }
 
         if (isBrowser)
@@ -621,14 +624,15 @@ public partial class AppEditorForm : Form
         }
     }
 
-    private async Task SafeLoadAppsAsync()
+    private async Task EnsureAppsListAsync()
     {
-        if (_appsListLoaded)
+        if (rbExe?.Checked != true)
         {
+            SetInstalledAppsStatus(string.Empty, isError: false);
             return;
         }
 
-        if (rbExe?.Checked != true)
+        if (_appsListLoaded)
         {
             return;
         }
@@ -646,29 +650,28 @@ public partial class AppEditorForm : Form
 
         try
         {
-            UpdateInstalledAppsStatus("Carregando aplicativos instalados...", isError: false);
+            SetInstalledAppsStatus("Carregando aplicativos instalados...", isError: false);
             var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
             _allApps.Clear();
             _allApps.AddRange(apps);
 
             PopulateInstalledApps(_allApps);
             appsTabControl?.SetInstalledApps(apps);
-            UpdateInstalledAppsStatus(string.Empty, isError: false);
-            _appsListLoaded = true;
+            SetInstalledAppsStatus(string.Empty, isError: false);
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
             _allApps.Clear();
             PopulateInstalledApps(Array.Empty<InstalledAppInfo>());
-            UpdateInstalledAppsStatus("Não foi possível carregar a lista de aplicativos instalados.", isError: true);
+            SetInstalledAppsStatus("Não foi possível carregar a lista de aplicativos instalados.", isError: true);
             _appsListLoaded = false;
         }
         finally
         {
             Cursor.Current = previousCursor;
             UseWaitCursor = false;
-            ApplyTypeTabs();
+            ApplyAppTypeUI();
         }
     }
 
@@ -882,7 +885,7 @@ public partial class AppEditorForm : Form
         return item;
     }
 
-    private void UpdateInstalledAppsStatus(string? message, bool isError)
+    private void SetInstalledAppsStatus(string? message, bool isError)
     {
         if (_installedAppsStatusLabel is null)
         {
@@ -890,9 +893,11 @@ public partial class AppEditorForm : Form
         }
 
         var text = message ?? string.Empty;
+        var hasText = !string.IsNullOrWhiteSpace(text);
+
         _installedAppsStatusLabel.Text = text;
         _installedAppsStatusLabel.ForeColor = isError ? Color.Maroon : SystemColors.GrayText;
-        _installedAppsStatusLabel.Visible = !string.IsNullOrWhiteSpace(text);
+        _installedAppsStatusLabel.Visible = hasText && (rbExe?.Checked ?? false);
     }
 
     private static void EnsureInstalledAppsColumns(ListView listView)
@@ -1382,7 +1387,7 @@ public partial class AppEditorForm : Form
 
     private void rbBrowser_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyTypeTabs();
+        ApplyAppTypeUI();
     }
 
     private void chkCycleRedeDisponivel_CheckedChanged(object? sender, EventArgs e)
