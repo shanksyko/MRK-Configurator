@@ -18,6 +18,9 @@ partial class AppEditorForm
     internal TabPage tpCiclo = null!;
     internal TabPage tpAvancado = null!;
     internal SitesEditorControl sitesEditorControl = null!;
+    internal ComboBox cmbBrowserEngine = null!;
+    internal Label lblBrowserDetected = null!;
+    internal Panel pnlBrowserOptions = null!;
     internal AppsTab appsTabControl = null!;
     internal Button btnSalvar = null!;
     internal Button btnCancelar = null!;
@@ -81,6 +84,9 @@ partial class AppEditorForm
         tpCiclo = new TabPage();
         tpAvancado = new TabPage();
         sitesEditorControl = new SitesEditorControl();
+        cmbBrowserEngine = new ComboBox();
+        lblBrowserDetected = new Label();
+        pnlBrowserOptions = new Panel();
         appsTabControl = new AppsTab();
         var tlpAplicativos = new TableLayoutPanel();
         var painelRodape = new FlowLayoutPanel();
@@ -146,6 +152,12 @@ partial class AppEditorForm
         tlpAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
         tpSites.SuspendLayout();
+        var tlpSites = new TableLayoutPanel();
+        var flowBrowserHeader = new FlowLayoutPanel();
+        var lblBrowserEngine = new Label();
+        tlpSites.SuspendLayout();
+        flowBrowserHeader.SuspendLayout();
+        pnlBrowserOptions.SuspendLayout();
         tlpCycle.SuspendLayout();
         tlpCycleList.SuspendLayout();
         flowCycleControls.SuspendLayout();
@@ -657,7 +669,7 @@ partial class AppEditorForm
         //
         // tpSites
         //
-        tpSites.Controls.Add(sitesEditorControl);
+        tpSites.Controls.Add(tlpSites);
         tpSites.Location = new System.Drawing.Point(4, 24);
         tpSites.Margin = new Padding(8);
         tpSites.Name = "tpSites";
@@ -667,13 +679,83 @@ partial class AppEditorForm
         tpSites.Text = "Sites";
         tpSites.UseVisualStyleBackColor = true;
         //
+        // tlpSites
+        //
+        tlpSites.ColumnCount = 1;
+        tlpSites.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpSites.Controls.Add(flowBrowserHeader, 0, 0);
+        tlpSites.Controls.Add(lblBrowserDetected, 0, 1);
+        tlpSites.Controls.Add(pnlBrowserOptions, 0, 2);
+        tlpSites.Dock = DockStyle.Fill;
+        tlpSites.Location = new System.Drawing.Point(8, 8);
+        tlpSites.Margin = new Padding(0);
+        tlpSites.Name = "tlpSites";
+        tlpSites.RowCount = 3;
+        tlpSites.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpSites.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpSites.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpSites.Size = new System.Drawing.Size(1016, 604);
+        tlpSites.TabIndex = 0;
+        //
+        // flowBrowserHeader
+        //
+        flowBrowserHeader.AutoSize = true;
+        flowBrowserHeader.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        flowBrowserHeader.Dock = DockStyle.Fill;
+        flowBrowserHeader.FlowDirection = FlowDirection.LeftToRight;
+        flowBrowserHeader.Location = new System.Drawing.Point(0, 0);
+        flowBrowserHeader.Margin = new Padding(0, 0, 0, 8);
+        flowBrowserHeader.Name = "flowBrowserHeader";
+        flowBrowserHeader.WrapContents = false;
+        flowBrowserHeader.Controls.Add(lblBrowserEngine);
+        flowBrowserHeader.Controls.Add(cmbBrowserEngine);
+        //
+        // lblBrowserEngine
+        //
+        lblBrowserEngine.AutoSize = true;
+        lblBrowserEngine.Margin = new Padding(0, 0, 8, 0);
+        lblBrowserEngine.Name = "lblBrowserEngine";
+        lblBrowserEngine.Size = new System.Drawing.Size(113, 15);
+        lblBrowserEngine.TabIndex = 0;
+        lblBrowserEngine.Text = "Motor do navegador";
+        //
+        // cmbBrowserEngine
+        //
+        cmbBrowserEngine.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbBrowserEngine.FormattingEnabled = true;
+        cmbBrowserEngine.Margin = new Padding(0);
+        cmbBrowserEngine.MinimumSize = new System.Drawing.Size(200, 0);
+        cmbBrowserEngine.Name = "cmbBrowserEngine";
+        cmbBrowserEngine.Size = new System.Drawing.Size(200, 23);
+        cmbBrowserEngine.TabIndex = 1;
+        //
+        // lblBrowserDetected
+        //
+        lblBrowserDetected.AutoSize = true;
+        lblBrowserDetected.ForeColor = System.Drawing.SystemColors.GrayText;
+        lblBrowserDetected.Margin = new Padding(0, 0, 0, 8);
+        lblBrowserDetected.Name = "lblBrowserDetected";
+        lblBrowserDetected.Size = new System.Drawing.Size(0, 15);
+        lblBrowserDetected.TabIndex = 1;
+        lblBrowserDetected.Visible = false;
+        //
+        // pnlBrowserOptions
+        //
+        pnlBrowserOptions.Controls.Add(sitesEditorControl);
+        pnlBrowserOptions.Dock = DockStyle.Fill;
+        pnlBrowserOptions.Location = new System.Drawing.Point(0, 46);
+        pnlBrowserOptions.Margin = new Padding(0);
+        pnlBrowserOptions.Name = "pnlBrowserOptions";
+        pnlBrowserOptions.Size = new System.Drawing.Size(1016, 558);
+        pnlBrowserOptions.TabIndex = 2;
+        //
         // sitesEditorControl
         //
         sitesEditorControl.Dock = DockStyle.Fill;
-        sitesEditorControl.Location = new System.Drawing.Point(8, 8);
+        sitesEditorControl.Location = new System.Drawing.Point(0, 0);
         sitesEditorControl.Margin = new Padding(0);
         sitesEditorControl.Name = "sitesEditorControl";
-        sitesEditorControl.Size = new System.Drawing.Size(1016, 604);
+        sitesEditorControl.Size = new System.Drawing.Size(1016, 558);
         sitesEditorControl.TabIndex = 0;
         //
         // tlpCycle
@@ -983,6 +1065,11 @@ partial class AppEditorForm
         tlpAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
         tpSites.ResumeLayout(false);
+        pnlBrowserOptions.ResumeLayout(false);
+        flowBrowserHeader.ResumeLayout(false);
+        flowBrowserHeader.PerformLayout();
+        tlpSites.ResumeLayout(false);
+        tlpSites.PerformLayout();
         tlpCycleList.ResumeLayout(false);
         tlpCycleList.PerformLayout();
         tlpCycle.ResumeLayout(false);
