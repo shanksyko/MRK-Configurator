@@ -1321,13 +1321,15 @@ public partial class AppEditorForm : Form
             var baseColor = ResolveSimulationColor(app.Id);
             var label = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
 
-            overlays.Add(new MonitorPreviewDisplay.SimRect(
-                relativeBounds,
-                Color.FromArgb(96, baseColor),
-                Color.FromArgb(220, baseColor),
-                order,
-                label ?? string.Empty,
-                app.AskBeforeLaunch));
+            overlays.Add(new MonitorPreviewDisplay.SimRect
+            {
+                MonRel = relativeBounds,
+                Color = baseColor,
+                Order = order,
+                Title = label ?? string.Empty,
+                RequiresNetwork = app.RequiresNetwork,
+                AskBefore = app.AskBeforeLaunch,
+            });
 
             order++;
         }

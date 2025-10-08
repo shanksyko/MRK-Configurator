@@ -15,7 +15,7 @@ public sealed class MonitorPreviewDisplay : UserControl
 {
     private readonly PictureBox _pictureBox;
     private readonly List<SimRect> _simRects;
-    private readonly List<(RectangleF Bounds, string Text)> _askGlyphRegions;
+    private readonly List<(RectangleF Bounds, string Text)> _glyphRegions;
     private readonly ToolTip _tooltip;
     private MonitorPreviewHost? _host;
     private MonitorInfo? _monitor;
@@ -23,6 +23,8 @@ public sealed class MonitorPreviewDisplay : UserControl
 
     private const string AskGlyph = "❓";
     private const string AskTooltipText = "Solicitar confirmação antes de iniciar.";
+    private const string NetworkGlyph = "🌐";
+    private const string NetworkTooltipText = "Requer conexão de rede para iniciar.";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MonitorPreviewDisplay"/> class.
@@ -41,7 +43,7 @@ public sealed class MonitorPreviewDisplay : UserControl
         Controls.Add(_pictureBox);
 
         _simRects = new List<SimRect>();
-        _askGlyphRegions = new List<(RectangleF Bounds, string Text)>();
+        _glyphRegions = new List<(RectangleF Bounds, string Text)>();
         _tooltip = new ToolTip
         {
             ShowAlways = true,
@@ -70,29 +72,19 @@ public sealed class MonitorPreviewDisplay : UserControl
     /// <summary>
     /// Represents a simulated rectangle drawn on top of the monitor preview.
     /// </summary>
-    public readonly struct SimRect
+    public sealed class SimRect
     {
-        public SimRect(Rectangle bounds, Color fillColor, Color borderColor, int order, string title, bool askBeforeLaunch)
-        {
-            Bounds = bounds;
-            FillColor = fillColor;
-            BorderColor = borderColor;
-            Order = order;
-            Title = title ?? string.Empty;
-            AskBeforeLaunch = askBeforeLaunch;
-        }
+        public Rectangle MonRel { get; set; }
 
-        public Rectangle Bounds { get; }
+        public Color Color { get; set; }
 
-        public Color FillColor { get; }
+        public int Order { get; set; }
 
-        public Color BorderColor { get; }
+        public string? Title { get; set; }
 
-        public int Order { get; }
+        public bool RequiresNetwork { get; set; }
 
-        public string Title { get; }
-
-        public bool AskBeforeLaunch { get; }
+        public bool AskBefore { get; set; }
     }
 
     /// <summary>
@@ -194,7 +186,7 @@ public sealed class MonitorPreviewDisplay : UserControl
             _simRects.AddRange(rectangles);
         }
 
-        _askGlyphRegions.Clear();
+        _glyphRegions.Clear();
         ClearGlyphTooltip();
         _pictureBox.Invalidate();
     }
@@ -243,7 +235,7 @@ public sealed class MonitorPreviewDisplay : UserControl
     {
         if (_monitor is null || _simRects.Count == 0)
         {
-            _askGlyphRegions.Clear();
+            _glyphRegions.Clear();
             return;
         }
 
@@ -251,14 +243,14 @@ public sealed class MonitorPreviewDisplay : UserControl
         var monitorHeight = _monitor.Height > 0 ? _monitor.Height : _monitor.Bounds.Height;
         if (monitorWidth <= 0 || monitorHeight <= 0)
         {
-            _askGlyphRegions.Clear();
+            _glyphRegions.Clear();
             return;
         }
 
         var displayRect = GetImageDisplayRectangle(_pictureBox);
         if (displayRect.Width <= 0 || displayRect.Height <= 0)
         {
-            _askGlyphRegions.Clear();
+            _glyphRegions.Clear();
             return;
         }
 
@@ -269,88 +261,128 @@ public sealed class MonitorPreviewDisplay : UserControl
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-        _askGlyphRegions.Clear();
+        _glyphRegions.Clear();
 
         foreach (var rect in _simRects)
         {
-            if (rect.Bounds.Width <= 0 || rect.Bounds.Height <= 0)
+            if (rect.MonRel.Width <= 0 || rect.MonRel.Height <= 0)
             {
                 continue;
             }
 
             var canvasRect = new RectangleF(
-                displayRect.X + (rect.Bounds.X * scaleX),
-                displayRect.Y + (rect.Bounds.Y * scaleY),
-                rect.Bounds.Width * scaleX,
-                rect.Bounds.Height * scaleY);
+                displayRect.X + (rect.MonRel.X * scaleX),
+                displayRect.Y + (rect.MonRel.Y * scaleY),
+                rect.MonRel.Width * scaleX,
+                rect.MonRel.Height * scaleY);
 
             if (canvasRect.Width <= 0f || canvasRect.Height <= 0f)
             {
                 continue;
             }
 
-            using (var fill = new SolidBrush(rect.FillColor))
+            var baseColor = rect.Color;
+            if (baseColor.A == 0)
+            {
+                baseColor = Color.DodgerBlue;
+            }
+
+            using (var fill = new SolidBrush(Color.FromArgb(96, baseColor)))
             {
                 graphics.FillRectangle(fill, canvasRect);
             }
 
-            using (var border = new Pen(rect.BorderColor, 2f))
+            var borderColor = Color.FromArgb(220, baseColor);
+            using (var border = new Pen(borderColor, 2f))
             {
                 graphics.DrawRectangle(border, canvasRect.X, canvasRect.Y, canvasRect.Width, canvasRect.Height);
             }
 
-            var label = FormatLabel(rect);
-            if (!string.IsNullOrWhiteSpace(label))
-            {
-                var labelSize = TextRenderer.MeasureText(label, Font, Size.Empty, TextFormatFlags.NoPadding);
-                var labelRect = new Rectangle(
-                    (int)Math.Round(canvasRect.X + 4f),
-                    (int)Math.Round(canvasRect.Y + 4f),
-                    Math.Max(labelSize.Width + 8, 0),
-                    Math.Max(labelSize.Height + 4, 0));
+            DrawLabel(graphics, rect, canvasRect);
+            DrawIndicatorGlyphs(graphics, rect, canvasRect, borderColor);
+        }
+    }
 
-                if (labelRect.Width > 0 && labelRect.Height > 0)
-                {
-                    using var labelBrush = new SolidBrush(Color.FromArgb(180, 0, 0, 0));
-                    graphics.FillRectangle(labelBrush, labelRect);
-                    TextRenderer.DrawText(
-                        graphics,
-                        label,
-                        Font,
-                        labelRect,
-                        Color.White,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                }
+    private void DrawLabel(Graphics graphics, SimRect rect, RectangleF canvasRect)
+    {
+        var label = FormatLabel(rect);
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return;
+        }
+
+        var labelSize = TextRenderer.MeasureText(label, Font, Size.Empty, TextFormatFlags.NoPadding);
+        var labelRect = new Rectangle(
+            (int)Math.Round(canvasRect.X + 4f),
+            (int)Math.Round(canvasRect.Y + 4f),
+            Math.Max(labelSize.Width + 8, 0),
+            Math.Max(labelSize.Height + 4, 0));
+
+        if (labelRect.Width <= 0 || labelRect.Height <= 0)
+        {
+            return;
+        }
+
+        using var labelBrush = new SolidBrush(Color.FromArgb(180, 0, 0, 0));
+        graphics.FillRectangle(labelBrush, labelRect);
+        TextRenderer.DrawText(
+            graphics,
+            label,
+            Font,
+            labelRect,
+            Color.White,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+    }
+
+    private void DrawIndicatorGlyphs(Graphics graphics, SimRect rect, RectangleF canvasRect, Color borderColor)
+    {
+        var rightEdge = canvasRect.Right - 4f;
+
+        void DrawGlyph(string glyph, string tooltip)
+        {
+            if (string.IsNullOrEmpty(glyph))
+            {
+                return;
             }
 
-            if (rect.AskBeforeLaunch)
+            var glyphSize = TextRenderer.MeasureText(glyph, Font, Size.Empty, TextFormatFlags.NoPadding);
+            var glyphRect = new Rectangle(
+                (int)Math.Round(rightEdge - glyphSize.Width - 6f),
+                (int)Math.Round(canvasRect.Y + 4f),
+                glyphSize.Width + 6,
+                glyphSize.Height + 6);
+
+            if (glyphRect.Width <= 0 || glyphRect.Height <= 0)
             {
-                var glyphSize = TextRenderer.MeasureText(AskGlyph, Font, Size.Empty, TextFormatFlags.NoPadding);
-                var glyphRect = new Rectangle(
-                    (int)Math.Round(canvasRect.Right - glyphSize.Width - 8f),
-                    (int)Math.Round(canvasRect.Y + 4f),
-                    glyphSize.Width + 6,
-                    glyphSize.Height + 6);
-
-                if (glyphRect.Width > 0 && glyphRect.Height > 0)
-                {
-                    using var glyphFill = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
-                    graphics.FillEllipse(glyphFill, glyphRect);
-
-                    using var glyphBorder = new Pen(rect.BorderColor, 1.5f);
-                    graphics.DrawEllipse(glyphBorder, glyphRect);
-
-                    TextRenderer.DrawText(
-                        graphics,
-                        AskGlyph,
-                        Font,
-                        glyphRect,
-                        Color.Black,
-                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-
-                    _askGlyphRegions.Add((new RectangleF(glyphRect.X, glyphRect.Y, glyphRect.Width, glyphRect.Height), AskTooltipText));
-                }
+                return;
             }
+
+            using var glyphFill = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
+            graphics.FillEllipse(glyphFill, glyphRect);
+
+            using var glyphBorder = new Pen(borderColor, 1.5f);
+            graphics.DrawEllipse(glyphBorder, glyphRect);
+
+            TextRenderer.DrawText(
+                graphics,
+                glyph,
+                Font,
+                glyphRect,
+                Color.Black,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+
+            _glyphRegions.Add((new RectangleF(glyphRect.X, glyphRect.Y, glyphRect.Width, glyphRect.Height), tooltip));
+            rightEdge = glyphRect.X - 4f;
+        }
+
+        if (rect.AskBefore)
+        {
+            DrawGlyph(AskGlyph, AskTooltipText);
+        }
+
+        if (rect.RequiresNetwork)
+        {
+            DrawGlyph(NetworkGlyph, NetworkTooltipText);
         }
     }
 
@@ -418,7 +450,7 @@ public sealed class MonitorPreviewDisplay : UserControl
     {
         string? tooltip = null;
 
-        foreach (var entry in _askGlyphRegions)
+        foreach (var entry in _glyphRegions)
         {
             if (entry.Bounds.Contains(location))
             {
