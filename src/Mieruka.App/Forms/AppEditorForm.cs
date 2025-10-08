@@ -23,12 +23,13 @@ using Mieruka.Core.Interop;
 using Mieruka.Core.Services;
 using Mieruka.Core.Infra;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
-using Logger = Serilog.Log;
+using Serilog;
 
 namespace Mieruka.App.Forms;
 
 public partial class AppEditorForm : Form
 {
+    private static readonly ILogger Logger = Log.ForContext<AppEditorForm>();
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
@@ -79,6 +80,11 @@ public partial class AppEditorForm : Form
     private Point? _hoverPendingPoint;
     private Point? _hoverAppliedPoint;
     private CancellationTokenSource? _hoverThrottleCts;
+    private readonly IInstalledAppsProvider _installedAppsProvider = new RegistryInstalledAppsProvider();
+    private readonly List<InstalledAppInfo> _allApps = new();
+    private readonly Label _installedAppsStatusLabel;
+    private TextBox? _installedAppsSearchBox;
+    private bool _installedAppsLoaded;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -104,7 +110,7 @@ public partial class AppEditorForm : Form
         _ = rbExe ?? throw new InvalidOperationException("O seletor de executável não foi carregado.");
         _ = rbBrowser ?? throw new InvalidOperationException("O seletor de navegador não foi carregado.");
         _ = grpInstalledApps ?? throw new InvalidOperationException("O grupo de aplicativos instalados não foi carregado.");
-        _ = lvApps ?? throw new InvalidOperationException("A lista de aplicativos instalados não foi carregada.");
+        var installedAppsList = lvApps ?? throw new InvalidOperationException("A lista de aplicativos instalados não foi carregada.");
         _ = btnBrowseExe ?? throw new InvalidOperationException("O botão de procurar executáveis não foi carregado.");
 
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
@@ -144,12 +150,13 @@ public partial class AppEditorForm : Form
         sitesControl.RemoveRequested += SitesEditorControl_RemoveRequested;
         sitesControl.CloneRequested += SitesEditorControl_CloneRequested;
 
+        ConfigureInstalledAppsSection(installedAppsList);
+
         appsTab.ExecutableChosen += AppsTab_ExecutableChosen;
         appsTab.ExecutableCleared += AppsTab_ExecutableCleared;
         appsTab.ArgumentsChanged += AppsTab_ArgumentsChanged;
         appsTab.OpenRequested += AppsTab_OpenRequestedAsync;
         appsTab.TestRequested += AppsTab_TestRequestedAsync;
-        _ = appsTab.LoadInstalledAppsAsync();
 
         txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
         txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
@@ -191,6 +198,7 @@ public partial class AppEditorForm : Form
         UpdateMonitorCoordinateLabel(null);
 
         Disposed += AppEditorForm_Disposed;
+        Shown += async (_, __) => await SafeLoadAppsAsync().ConfigureAwait(true);
 
         InitializeCycleMetadata(profileApps, programa);
 
@@ -212,6 +220,32 @@ public partial class AppEditorForm : Form
 
         InitializeCycleSimulation();
         ApplyAppTypeUI();
+    }
+
+    private void ConfigureInstalledAppsSection(ListView installedAppsList)
+    {
+        _installedAppsStatusLabel = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 20,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = SystemColors.GrayText,
+            Padding = new Padding(0, 4, 0, 0),
+            Visible = false,
+        };
+        grpInstalledApps.Controls.Add(_installedAppsStatusLabel);
+
+        _installedAppsSearchBox = new TextBox
+        {
+            Dock = DockStyle.Top,
+            PlaceholderText = "Buscar aplicativos instalados...",
+        };
+        _installedAppsSearchBox.TextChanged += InstalledAppsSearch_TextChanged;
+        grpInstalledApps.Controls.Add(_installedAppsSearchBox);
+        grpInstalledApps.Controls.SetChildIndex(_installedAppsSearchBox, 0);
+        grpInstalledApps.Controls.SetChildIndex(installedAppsList, 1);
+
+        EnsureInstalledAppsColumns(installedAppsList);
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -411,6 +445,7 @@ public partial class AppEditorForm : Form
         {
             grpInstalledApps.Visible = isExecutable;
             grpInstalledApps.Enabled = isExecutable;
+            grpInstalledApps.Refresh();
         }
 
         if (lvApps is not null)
@@ -438,6 +473,147 @@ public partial class AppEditorForm : Form
             txtArgumentos.ReadOnly = !isExecutable;
             txtArgumentos.TabStop = isExecutable;
         }
+    }
+
+    private async Task SafeLoadAppsAsync()
+    {
+        if (_installedAppsLoaded)
+        {
+            return;
+        }
+
+        _installedAppsLoaded = true;
+
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        UseWaitCursor = true;
+        var previousCursor = Cursor.Current;
+        Cursor.Current = Cursors.WaitCursor;
+
+        try
+        {
+            var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
+            _allApps.Clear();
+            _allApps.AddRange(apps);
+
+            PopulateInstalledApps(_allApps);
+            appsTabControl?.SetInstalledApps(apps);
+            UpdateInstalledAppsStatus(string.Empty, isError: false);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
+            _allApps.Clear();
+            PopulateInstalledApps(Array.Empty<InstalledAppInfo>());
+            UpdateInstalledAppsStatus("Não foi possível carregar a lista de aplicativos instalados.", isError: true);
+        }
+        finally
+        {
+            Cursor.Current = previousCursor;
+            UseWaitCursor = false;
+            ApplyAppTypeUI();
+        }
+    }
+
+    private void InstalledAppsSearch_TextChanged(object? sender, EventArgs e)
+    {
+        if (lvApps is null)
+        {
+            return;
+        }
+
+        var term = _installedAppsSearchBox?.Text;
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            PopulateInstalledApps(_allApps);
+            return;
+        }
+
+        var filtered = _allApps
+            .Where(app =>
+                app.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(app.Vendor) && app.Vendor.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                app.ExecutablePath.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(app.Source) && app.Source.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        PopulateInstalledApps(filtered);
+    }
+
+    private void PopulateInstalledApps(IReadOnlyList<InstalledAppInfo> apps)
+    {
+        if (lvApps is null)
+        {
+            return;
+        }
+
+        EnsureInstalledAppsColumns(lvApps);
+
+        lvApps.BeginUpdate();
+        try
+        {
+            lvApps.Items.Clear();
+            foreach (var app in apps)
+            {
+                lvApps.Items.Add(CreateListViewItem(app));
+            }
+
+            lvApps.SelectedItems.Clear();
+        }
+        finally
+        {
+            lvApps.EndUpdate();
+        }
+
+        if (lvApps.Columns.Count > 0)
+        {
+            lvApps.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
+        }
+    }
+
+    private static ListViewItem CreateListViewItem(InstalledAppInfo app)
+    {
+        var item = new ListViewItem(app.Name)
+        {
+            Tag = app,
+        };
+
+        item.SubItems.Add(app.Version ?? string.Empty);
+        item.SubItems.Add(app.Vendor ?? string.Empty);
+        item.SubItems.Add(app.ExecutablePath);
+        item.SubItems.Add(app.Source);
+
+        return item;
+    }
+
+    private void UpdateInstalledAppsStatus(string? message, bool isError)
+    {
+        if (_installedAppsStatusLabel is null)
+        {
+            return;
+        }
+
+        var text = message ?? string.Empty;
+        _installedAppsStatusLabel.Text = text;
+        _installedAppsStatusLabel.ForeColor = isError ? Color.Maroon : SystemColors.GrayText;
+        _installedAppsStatusLabel.Visible = !string.IsNullOrWhiteSpace(text);
+    }
+
+    private static void EnsureInstalledAppsColumns(ListView listView)
+    {
+        if (listView.Columns.Count > 0)
+        {
+            return;
+        }
+
+        listView.Columns.Add("Nome", 200, HorizontalAlignment.Left);
+        listView.Columns.Add("Versão", 80, HorizontalAlignment.Left);
+        listView.Columns.Add("Fornecedor", 120, HorizontalAlignment.Left);
+        listView.Columns.Add("Caminho", 320, HorizontalAlignment.Left);
+        listView.Columns.Add("Origem", 80, HorizontalAlignment.Left);
     }
 
     private void Sites_ListChanged(object? sender, ListChangedEventArgs e)
@@ -2833,6 +3009,19 @@ public partial class AppEditorForm : Form
         public int dmReserved2;
         public int dmPanningWidth;
         public int dmPanningHeight;
+    }
+
+    private interface IInstalledAppsProvider
+    {
+        Task<IReadOnlyList<InstalledAppInfo>> QueryAsync();
+    }
+
+    private sealed class RegistryInstalledAppsProvider : IInstalledAppsProvider
+    {
+        public Task<IReadOnlyList<InstalledAppInfo>> QueryAsync()
+        {
+            return Task.Run<IReadOnlyList<InstalledAppInfo>>(InstalledAppsProvider.GetAll);
+        }
     }
 
     private sealed class SimRectDisplay : IDisposable
