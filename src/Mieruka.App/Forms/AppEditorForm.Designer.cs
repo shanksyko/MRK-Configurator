@@ -40,6 +40,12 @@ partial class AppEditorForm
     internal MonitorPreviewDisplay monitorPreviewDisplay = null!;
     internal TableLayoutPanel tlpMonitorPreview = null!;
     internal Label lblMonitorCoordinates = null!;
+    internal TableLayoutPanel tlpCycle = null!;
+    internal DataGridView dgvCycle = null!;
+    internal BindingSource bsCycle = null!;
+    internal FlowLayoutPanel flpCycleButtons = null!;
+    internal Button btnCycleUp = null!;
+    internal Button btnCycleDown = null!;
     internal ErrorProvider errorProvider = null!;
     internal FlowLayoutPanel flowCycleControls = null!;
     internal FlowLayoutPanel flowCycleItems = null!;
@@ -61,6 +67,7 @@ partial class AppEditorForm
     private void InitializeComponent()
     {
         components = new Container();
+        bsCycle = new BindingSource(components);
         tabEditor = new TabControl();
         tpGeral = new TabPage();
         tpAplicativos = new TabPage();
@@ -742,6 +749,8 @@ partial class AppEditorForm
         ((ISupportInitialize)nudJanelaY).EndInit();
         ((ISupportInitialize)nudJanelaLargura).EndInit();
         ((ISupportInitialize)nudJanelaAltura).EndInit();
+        ((ISupportInitialize)dgvCycle).EndInit();
+        ((ISupportInitialize)bsCycle).EndInit();
         ((ISupportInitialize)errorProvider).EndInit();
         ResumeLayout(false);
         PerformLayout();
