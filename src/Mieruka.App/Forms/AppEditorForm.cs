@@ -29,7 +29,8 @@ public partial class AppEditorForm : Form
 {
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
-    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan HoverThrottleInterval = TimeSpan.FromMilliseconds(1000d / 30d);
     private static readonly MethodInfo? ClearAppsInventorySelectionMethod =
         typeof(AppsTab).GetMethod("ClearSelection", BindingFlags.Instance | BindingFlags.NonPublic);
     private static readonly Color[] SimulationPalette =
@@ -72,6 +73,10 @@ public partial class AppEditorForm : Form
     private CancellationTokenSource? _cycleSimulationCts;
     private SimRectDisplay? _activeCycleDisplay;
     private int _nextSimRectIndex;
+    private readonly Stopwatch _hoverSw = new();
+    private Point? _hoverPendingPoint;
+    private Point? _hoverAppliedPoint;
+    private CancellationTokenSource? _hoverThrottleCts;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -1129,18 +1134,141 @@ public partial class AppEditorForm : Form
     {
         UpdateMonitorCoordinateLabel(point);
 
-        if (ClampWindowInputsToMonitor(point))
+        _hoverPendingPoint = point;
+
+        if (!_hoverSw.IsRunning)
         {
-            InvalidateWindowPreviewOverlay();
+            _hoverSw.Start();
         }
+
+        if (_hoverAppliedPoint is null || _hoverSw.Elapsed >= HoverThrottleInterval)
+        {
+            CancelHoverThrottleTimer();
+            ApplyPendingHoverPoint(enforceInterval: false);
+            return;
+        }
+
+        var remaining = HoverThrottleInterval - _hoverSw.Elapsed;
+        ScheduleHoverPointUpdate(remaining);
     }
 
     private void MonitorPreviewDisplay_MonitorMouseLeft(object? sender, EventArgs e)
     {
         UpdateMonitorCoordinateLabel(null);
 
+        _hoverPendingPoint = null;
+        _hoverAppliedPoint = null;
+        _hoverSw.Reset();
+        CancelHoverThrottleTimer();
+
         _ = ClampWindowInputsToMonitor(null);
         InvalidateWindowPreviewOverlay();
+    }
+
+    private void ScheduleHoverPointUpdate(TimeSpan delay)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (delay < TimeSpan.Zero)
+        {
+            delay = TimeSpan.Zero;
+        }
+
+        CancelHoverThrottleTimer();
+
+        var source = new CancellationTokenSource();
+        _hoverThrottleCts = source;
+        FlushHoverPointAsync(delay, source.Token);
+    }
+
+    private async void FlushHoverPointAsync(TimeSpan delay, CancellationToken token)
+    {
+        try
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, token).ConfigureAwait(true);
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested || IsDisposed)
+        {
+            return;
+        }
+
+        CancelHoverThrottleTimer();
+        ApplyPendingHoverPoint(enforceInterval: true);
+    }
+
+    private void ApplyPendingHoverPoint(bool enforceInterval)
+    {
+        if (_hoverPendingPoint is not Point pending)
+        {
+            return;
+        }
+
+        if (!_hoverSw.IsRunning)
+        {
+            _hoverSw.Start();
+        }
+
+        if (enforceInterval && _hoverSw.Elapsed < HoverThrottleInterval)
+        {
+            var remaining = HoverThrottleInterval - _hoverSw.Elapsed;
+            ScheduleHoverPointUpdate(remaining);
+            return;
+        }
+
+        if (_hoverAppliedPoint is Point applied && applied == pending)
+        {
+            _hoverSw.Restart();
+            return;
+        }
+
+        _hoverSw.Restart();
+        _hoverAppliedPoint = pending;
+        _ = ClampWindowInputsToMonitor(pending);
+    }
+
+    private void CancelHoverThrottleTimer()
+    {
+        var pending = _hoverThrottleCts;
+        if (pending is null)
+        {
+            return;
+        }
+
+        _hoverThrottleCts = null;
+
+        try
+        {
+            pending.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignorar cancelamentos após descarte.
+        }
+        catch (AggregateException)
+        {
+            // Ignorar cancelamentos concorrentes.
+        }
+
+        pending.Dispose();
     }
 
     private bool ClampWindowInputsToMonitor(Point? pointer, bool allowFullScreen = false)
@@ -1955,6 +2083,7 @@ public partial class AppEditorForm : Form
         DisposeSimRectDisplays();
         _appRunner.BeforeMoveWindow -= AppRunnerOnBeforeMoveWindow;
         _appRunner.AfterMoveWindow -= AppRunnerOnAfterMoveWindow;
+        CancelHoverThrottleTimer();
     }
 
     private void btnSalvar_Click(object? sender, EventArgs e)
