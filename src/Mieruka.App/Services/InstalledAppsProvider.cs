@@ -122,6 +122,11 @@ public static class InstalledAppsProvider
         return null;
     }
 
+    private static readonly string[] _badTokens =
+    {
+        "uninstall", "setup", "install", "updater", "update", "repair"
+    };
+
     private static bool LooksLikeLauncher(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -129,16 +134,21 @@ public static class InstalledAppsProvider
             return false;
         }
 
-        var extension = Path.GetExtension(path);
-        if (!string.Equals(extension, ".exe", StringComparison.OrdinalIgnoreCase))
+        var trimmed = path.Trim().Trim('\"');
+
+        if (!trimmed.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        var lowered = path.Replace('/', '\').ToLowerInvariant();
-        if (lowered.Contains("uninstall") || lowered.Contains("setup") || lowered.Contains("install"))
+        var name = Path.GetFileNameWithoutExtension(trimmed).ToLowerInvariant();
+
+        foreach (var token in _badTokens)
         {
-            return false;
+            if (name.Contains(token))
+            {
+                return false;
+            }
         }
 
         return true;
