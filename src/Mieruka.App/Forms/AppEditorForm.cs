@@ -222,7 +222,15 @@ public partial class AppEditorForm : Form
         UpdateExePreview();
 
         InitializeCycleSimulation();
-        ApplyAppTypeUI();
+
+        if (rbExe is not null && rbBrowser is not null)
+        {
+            var isBrowser = programa is not null && string.IsNullOrWhiteSpace(programa.ExecutablePath);
+            rbBrowser.Checked = isBrowser;
+            rbExe.Checked = !isBrowser;
+        }
+
+        ApplyTypeTabs();
     }
 
     private void ConfigureInstalledAppsSection(ListView installedAppsList)
@@ -438,7 +446,7 @@ public partial class AppEditorForm : Form
         RebuildSimRects();
     }
 
-    private void ApplyAppTypeUI()
+    private void ApplyTypeTabs()
     {
         var isExecutable = rbExe?.Checked ?? false;
         var isBrowser = rbBrowser?.Checked ?? false;
@@ -559,7 +567,7 @@ public partial class AppEditorForm : Form
         {
             Cursor.Current = previousCursor;
             UseWaitCursor = false;
-            ApplyAppTypeUI();
+            ApplyTypeTabs();
         }
     }
 
@@ -1267,12 +1275,12 @@ public partial class AppEditorForm : Form
 
     private void rbExe_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyAppTypeUI();
+        ApplyTypeTabs();
     }
 
     private void rbBrowser_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyAppTypeUI();
+        ApplyTypeTabs();
     }
 
     private void chkCycleRedeDisponivel_CheckedChanged(object? sender, EventArgs e)
@@ -2934,15 +2942,23 @@ public partial class AppEditorForm : Form
             errorProvider.SetError(txtId, string.Empty);
         }
 
-        if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
+        var validarExecutavel = rbExe?.Checked ?? true;
+        if (validarExecutavel)
         {
-            errorProvider.SetError(txtExecutavel, "Informe o executável." );
-            valido = false;
-        }
-        else if (!File.Exists(txtExecutavel.Text))
-        {
-            errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
-            valido = false;
+            if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
+            {
+                errorProvider.SetError(txtExecutavel, "Informe o executável." );
+                valido = false;
+            }
+            else if (!File.Exists(txtExecutavel.Text))
+            {
+                errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
+                valido = false;
+            }
+            else
+            {
+                errorProvider.SetError(txtExecutavel, string.Empty);
+            }
         }
         else
         {
