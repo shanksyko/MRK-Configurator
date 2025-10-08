@@ -86,7 +86,7 @@ public partial class AppEditorForm : Form
     private readonly List<InstalledAppInfo> _allApps = new();
     private readonly Label _installedAppsStatusLabel = new();
     private TextBox? _installedAppsSearchBox;
-    private bool _installedAppsLoaded;
+    private bool _appsListLoaded;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -117,6 +117,9 @@ public partial class AppEditorForm : Form
         _ = grpInstalledApps ?? throw new InvalidOperationException("O grupo de aplicativos instalados não foi carregado.");
         var installedAppsList = lvApps ?? throw new InvalidOperationException("A lista de aplicativos instalados não foi carregada.");
         _ = btnBrowseExe ?? throw new InvalidOperationException("O botão de procurar executáveis não foi carregado.");
+        _ = cmbBrowserEngine ?? throw new InvalidOperationException("O seletor de motor de navegador não foi carregado.");
+        _ = lblBrowserDetected ?? throw new InvalidOperationException("O rótulo de navegadores detectados não foi carregado.");
+        _ = pnlBrowserOptions ?? throw new InvalidOperationException("O painel de opções de navegador não foi carregado.");
 
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
@@ -215,7 +218,13 @@ public partial class AppEditorForm : Form
         UpdateMonitorCoordinateLabel(null);
 
         Disposed += AppEditorForm_Disposed;
-        Shown += async (_, __) => await SafeLoadAppsAsync().ConfigureAwait(true);
+        Shown += async (_, __) =>
+        {
+            if (rbExe?.Checked == true)
+            {
+                await EnsureAppsListAsync().ConfigureAwait(true);
+            }
+        };
 
         InitializeCycleMetadata(profileApps, programa);
 
@@ -236,7 +245,15 @@ public partial class AppEditorForm : Form
         UpdateExePreview();
 
         InitializeCycleSimulation();
-        ApplyAppTypeUI();
+
+        if (rbExe is not null && rbBrowser is not null)
+        {
+            var isBrowser = programa is not null && string.IsNullOrWhiteSpace(programa.ExecutablePath);
+            rbBrowser.Checked = isBrowser;
+            rbExe.Checked = !isBrowser;
+        }
+
+        ApplyTypeTabs();
     }
 
     private void ConfigureInstalledAppsSection(ListView installedAppsList)
@@ -452,9 +469,10 @@ public partial class AppEditorForm : Form
         RebuildSimRects();
     }
 
-    private void ApplyAppTypeUI()
+    private void ApplyTypeTabs()
     {
         var isExecutable = rbExe?.Checked ?? false;
+        var isBrowser = rbBrowser?.Checked ?? false;
 
         var tabControl = tabEditor;
         var appsTabPage = tabAplicativos;
@@ -532,6 +550,49 @@ public partial class AppEditorForm : Form
             txtArgumentos.ReadOnly = !isExecutable;
             txtArgumentos.TabStop = isExecutable;
         }
+
+        if (isBrowser)
+        {
+            BindDetectedBrowsers();
+        }
+        else
+        {
+            if (cmbBrowserEngine is not null)
+            {
+                cmbBrowserEngine.Enabled = false;
+            }
+
+            if (pnlBrowserOptions is not null)
+            {
+                pnlBrowserOptions.Enabled = false;
+            }
+
+            if (sitesEditorControl is not null)
+            {
+                sitesEditorControl.Enabled = false;
+            }
+        }
+
+        if (cmbBrowserEngine is not null)
+        {
+            cmbBrowserEngine.Visible = isBrowser;
+            cmbBrowserEngine.TabStop = isBrowser && cmbBrowserEngine.Enabled;
+        }
+
+        if (lblBrowserDetected is not null)
+        {
+            lblBrowserDetected.Visible = isBrowser && !string.IsNullOrWhiteSpace(lblBrowserDetected.Text);
+        }
+
+        if (pnlBrowserOptions is not null)
+        {
+            pnlBrowserOptions.Visible = isBrowser;
+        }
+
+        if (sitesEditorControl is not null)
+        {
+            sitesEditorControl.Visible = isBrowser;
+        }
     }
 
     private static void SetTabVisibility(TabControl tabControl, TabPage tabPage, int originalIndex, bool visible)
@@ -562,17 +623,22 @@ public partial class AppEditorForm : Form
 
     private async Task SafeLoadAppsAsync()
     {
-        if (_installedAppsLoaded)
+        if (_appsListLoaded)
         {
             return;
         }
 
-        _installedAppsLoaded = true;
+        if (rbExe?.Checked != true)
+        {
+            return;
+        }
 
         if (IsDisposed || !IsHandleCreated)
         {
             return;
         }
+
+        _appsListLoaded = true;
 
         UseWaitCursor = true;
         var previousCursor = Cursor.Current;
@@ -580,6 +646,7 @@ public partial class AppEditorForm : Form
 
         try
         {
+            UpdateInstalledAppsStatus("Carregando aplicativos instalados...", isError: false);
             var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
             _allApps.Clear();
             _allApps.AddRange(apps);
@@ -587,6 +654,7 @@ public partial class AppEditorForm : Form
             PopulateInstalledApps(_allApps);
             appsTabControl?.SetInstalledApps(apps);
             UpdateInstalledAppsStatus(string.Empty, isError: false);
+            _appsListLoaded = true;
         }
         catch (Exception ex)
         {
@@ -594,12 +662,152 @@ public partial class AppEditorForm : Form
             _allApps.Clear();
             PopulateInstalledApps(Array.Empty<InstalledAppInfo>());
             UpdateInstalledAppsStatus("Não foi possível carregar a lista de aplicativos instalados.", isError: true);
+            _appsListLoaded = false;
         }
         finally
         {
             Cursor.Current = previousCursor;
             UseWaitCursor = false;
-            ApplyAppTypeUI();
+            ApplyTypeTabs();
+        }
+    }
+
+    private void BindDetectedBrowsers()
+    {
+        if (cmbBrowserEngine is null || lblBrowserDetected is null || pnlBrowserOptions is null)
+        {
+            return;
+        }
+
+        var detections = BrowserRegistry.Detect();
+
+        var supported = detections
+            .Where(browser => browser.IsSupported)
+            .ToList();
+
+        cmbBrowserEngine.BeginUpdate();
+        try
+        {
+            cmbBrowserEngine.Items.Clear();
+            foreach (var browser in supported)
+            {
+                cmbBrowserEngine.Items.Add(new BrowserComboItem(browser));
+            }
+        }
+        finally
+        {
+            cmbBrowserEngine.EndUpdate();
+        }
+
+        var items = cmbBrowserEngine.Items.Cast<object>()
+            .OfType<BrowserComboItem>()
+            .ToList();
+
+        BrowserComboItem? selected = items
+            .FirstOrDefault(item => item.Installation.Engine == BrowserType.Chrome && item.Installation.IsDetected)
+            ?? items.FirstOrDefault(item => item.Installation.IsDetected)
+            ?? items.FirstOrDefault(item => item.Installation.Engine == BrowserType.Chrome)
+            ?? items.FirstOrDefault();
+
+        if (selected is not null)
+        {
+            cmbBrowserEngine.SelectedItem = selected;
+        }
+        else
+        {
+            cmbBrowserEngine.SelectedIndex = -1;
+        }
+
+        lblBrowserDetected.Text = BuildBrowserDetectionMessage(detections);
+
+        var hasSupported = items.Count > 0;
+        cmbBrowserEngine.Enabled = hasSupported;
+        pnlBrowserOptions.Enabled = hasSupported;
+
+        if (sitesEditorControl is not null)
+        {
+            sitesEditorControl.Enabled = hasSupported;
+        }
+    }
+
+    private static string BuildBrowserDetectionMessage(IReadOnlyList<BrowserRegistry.BrowserInstallation> detections)
+    {
+        if (detections.Count == 0)
+        {
+            return "Nenhum navegador foi detectado.";
+        }
+
+        var supportedDetected = detections
+            .Where(detection => detection.IsSupported && detection.IsDetected)
+            .Select(detection => detection.DisplayName)
+            .ToList();
+
+        var supportedMissing = detections
+            .Where(detection => detection.IsSupported && !detection.IsDetected)
+            .Select(detection => detection.DisplayName)
+            .ToList();
+
+        var unsupportedDetected = detections
+            .Where(detection => !detection.IsSupported && detection.IsDetected)
+            .Select(detection => detection.DisplayName)
+            .ToList();
+
+        var builder = new StringBuilder();
+
+        if (supportedDetected.Count > 0)
+        {
+            builder.Append("Navegadores suportados detectados: ");
+            builder.Append(string.Join(", ", supportedDetected));
+            builder.Append('.');
+        }
+        else
+        {
+            builder.Append("Nenhum navegador suportado foi encontrado.");
+        }
+
+        if (supportedMissing.Count > 0)
+        {
+            if (builder.Length > 0)
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append("Não encontrados: ");
+            builder.Append(string.Join(", ", supportedMissing));
+            builder.Append('.');
+        }
+
+        if (unsupportedDetected.Count > 0)
+        {
+            if (builder.Length > 0)
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append("Detectados (não suportados): ");
+            builder.Append(string.Join(", ", unsupportedDetected));
+            builder.Append('.');
+        }
+
+        return builder.ToString();
+    }
+
+    private sealed class BrowserComboItem
+    {
+        internal BrowserComboItem(BrowserRegistry.BrowserInstallation installation)
+        {
+            Installation = installation;
+        }
+
+        internal BrowserRegistry.BrowserInstallation Installation { get; }
+
+        internal BrowserType Engine => Installation.Engine ?? BrowserType.Chrome;
+
+        public override string ToString()
+        {
+            return Installation.IsDetected
+                ? Installation.DisplayName
+                : $"{Installation.DisplayName} (não encontrado)";
         }
     }
 
@@ -1166,14 +1374,15 @@ public partial class AppEditorForm : Form
         StopCycleSimulation();
     }
 
-    private void rbExe_CheckedChanged(object? sender, EventArgs e)
+    private async void rbExe_CheckedChanged(object? sender, EventArgs e)
     {
         ApplyAppTypeUI();
+        await EnsureAppsListAsync().ConfigureAwait(true);
     }
 
     private void rbBrowser_CheckedChanged(object? sender, EventArgs e)
     {
-        ApplyAppTypeUI();
+        ApplyTypeTabs();
     }
 
     private void chkCycleRedeDisponivel_CheckedChanged(object? sender, EventArgs e)
@@ -2835,15 +3044,23 @@ public partial class AppEditorForm : Form
             errorProvider.SetError(txtId, string.Empty);
         }
 
-        if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
+        var validarExecutavel = rbExe?.Checked ?? true;
+        if (validarExecutavel)
         {
-            errorProvider.SetError(txtExecutavel, "Informe o executável." );
-            valido = false;
-        }
-        else if (!File.Exists(txtExecutavel.Text))
-        {
-            errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
-            valido = false;
+            if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
+            {
+                errorProvider.SetError(txtExecutavel, "Informe o executável." );
+                valido = false;
+            }
+            else if (!File.Exists(txtExecutavel.Text))
+            {
+                errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
+                valido = false;
+            }
+            else
+            {
+                errorProvider.SetError(txtExecutavel, string.Empty);
+            }
         }
         else
         {
