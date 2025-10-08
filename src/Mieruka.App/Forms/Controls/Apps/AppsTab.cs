@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Services;
+using Mieruka.Core.Infra;
 
 namespace Mieruka.App.Forms.Controls.Apps;
 
@@ -222,19 +223,50 @@ public sealed class AppsTab : UserControl
 
     public async Task LoadInstalledAppsAsync()
     {
-        var apps = await Task.Run(InstalledAppsProvider.GetAll).ConfigureAwait(false);
-        if (IsDisposed)
+        try
         {
-            return;
-        }
+            var apps = await Task.Run(InstalledAppsProvider.GetAll).ConfigureAwait(false);
+            if (IsDisposed)
+            {
+                return;
+            }
 
-        if (InvokeRequired)
-        {
-            BeginInvoke(new Action(() => Populate(apps)));
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => Populate(apps)));
+            }
+            else
+            {
+                Populate(apps);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            Populate(apps);
+            Logger.Error("Falha ao carregar a lista de aplicativos instalados.", ex);
+
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            void ShowError()
+            {
+                MessageBox.Show(
+                    this,
+                    "Não foi possível carregar a lista de aplicativos instalados. Consulte o log para mais detalhes.",
+                    "Aplicativos instalados",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(ShowError));
+            }
+            else
+            {
+                ShowError();
+            }
         }
     }
 
