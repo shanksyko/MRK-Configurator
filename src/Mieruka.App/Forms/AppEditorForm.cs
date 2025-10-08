@@ -32,11 +32,16 @@ public partial class AppEditorForm : Form
     private readonly IReadOnlyList<MonitorInfo>? _providedMonitors;
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
+    private readonly IAppRunner _appRunner;
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
 
-    public AppEditorForm(ProgramaConfig? programa = null, IReadOnlyList<MonitorInfo>? monitors = null, string? selectedMonitorId = null)
+    public AppEditorForm(
+        ProgramaConfig? programa = null,
+        IReadOnlyList<MonitorInfo>? monitors = null,
+        string? selectedMonitorId = null,
+        IAppRunner? appRunner = null)
     {
         InitializeComponent();
 
@@ -55,6 +60,7 @@ public partial class AppEditorForm : Form
         AcceptButton = salvar;
         CancelButton = btnCancelar;
 
+        _appRunner = appRunner ?? new AppRunner();
         _providedMonitors = monitors;
         _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
@@ -674,10 +680,6 @@ public partial class AppEditorForm : Form
         }
 
         window = window with { Monitor = monitor.Key };
-
-        var executablePath = txtExecutavel.Text.Trim();
-        var arguments = string.IsNullOrWhiteSpace(txtArgumentos.Text) ? null : txtArgumentos.Text;
-        var hasExecutable = !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
         var button = btnTestarJanela;
 
         if (button is not null)
@@ -687,29 +689,7 @@ public partial class AppEditorForm : Form
 
         try
         {
-            if (hasExecutable)
-            {
-                var existingProcess = FindRunningProcess(executablePath);
-                if (existingProcess is not null)
-                {
-                    try
-                    {
-                        await PositionExistingProcessAsync(existingProcess, monitor, window).ConfigureAwait(true);
-                    }
-                    finally
-                    {
-                        existingProcess.Dispose();
-                    }
-                }
-                else
-                {
-                    await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, window).ConfigureAwait(true);
-                }
-            }
-            else
-            {
-                await LaunchDummyWindowAsync(monitor, window).ConfigureAwait(true);
-            }
+            await LaunchDummyWindowAsync(monitor, window).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -729,6 +709,124 @@ public partial class AppEditorForm : Form
         }
     }
 
+    private async void btnTestReal_Click(object? sender, EventArgs e)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            MessageBox.Show(
+                this,
+                "O teste de posicionamento está disponível apenas no Windows.",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        if (!TryBuildCurrentApp("Teste de aplicativo", out var app, out var monitor, out var bounds))
+        {
+            return;
+        }
+
+        var button = btnTestReal;
+        if (button is not null)
+        {
+            button.Enabled = false;
+        }
+
+        try
+        {
+            await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Não foi possível executar o aplicativo real: {ex.Message}",
+                "Teste de aplicativo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (button is not null)
+            {
+                button.Enabled = true;
+            }
+        }
+    }
+
+    private bool TryBuildCurrentApp(
+        string messageTitle,
+        out ProgramaConfig app,
+        out MonitorInfo monitor,
+        out Rectangle bounds,
+        string? executableOverride = null,
+        string? argumentsOverride = null,
+        bool requireExecutable = true)
+    {
+        app = default!;
+        monitor = default!;
+        bounds = default;
+
+        var selectedMonitor = GetSelectedMonitor();
+        if (selectedMonitor is null)
+        {
+            MessageBox.Show(
+                this,
+                "Selecione um monitor para testar a posição.",
+                messageTitle,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return false;
+        }
+
+        var config = ConstruirPrograma();
+
+        if (executableOverride is not null)
+        {
+            var overridePath = executableOverride.Trim();
+            config = config with { ExecutablePath = overridePath };
+        }
+
+        if (argumentsOverride is not null)
+        {
+            var overrideArguments = string.IsNullOrWhiteSpace(argumentsOverride)
+                ? null
+                : argumentsOverride;
+            config = config with { Arguments = overrideArguments };
+        }
+
+        var executablePath = config.ExecutablePath;
+        if (requireExecutable && string.IsNullOrWhiteSpace(executablePath))
+        {
+            MessageBox.Show(
+                this,
+                "Informe um executável válido antes de executar o teste.",
+                messageTitle,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return false;
+        }
+
+        if (requireExecutable && !string.IsNullOrWhiteSpace(executablePath) && !File.Exists(executablePath))
+        {
+            MessageBox.Show(
+                this,
+                "Executável não encontrado. Ajuste o caminho antes de executar o teste.",
+                messageTitle,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return false;
+        }
+
+        var resolvedBounds = WindowPlacementHelper.ResolveBounds(config.Window, selectedMonitor);
+
+        app = config;
+        monitor = selectedMonitor;
+        bounds = resolvedBounds;
+        return true;
+    }
+
     private WindowConfig BuildWindowConfigurationFromInputs()
     {
         if (chkJanelaTelaCheia.Checked)
@@ -744,46 +842,6 @@ public partial class AppEditorForm : Form
             Width = (int)nudJanelaLargura.Value,
             Height = (int)nudJanelaAltura.Value,
         };
-    }
-
-    private async Task LaunchAndPositionProcessAsync(
-        string executablePath,
-        string? arguments,
-        MonitorInfo monitor,
-        WindowConfig window)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = executablePath,
-            UseShellExecute = false,
-        };
-
-        if (!string.IsNullOrWhiteSpace(arguments))
-        {
-            startInfo.Arguments = arguments;
-        }
-
-        var workingDirectory = Path.GetDirectoryName(executablePath);
-        if (!string.IsNullOrWhiteSpace(workingDirectory))
-        {
-            startInfo.WorkingDirectory = workingDirectory;
-        }
-
-        var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            throw new InvalidOperationException("Não foi possível iniciar o processo para teste.");
-        }
-
-        try
-        {
-            var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
-            ApplyWindowPosition(handle, monitor, window);
-        }
-        finally
-        {
-            process.Dispose();
-        }
     }
 
     private static void LaunchExecutable(string executablePath, string? arguments)
@@ -812,23 +870,6 @@ public partial class AppEditorForm : Form
         }
     }
 
-    private async Task PositionExistingProcessAsync(Process process, MonitorInfo monitor, WindowConfig window)
-    {
-        if (process.HasExited)
-        {
-            throw new InvalidOperationException("O processo selecionado já foi encerrado.");
-        }
-
-        process.Refresh();
-        var handle = process.MainWindowHandle;
-        if (handle == IntPtr.Zero)
-        {
-            handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
-        }
-
-        ApplyWindowPosition(handle, monitor, window);
-    }
-
     private async Task LaunchDummyWindowAsync(MonitorInfo monitor, WindowConfig window)
     {
         var startInfo = new ProcessStartInfo
@@ -846,7 +887,8 @@ public partial class AppEditorForm : Form
         try
         {
             var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
-            ApplyWindowPosition(handle, monitor, window);
+            var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
+            WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
             await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
         }
         finally
@@ -869,80 +911,6 @@ public partial class AppEditorForm : Form
 
             process.Dispose();
         }
-    }
-
-    private static void ApplyWindowPosition(IntPtr handle, MonitorInfo monitor, WindowConfig window)
-    {
-        if (handle == IntPtr.Zero)
-        {
-            throw new InvalidOperationException("A janela de destino não foi localizada.");
-        }
-
-        var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
-        WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
-    }
-
-    private static Process? FindRunningProcess(string executablePath)
-    {
-        if (string.IsNullOrWhiteSpace(executablePath))
-        {
-            return null;
-        }
-
-        try
-        {
-            var normalized = Path.GetFullPath(executablePath);
-            var processName = Path.GetFileNameWithoutExtension(normalized);
-            if (string.IsNullOrWhiteSpace(processName))
-            {
-                return null;
-            }
-
-            var candidates = Process.GetProcessesByName(processName);
-            Process? match = null;
-
-            foreach (var candidate in candidates)
-            {
-                try
-                {
-                    var module = candidate.MainModule;
-                    var candidatePath = module?.FileName;
-                    if (!string.IsNullOrWhiteSpace(candidatePath) &&
-                        string.Equals(Path.GetFullPath(candidatePath), normalized, StringComparison.OrdinalIgnoreCase))
-                    {
-                        match = candidate;
-                        break;
-                    }
-                }
-                catch (Win32Exception)
-                {
-                    // Ignore processes without access rights.
-                }
-                catch (InvalidOperationException)
-                {
-                    // Ignore processes that exited while enumerating.
-                }
-            }
-
-            foreach (var candidate in candidates)
-            {
-                if (!ReferenceEquals(candidate, match))
-                {
-                    candidate.Dispose();
-                }
-            }
-
-            if (match is not null)
-            {
-                return match;
-            }
-        }
-        catch
-        {
-            // Swallow exceptions when enumerating running processes.
-        }
-
-        return null;
     }
 
     private void btnSalvar_Click(object? sender, EventArgs e)
@@ -1133,54 +1101,30 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        var monitor = GetSelectedMonitor();
-        if (monitor is null)
-        {
-            MessageBox.Show(
-                this,
-                "Selecione um monitor para testar a posição.",
+        if (!TryBuildCurrentApp(
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                out var app,
+                out var monitor,
+                out var bounds,
+                e.ExecutablePath,
+                e.Arguments,
+                requireExecutable: false))
+        {
             return;
         }
 
-        var window = BuildWindowConfigurationFromInputs();
-        if (!window.FullScreen)
-        {
-            window = ClampWindowBounds(window, monitor);
-        }
-
-        window = window with { Monitor = monitor.Key };
-
-        var executablePath = e.ExecutablePath;
-        var arguments = e.Arguments;
+        var executablePath = app.ExecutablePath;
         var hasExecutable = !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
 
         try
         {
             if (hasExecutable)
             {
-                var existingProcess = FindRunningProcess(executablePath);
-                if (existingProcess is not null)
-                {
-                    try
-                    {
-                        await PositionExistingProcessAsync(existingProcess, monitor, window).ConfigureAwait(true);
-                    }
-                    finally
-                    {
-                        existingProcess.Dispose();
-                    }
-                }
-                else
-                {
-                    await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, window).ConfigureAwait(true);
-                }
+                await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
             }
             else
             {
-                await LaunchDummyWindowAsync(monitor, window).ConfigureAwait(true);
+                await LaunchDummyWindowAsync(monitor, app.Window).ConfigureAwait(true);
             }
         }
         catch (Exception ex)
