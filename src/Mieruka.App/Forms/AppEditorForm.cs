@@ -23,6 +23,7 @@ using Mieruka.Core.Interop;
 using Mieruka.Core.Services;
 using Mieruka.Core.Infra;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
+using Logger = Serilog.Log;
 
 namespace Mieruka.App.Forms;
 
@@ -30,7 +31,7 @@ public partial class AppEditorForm : Form
 {
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
-    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan HoverThrottleInterval = TimeSpan.FromMilliseconds(1000d / 30d);
     private static readonly MethodInfo? ClearAppsInventorySelectionMethod =
         typeof(AppsTab).GetMethod("ClearSelection", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1855,6 +1856,8 @@ public partial class AppEditorForm : Form
         }
     }
 
+    partial void OnBeforeMoveWindowUI();
+
     private async void btnTestReal_Click(object? sender, EventArgs e)
     {
         if (!OperatingSystem.IsWindows())
@@ -1876,6 +1879,11 @@ public partial class AppEditorForm : Form
         var button = btnTestReal;
         if (button is not null)
         {
+            if (!button.Enabled)
+            {
+                return;
+            }
+
             button.Enabled = false;
         }
 
@@ -1883,6 +1891,9 @@ public partial class AppEditorForm : Form
         {
             UseWaitCursor = true;
             Cursor.Current = Cursors.WaitCursor;
+
+            SuspendPreviewCapture();
+            OnBeforeMoveWindowUI();
 
             await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
         }
@@ -1899,6 +1910,7 @@ public partial class AppEditorForm : Form
         finally
         {
             Cursor.Current = Cursors.Default;
+            SchedulePreviewResume();
             UseWaitCursor = false;
 
             if (button is not null)
