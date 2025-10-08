@@ -17,6 +17,9 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly PictureBox _target;
     private readonly object _gate = new();
     private readonly object _frameTimingGate = new();
+    private readonly object _stateGate = new();
+    private readonly object _pendingFramesGate = new();
+    private readonly HashSet<Bitmap> _pendingFrames = new();
     private TimeSpan _frameThrottle = TimeSpan.FromMilliseconds(300);
     private Bitmap? _currentFrame;
     private bool _disposed;
@@ -26,6 +29,9 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _rotation;
     private int _refreshRate;
     private DateTime _nextFrameAt;
+    private bool _hasActiveSession;
+    private bool _lastPreferGpu;
+    private volatile bool _isSuspended;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
@@ -130,6 +136,13 @@ public sealed class MonitorPreviewHost : IDisposable
                     Capture = capture;
                 }
 
+                lock (_stateGate)
+                {
+                    _hasActiveSession = true;
+                    _lastPreferGpu = preferGpu;
+                    _isSuspended = false;
+                }
+
                 return;
             }
             catch (Exception ex)
@@ -142,6 +155,14 @@ public sealed class MonitorPreviewHost : IDisposable
                 }
             }
         }
+
+        lock (_stateGate)
+        {
+            if (!_isSuspended)
+            {
+                _hasActiveSession = false;
+            }
+        }
     }
 
     /// <summary>
@@ -149,22 +170,73 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public void Stop()
     {
-        IMonitorCapture? capture;
-        lock (_gate)
+        lock (_stateGate)
         {
-            capture = Capture;
-            Capture = null;
+            _hasActiveSession = false;
+            _isSuspended = false;
         }
 
-        if (capture is null)
+        StopCaptureCore(clearFrame: true);
+    }
+
+    /// <summary>
+    /// Temporarily suspends the capture pipeline while keeping the current frame.
+    /// </summary>
+    public void SuspendCapture()
+    {
+        if (_disposed)
         {
-            ClearFrame();
             return;
         }
 
-        capture.FrameArrived -= OnFrameArrived;
-        SafeDispose(capture);
-        ClearFrame();
+        var shouldSuspend = false;
+
+        lock (_stateGate)
+        {
+            if (_hasActiveSession && !_isSuspended)
+            {
+                _isSuspended = true;
+                shouldSuspend = true;
+            }
+        }
+
+        if (!shouldSuspend)
+        {
+            return;
+        }
+
+        StopCaptureCore(clearFrame: false);
+    }
+
+    /// <summary>
+    /// Resumes a previously suspended capture session.
+    /// </summary>
+    public void ResumeCapture()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        bool shouldResume;
+        bool preferGpu;
+
+        lock (_stateGate)
+        {
+            shouldResume = _hasActiveSession && _isSuspended;
+            preferGpu = _lastPreferGpu;
+            if (shouldResume)
+            {
+                _isSuspended = false;
+            }
+        }
+
+        if (!shouldResume)
+        {
+            return;
+        }
+
+        Start(preferGpu);
     }
 
     public void Dispose()
@@ -195,6 +267,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
+        if (!ShouldDisplayFrame())
+        {
+            e.Dispose();
+            return;
+        }
+
         if (!ShouldProcessFrame())
         {
             e.Dispose();
@@ -224,6 +302,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
+        RegisterPendingFrame(clone);
         UpdateTarget(clone);
     }
 
@@ -231,21 +310,38 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         if (_target.IsDisposed)
         {
+            UnregisterPendingFrame(frame);
             frame.Dispose();
             return;
         }
 
         if (_target.InvokeRequired)
         {
+            if (!ShouldDisplayFrame())
+            {
+                UnregisterPendingFrame(frame);
+                frame.Dispose();
+                return;
+            }
+
             try
             {
                 _target.BeginInvoke(new Action<Bitmap>(UpdateTarget), frame);
             }
             catch
             {
+                UnregisterPendingFrame(frame);
                 frame.Dispose();
             }
 
+            return;
+        }
+
+        UnregisterPendingFrame(frame);
+
+        if (!ShouldDisplayFrame())
+        {
+            frame.Dispose();
             return;
         }
 
@@ -289,6 +385,33 @@ public sealed class MonitorPreviewHost : IDisposable
         ResetFrameThrottle();
     }
 
+    private void StopCaptureCore(bool clearFrame)
+    {
+        IMonitorCapture? capture;
+        lock (_gate)
+        {
+            capture = Capture;
+            Capture = null;
+        }
+
+        if (capture is not null)
+        {
+            capture.FrameArrived -= OnFrameArrived;
+            SafeDispose(capture);
+        }
+
+        DisposePendingFrames();
+
+        if (clearFrame)
+        {
+            ClearFrame();
+        }
+        else
+        {
+            ResetFrameThrottle();
+        }
+    }
+
     private bool ShouldProcessFrame()
     {
         TimeSpan throttle;
@@ -320,6 +443,67 @@ public sealed class MonitorPreviewHost : IDisposable
         lock (_frameTimingGate)
         {
             _nextFrameAt = DateTime.MinValue;
+        }
+    }
+
+    private bool ShouldDisplayFrame()
+    {
+        if (_isSuspended)
+        {
+            return false;
+        }
+
+        lock (_stateGate)
+        {
+            return _hasActiveSession;
+        }
+    }
+
+    private void RegisterPendingFrame(Bitmap frame)
+    {
+        lock (_pendingFramesGate)
+        {
+            _pendingFrames.Add(frame);
+        }
+    }
+
+    private void UnregisterPendingFrame(Bitmap frame)
+    {
+        lock (_pendingFramesGate)
+        {
+            _pendingFrames.Remove(frame);
+        }
+    }
+
+    private void DisposePendingFrames()
+    {
+        Bitmap[]? frames = null;
+
+        lock (_pendingFramesGate)
+        {
+            if (_pendingFrames.Count > 0)
+            {
+                frames = new Bitmap[_pendingFrames.Count];
+                _pendingFrames.CopyTo(frames);
+                _pendingFrames.Clear();
+            }
+        }
+
+        if (frames is null)
+        {
+            return;
+        }
+
+        foreach (var frame in frames)
+        {
+            try
+            {
+                frame.Dispose();
+            }
+            catch
+            {
+                // Ignore failures while disposing pending frames.
+            }
         }
     }
 

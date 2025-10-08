@@ -99,6 +99,22 @@ public sealed class MonitorPreviewDisplay : UserControl
         _pictureBox.Image = null;
     }
 
+    /// <summary>
+    /// Temporarily suspends the active preview capture, if any.
+    /// </summary>
+    public void SuspendCapture()
+    {
+        _host?.SuspendCapture();
+    }
+
+    /// <summary>
+    /// Resumes a previously suspended preview capture, if any.
+    /// </summary>
+    public void ResumeCapture()
+    {
+        _host?.ResumeCapture();
+    }
+
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {

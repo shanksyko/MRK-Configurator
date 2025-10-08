@@ -12,6 +12,10 @@ namespace Mieruka.App.Services;
 
 public interface IAppRunner
 {
+    event EventHandler? BeforeMoveWindow;
+
+    event EventHandler? AfterMoveWindow;
+
     Task RunAndPositionAsync(
         AppConfig app,
         MonitorInfo monitor,
@@ -22,6 +26,10 @@ public interface IAppRunner
 public sealed class AppRunner : IAppRunner
 {
     private static readonly TimeSpan WindowWaitTimeout = TimeSpan.FromSeconds(5);
+
+    public event EventHandler? BeforeMoveWindow;
+
+    public event EventHandler? AfterMoveWindow;
 
     public async Task RunAndPositionAsync(
         AppConfig app,
@@ -69,7 +77,7 @@ public sealed class AppRunner : IAppRunner
         await LaunchAndPositionProcessAsync(executablePath, arguments, bounds, alwaysOnTop, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task LaunchAndPositionProcessAsync(
+    private async Task LaunchAndPositionProcessAsync(
         string executablePath,
         string? arguments,
         Rectangle bounds,
@@ -106,7 +114,7 @@ public sealed class AppRunner : IAppRunner
         ApplyWindowPosition(handle, bounds, alwaysOnTop);
     }
 
-    private static async Task PositionExistingProcessAsync(
+    private async Task PositionExistingProcessAsync(
         Process process,
         Rectangle bounds,
         bool alwaysOnTop,
@@ -129,15 +137,29 @@ public sealed class AppRunner : IAppRunner
         ApplyWindowPosition(handle, bounds, alwaysOnTop);
     }
 
-    private static void ApplyWindowPosition(IntPtr handle, Rectangle bounds, bool alwaysOnTop)
+    private void ApplyWindowPosition(IntPtr handle, Rectangle bounds, bool alwaysOnTop)
     {
         if (handle == IntPtr.Zero)
         {
             throw new InvalidOperationException("A janela de destino não foi localizada.");
         }
 
-        WindowMover.MoveTo(handle, bounds, alwaysOnTop, restoreIfMinimized: true);
+        OnBeforeMoveWindow();
+        try
+        {
+            WindowMover.MoveTo(handle, bounds, alwaysOnTop, restoreIfMinimized: true);
+        }
+        finally
+        {
+            OnAfterMoveWindow();
+        }
     }
+
+    private void OnBeforeMoveWindow()
+        => BeforeMoveWindow?.Invoke(this, EventArgs.Empty);
+
+    private void OnAfterMoveWindow()
+        => AfterMoveWindow?.Invoke(this, EventArgs.Empty);
 
     private static Process? FindRunningProcess(string executablePath)
     {
