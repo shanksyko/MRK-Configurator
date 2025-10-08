@@ -80,8 +80,8 @@ public partial class AppEditorForm : Form
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
 
-        previewControl.MouseMovedInMonitorSpace += (_, point) => UpdateMonitorCoordinateLabel(point);
-        previewControl.MonitorMouseLeft += (_, _) => UpdateMonitorCoordinateLabel(null);
+        previewControl.MouseMovedInMonitorSpace += MonitorPreviewDisplay_MouseMovedInMonitorSpace;
+        previewControl.MonitorMouseLeft += MonitorPreviewDisplay_MonitorMouseLeft;
 
         janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
 
@@ -439,6 +439,9 @@ public partial class AppEditorForm : Form
     private void chkJanelaTelaCheia_CheckedChanged(object? sender, EventArgs e)
     {
         UpdateWindowInputsState();
+
+        _ = ClampWindowInputsToMonitor(null, allowFullScreen: true);
+        InvalidateWindowPreviewOverlay();
     }
 
     private void UpdateWindowInputsState()
@@ -476,6 +479,122 @@ public partial class AppEditorForm : Form
         lblMonitorCoordinates.Text = coordinates is null
             ? "X=–, Y=–"
             : $"X={coordinates.Value.X}, Y={coordinates.Value.Y}";
+    }
+
+    private void MonitorPreviewDisplay_MouseMovedInMonitorSpace(object? sender, Point point)
+    {
+        UpdateMonitorCoordinateLabel(point);
+
+        if (ClampWindowInputsToMonitor(point))
+        {
+            InvalidateWindowPreviewOverlay();
+        }
+    }
+
+    private void MonitorPreviewDisplay_MonitorMouseLeft(object? sender, EventArgs e)
+    {
+        UpdateMonitorCoordinateLabel(null);
+
+        _ = ClampWindowInputsToMonitor(null);
+        InvalidateWindowPreviewOverlay();
+    }
+
+    private bool ClampWindowInputsToMonitor(Point? pointer, bool allowFullScreen = false)
+    {
+        if (!allowFullScreen && chkJanelaTelaCheia.Checked)
+        {
+            return false;
+        }
+
+        if (nudJanelaX is null ||
+            nudJanelaY is null ||
+            nudJanelaLargura is null ||
+            nudJanelaAltura is null)
+        {
+            return false;
+        }
+
+        var monitor = GetSelectedMonitor();
+        if (monitor is null)
+        {
+            return false;
+        }
+
+        var changed = false;
+
+        var width = (int)nudJanelaLargura.Value;
+        if (monitor.Width > 0)
+        {
+            var clampedWidth = Math.Clamp(width, 1, monitor.Width);
+            changed |= UpdateNumericControl(nudJanelaLargura, clampedWidth);
+            width = clampedWidth;
+        }
+
+        var height = (int)nudJanelaAltura.Value;
+        if (monitor.Height > 0)
+        {
+            var clampedHeight = Math.Clamp(height, 1, monitor.Height);
+            changed |= UpdateNumericControl(nudJanelaAltura, clampedHeight);
+            height = clampedHeight;
+        }
+
+        if (pointer is Point target)
+        {
+            var targetX = target.X;
+            if (monitor.Width > 0)
+            {
+                var maxX = Math.Max(0, monitor.Width - width);
+                targetX = Math.Clamp(targetX, 0, maxX);
+            }
+
+            var targetY = target.Y;
+            if (monitor.Height > 0)
+            {
+                var maxY = Math.Max(0, monitor.Height - height);
+                targetY = Math.Clamp(targetY, 0, maxY);
+            }
+
+            changed |= UpdateNumericControl(nudJanelaX, targetX);
+            changed |= UpdateNumericControl(nudJanelaY, targetY);
+        }
+        else
+        {
+            if (monitor.Width > 0)
+            {
+                var currentX = (int)nudJanelaX.Value;
+                var maxX = Math.Max(0, monitor.Width - width);
+                var clampedX = Math.Clamp(currentX, 0, maxX);
+                changed |= UpdateNumericControl(nudJanelaX, clampedX);
+            }
+
+            if (monitor.Height > 0)
+            {
+                var currentY = (int)nudJanelaY.Value;
+                var maxY = Math.Max(0, monitor.Height - height);
+                var clampedY = Math.Clamp(currentY, 0, maxY);
+                changed |= UpdateNumericControl(nudJanelaY, clampedY);
+            }
+        }
+
+        return changed;
+    }
+
+    private static bool UpdateNumericControl(NumericUpDown control, int value)
+    {
+        var adjusted = AjustarRange(control, value);
+        if (control.Value != adjusted)
+        {
+            control.Value = adjusted;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void InvalidateWindowPreviewOverlay()
+    {
+        monitorPreviewDisplay?.Invalidate();
+        monitorPreviewDisplay?.Update();
     }
 
     private void AdjustMonitorPreviewWidth()
