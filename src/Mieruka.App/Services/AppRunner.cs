@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
+using static Serilog.Log;
 
 namespace Mieruka.App.Services;
 
@@ -27,9 +28,21 @@ public sealed class AppRunner : IAppRunner
 {
     private static readonly TimeSpan WindowWaitTimeout = TimeSpan.FromSeconds(5);
 
-    public event EventHandler? BeforeMoveWindow;
+    public static event EventHandler? BeforeMoveWindow;
 
-    public event EventHandler? AfterMoveWindow;
+    public static event EventHandler? AfterMoveWindow;
+
+    event EventHandler? IAppRunner.BeforeMoveWindow
+    {
+        add => AppRunner.BeforeMoveWindow += value;
+        remove => AppRunner.BeforeMoveWindow -= value;
+    }
+
+    event EventHandler? IAppRunner.AfterMoveWindow
+    {
+        add => AppRunner.AfterMoveWindow += value;
+        remove => AppRunner.AfterMoveWindow -= value;
+    }
 
     public async Task RunAndPositionAsync(
         AppConfig app,
@@ -59,27 +72,42 @@ public sealed class AppRunner : IAppRunner
         var arguments = string.IsNullOrWhiteSpace(app.Arguments) ? null : app.Arguments;
         var alwaysOnTop = app.Window.AlwaysOnTop;
 
-        var existingProcess = FindRunningProcess(executablePath);
-        if (existingProcess is not null)
+        try
         {
-            try
+            OnBeforeMoveWindow();
+
+            var existingProcess = FindRunningProcess(executablePath);
+            if (existingProcess is not null)
             {
-                await PositionExistingProcessAsync(existingProcess, bounds, alwaysOnTop, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                existingProcess.Dispose();
+                try
+                {
+                    await PositionExistingProcessAsync(existingProcess, monitor, bounds, alwaysOnTop, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    existingProcess.Dispose();
+                }
+
+                return;
             }
 
-            return;
+            await LaunchAndPositionProcessAsync(executablePath, arguments, monitor, bounds, alwaysOnTop, cancellationToken).ConfigureAwait(false);
         }
-
-        await LaunchAndPositionProcessAsync(executablePath, arguments, bounds, alwaysOnTop, cancellationToken).ConfigureAwait(false);
+        catch (Exception ex)
+        {
+            Logger.Error($"RunAndPositionAsync falhou para {app.Name ?? app.Id}", ex);
+            throw;
+        }
+        finally
+        {
+            OnAfterMoveWindow();
+        }
     }
 
     private async Task LaunchAndPositionProcessAsync(
         string executablePath,
         string? arguments,
+        MonitorInfo monitor,
         Rectangle bounds,
         bool alwaysOnTop,
         CancellationToken cancellationToken)
@@ -111,11 +139,12 @@ public sealed class AppRunner : IAppRunner
             .WaitForMainWindowAsync(process, WindowWaitTimeout, cancellationToken)
             .ConfigureAwait(false);
 
-        ApplyWindowPosition(handle, bounds, alwaysOnTop);
+        ApplyWindowPosition(handle, monitor, bounds, alwaysOnTop);
     }
 
     private async Task PositionExistingProcessAsync(
         Process process,
+        MonitorInfo monitor,
         Rectangle bounds,
         bool alwaysOnTop,
         CancellationToken cancellationToken)
@@ -134,32 +163,43 @@ public sealed class AppRunner : IAppRunner
                 .ConfigureAwait(false);
         }
 
-        ApplyWindowPosition(handle, bounds, alwaysOnTop);
+        ApplyWindowPosition(handle, monitor, bounds, alwaysOnTop);
     }
 
-    private void ApplyWindowPosition(IntPtr handle, Rectangle bounds, bool alwaysOnTop)
+    private void ApplyWindowPosition(IntPtr handle, MonitorInfo monitor, Rectangle bounds, bool alwaysOnTop)
     {
         if (handle == IntPtr.Zero)
         {
             throw new InvalidOperationException("A janela de destino não foi localizada.");
         }
 
-        OnBeforeMoveWindow();
-        try
-        {
-            WindowMover.MoveTo(handle, bounds, alwaysOnTop, restoreIfMinimized: true);
-        }
-        finally
-        {
-            OnAfterMoveWindow();
-        }
+        WindowMover.MoveTo(handle, monitor, bounds, alwaysOnTop, WindowMoveMode.Absolute, relativeToMonitor: false, restoreIfMinimized: true);
+        User32.SetForegroundWindow(handle);
     }
 
     private void OnBeforeMoveWindow()
-        => BeforeMoveWindow?.Invoke(this, EventArgs.Empty);
+    {
+        try
+        {
+            BeforeMoveWindow?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            // Suppress subscriber exceptions to avoid interrupting the runner.
+        }
+    }
 
     private void OnAfterMoveWindow()
-        => AfterMoveWindow?.Invoke(this, EventArgs.Empty);
+    {
+        try
+        {
+            AfterMoveWindow?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            // Suppress subscriber exceptions to avoid interrupting the runner.
+        }
+    }
 
     private static Process? FindRunningProcess(string executablePath)
     {
