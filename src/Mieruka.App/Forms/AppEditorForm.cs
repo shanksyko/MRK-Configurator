@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -14,6 +16,7 @@ using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Services;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
+using Mieruka.Core.Services;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
@@ -21,9 +24,11 @@ namespace Mieruka.App.Forms;
 public partial class AppEditorForm : Form
 {
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
+    private const int EnumCurrentSettings = -1;
 
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
+    private readonly IReadOnlyList<MonitorInfo>? _providedMonitors;
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
     private MonitorInfo? _selectedMonitorInfo;
@@ -50,8 +55,11 @@ public partial class AppEditorForm : Form
         AcceptButton = salvar;
         CancelButton = btnCancelar;
 
-        _monitors = monitors?.ToList() ?? new List<MonitorInfo>();
+        _providedMonitors = monitors;
+        _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
+
+        RefreshMonitorSnapshot();
 
         _sites = new BindingList<SiteConfig>();
         sitesControl.Sites = _sites;
@@ -213,6 +221,101 @@ public partial class AppEditorForm : Form
         return candidato;
     }
 
+    private void RefreshMonitorSnapshot()
+    {
+        List<MonitorInfo> merged;
+
+        try
+        {
+            var installed = DisplayService.GetMonitors();
+            merged = installed.Count > 0
+                ? MergeMonitors(installed, _providedMonitors, _monitors)
+                : MergeMonitors(_providedMonitors, _monitors);
+        }
+        catch
+        {
+            merged = MergeMonitors(_providedMonitors, _monitors);
+        }
+
+        _monitors.Clear();
+        _monitors.AddRange(merged);
+    }
+
+    private static List<MonitorInfo> MergeMonitors(params IEnumerable<MonitorInfo>?[] sources)
+    {
+        var result = new List<MonitorInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in sources)
+        {
+            if (source is null)
+            {
+                continue;
+            }
+
+            foreach (var monitor in source)
+            {
+                if (monitor is null)
+                {
+                    continue;
+                }
+
+                var key = GetMonitorKey(monitor);
+                if (seen.Add(key))
+                {
+                    result.Add(monitor);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static string GetMonitorKey(MonitorInfo monitor)
+    {
+        if (!string.IsNullOrWhiteSpace(monitor.StableId))
+        {
+            return monitor.StableId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+        {
+            return monitor.DeviceName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.Key.DeviceId))
+        {
+            return monitor.Key.DeviceId;
+        }
+
+        var bounds = monitor.Bounds;
+        return string.Join(
+            '|',
+            monitor.Key.AdapterLuidHigh.ToString("X8", CultureInfo.InvariantCulture),
+            monitor.Key.AdapterLuidLow.ToString("X8", CultureInfo.InvariantCulture),
+            monitor.Key.TargetId.ToString(CultureInfo.InvariantCulture),
+            bounds.X.ToString(CultureInfo.InvariantCulture),
+            bounds.Y.ToString(CultureInfo.InvariantCulture),
+            bounds.Width.ToString(CultureInfo.InvariantCulture),
+            bounds.Height.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static string FormatMonitorDisplayName(MonitorInfo monitor)
+    {
+        var deviceName = !string.IsNullOrWhiteSpace(monitor.DeviceName)
+            ? monitor.DeviceName
+            : (!string.IsNullOrWhiteSpace(monitor.Name) ? monitor.Name : "Monitor");
+
+        var width = monitor.Width > 0 ? monitor.Width : monitor.Bounds.Width;
+        var height = monitor.Height > 0 ? monitor.Height : monitor.Bounds.Height;
+        var resolution = width > 0 && height > 0 ? $"{width}x{height}" : "?x?";
+
+        var refresh = TryGetRefreshRate(monitor.DeviceName);
+        var refreshText = refresh > 0 ? $"{refresh}Hz" : "?Hz";
+
+        return $"{deviceName} {resolution} @ {refreshText}";
+    }
+
     private void PopulateMonitorCombo(ProgramaConfig? programa)
     {
         if (cboMonitores is null)
@@ -220,6 +323,7 @@ public partial class AppEditorForm : Form
             return;
         }
 
+        RefreshMonitorSnapshot();
         _suppressMonitorComboEvents = true;
 
         try
@@ -238,7 +342,7 @@ public partial class AppEditorForm : Form
                 foreach (var monitor in _monitors)
                 {
                     var monitorId = MonitorIdentifier.Create(monitor);
-                    var displayName = LayoutHelpers.GetMonitorDisplayName(monitor);
+                    var displayName = FormatMonitorDisplayName(monitor);
                     cboMonitores.Items.Add(new MonitorOption(monitorId, monitor, displayName));
                 }
 
@@ -309,6 +413,10 @@ public partial class AppEditorForm : Form
 
     private void UpdateMonitorPreview()
     {
+        var previousMonitor = _selectedMonitorInfo;
+        var previousMonitorId = _selectedMonitorId;
+        var previousWindow = BuildWindowConfigurationFromInputs();
+
         _selectedMonitorInfo = null;
         _selectedMonitorId = null;
 
@@ -320,6 +428,13 @@ public partial class AppEditorForm : Form
 
         _selectedMonitorInfo = option.Monitor;
         _selectedMonitorId = option.MonitorId;
+
+        if (previousMonitor is not null &&
+            !string.Equals(previousMonitorId, option.MonitorId, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyRelativeWindowToNewMonitor(previousWindow, previousMonitor, option.Monitor);
+        }
+
         RenderMonitorPreview();
     }
 
@@ -426,6 +541,16 @@ public partial class AppEditorForm : Form
         var window = BuildWindowConfigurationFromInputs();
         if (window.FullScreen)
         {
+            var workArea = monitor.WorkArea;
+            if (workArea.Width > 0 && workArea.Height > 0)
+            {
+                return new Rectangle(
+                    workArea.X - bounds.X,
+                    workArea.Y - bounds.Y,
+                    workArea.Width,
+                    workArea.Height);
+            }
+
             return new Rectangle(0, 0, bounds.Width, bounds.Height);
         }
 
@@ -656,6 +781,95 @@ public partial class AppEditorForm : Form
             Width = width,
             Height = height,
         };
+    }
+
+    private void ApplyRelativeWindowToNewMonitor(WindowConfig previousWindow, MonitorInfo previousMonitor, MonitorInfo newMonitor)
+    {
+        if (previousWindow.FullScreen)
+        {
+            return;
+        }
+
+        var zone = WindowPlacementHelper.CreateZoneFromWindow(previousWindow, previousMonitor);
+        var relative = CalculateRelativeRectangle(zone, newMonitor);
+        ApplyBoundsToInputs(relative);
+    }
+
+    private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
+    {
+        var monitorWidth = Math.Max(1, monitor.Width);
+        var monitorHeight = Math.Max(1, monitor.Height);
+
+        var width = Math.Max(1, (int)Math.Round(monitorWidth * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
+        var height = Math.Max(1, (int)Math.Round(monitorHeight * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));
+        var x = (int)Math.Round(monitorWidth * (zone.LeftPercentage / 100d), MidpointRounding.AwayFromZero);
+        var y = (int)Math.Round(monitorHeight * (zone.TopPercentage / 100d), MidpointRounding.AwayFromZero);
+
+        x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
+        y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
+
+        return new Rectangle(x, y, width, height);
+    }
+
+    private void ApplyBoundsToInputs(Rectangle bounds)
+    {
+        if (chkJanelaTelaCheia.Checked)
+        {
+            return;
+        }
+
+        if (nudJanelaX is not null)
+        {
+            nudJanelaX.Value = AjustarRange(nudJanelaX, bounds.X);
+        }
+
+        if (nudJanelaY is not null)
+        {
+            nudJanelaY.Value = AjustarRange(nudJanelaY, bounds.Y);
+        }
+
+        if (nudJanelaLargura is not null)
+        {
+            nudJanelaLargura.Value = AjustarRange(nudJanelaLargura, bounds.Width);
+        }
+
+        if (nudJanelaAltura is not null)
+        {
+            nudJanelaAltura.Value = AjustarRange(nudJanelaAltura, bounds.Height);
+        }
+    }
+
+    private static int TryGetRefreshRate(string? deviceName)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return 0;
+        }
+
+        if (string.IsNullOrWhiteSpace(deviceName))
+        {
+            return 0;
+        }
+
+        try
+        {
+            var mode = new DEVMODE
+            {
+                dmSize = (short)Marshal.SizeOf<DEVMODE>(),
+            };
+
+            return EnumDisplaySettings(deviceName, EnumCurrentSettings, ref mode)
+                ? mode.dmDisplayFrequency
+                : 0;
+        }
+        catch (DllNotFoundException)
+        {
+            return 0;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return 0;
+        }
     }
 
     private async void btnTestarJanela_Click(object? sender, EventArgs e)
@@ -1210,6 +1424,52 @@ public partial class AppEditorForm : Form
         }
     }
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool EnumDisplaySettings(string? lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DEVMODE
+    {
+        private const int CchDeviceName = 32;
+        private const int CchFormName = 32;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchDeviceName)]
+        public string dmDeviceName;
+
+        public short dmSpecVersion;
+        public short dmDriverVersion;
+        public short dmSize;
+        public short dmDriverExtra;
+        public int dmFields;
+        public int dmPositionX;
+        public int dmPositionY;
+        public int dmDisplayOrientation;
+        public int dmDisplayFixedOutput;
+        public short dmColor;
+        public short dmDuplex;
+        public short dmYResolution;
+        public short dmTTOption;
+        public short dmCollate;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CchFormName)]
+        public string dmFormName;
+
+        public short dmLogPixels;
+        public int dmBitsPerPel;
+        public int dmPelsWidth;
+        public int dmPelsHeight;
+        public int dmDisplayFlags;
+        public int dmDisplayFrequency;
+        public int dmICMMethod;
+        public int dmICMIntent;
+        public int dmMediaType;
+        public int dmDitherType;
+        public int dmReserved1;
+        public int dmReserved2;
+        public int dmPanningWidth;
+        public int dmPanningHeight;
+    }
+
     private sealed class MonitorOption
     {
         public MonitorOption(string? monitorId, MonitorInfo? monitor, string displayName)
@@ -1217,11 +1477,14 @@ public partial class AppEditorForm : Form
             MonitorId = monitorId;
             Monitor = monitor;
             DisplayName = displayName;
+            Tag = monitor;
         }
 
         public string? MonitorId { get; }
 
         public MonitorInfo? Monitor { get; }
+
+        public MonitorInfo? Tag { get; }
 
         public string DisplayName { get; }
 

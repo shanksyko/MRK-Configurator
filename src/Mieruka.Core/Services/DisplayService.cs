@@ -72,6 +72,19 @@ public sealed class DisplayService : IDisplayService
         }
     }
 
+    /// <summary>
+    /// Retrieves the currently installed monitors without caching the result.
+    /// </summary>
+    public static IReadOnlyList<MonitorInfo> GetMonitors()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return Array.Empty<MonitorInfo>();
+        }
+
+        return EnumerateMonitors();
+    }
+
     /// <inheritdoc />
     public MonitorInfo? FindBy(MonitorKey key)
     {
