@@ -23,6 +23,9 @@ partial class AppEditorForm
     internal Button btnCancelar = null!;
     internal Button btnTestarJanela = null!;
     internal Button btnTestReal = null!;
+    internal Button btnCyclePlay = null!;
+    internal Button btnCycleStep = null!;
+    internal Button btnCycleStop = null!;
     internal TextBox txtId = null!;
     internal TextBox txtExecutavel = null!;
     internal TextBox txtArgumentos = null!;
@@ -44,6 +47,10 @@ partial class AppEditorForm
     internal Button btnCycleUp = null!;
     internal Button btnCycleDown = null!;
     internal ErrorProvider errorProvider = null!;
+    internal FlowLayoutPanel flowCycleControls = null!;
+    internal FlowLayoutPanel flowCycleItems = null!;
+    internal CheckBox chkCycleRedeDisponivel = null!;
+    internal ToolTip cycleToolTip = null!;
 
     protected override void Dispose(bool disposing)
     {
@@ -100,20 +107,24 @@ partial class AppEditorForm
         var lblAltura = new Label();
         lblMonitorCoordinates = new Label();
         nudJanelaAltura = new NumericUpDown();
-        tlpCycle = new TableLayoutPanel();
-        dgvCycle = new DataGridView();
-        flpCycleButtons = new FlowLayoutPanel();
-        btnCycleUp = new Button();
-        btnCycleDown = new Button();
+        var tlpCycle = new TableLayoutPanel();
+        flowCycleControls = new FlowLayoutPanel();
+        btnCyclePlay = new Button();
+        btnCycleStep = new Button();
+        btnCycleStop = new Button();
+        chkCycleRedeDisponivel = new CheckBox();
+        flowCycleItems = new FlowLayoutPanel();
         var lblAvancado = new Label();
         errorProvider = new ErrorProvider(components);
-        ((ISupportInitialize)bsCycle).BeginInit();
-        ((ISupportInitialize)dgvCycle).BeginInit();
+        cycleToolTip = new ToolTip(components);
         tabEditor.SuspendLayout();
         tpGeral.SuspendLayout();
         tpAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
         tpSites.SuspendLayout();
+        tlpCycle.SuspendLayout();
+        flowCycleControls.SuspendLayout();
+        flowCycleItems.SuspendLayout();
         tpCiclo.SuspendLayout();
         tpAvancado.SuspendLayout();
         painelRodape.SuspendLayout();
@@ -525,6 +536,101 @@ partial class AppEditorForm
         sitesEditorControl.Size = new System.Drawing.Size(1016, 604);
         sitesEditorControl.TabIndex = 0;
         //
+        // tlpCycle
+        //
+        tlpCycle.ColumnCount = 1;
+        tlpCycle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpCycle.Controls.Add(flowCycleControls, 0, 0);
+        tlpCycle.Controls.Add(flowCycleItems, 0, 1);
+        tlpCycle.Dock = DockStyle.Fill;
+        tlpCycle.Location = new System.Drawing.Point(8, 8);
+        tlpCycle.Margin = new Padding(0);
+        tlpCycle.Name = "tlpCycle";
+        tlpCycle.RowCount = 2;
+        tlpCycle.RowStyles.Add(new RowStyle());
+        tlpCycle.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpCycle.Size = new System.Drawing.Size(1016, 604);
+        tlpCycle.TabIndex = 0;
+        //
+        // flowCycleControls
+        //
+        flowCycleControls.AutoSize = true;
+        flowCycleControls.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        flowCycleControls.Dock = DockStyle.Fill;
+        flowCycleControls.FlowDirection = FlowDirection.LeftToRight;
+        flowCycleControls.Margin = new Padding(0, 0, 0, 8);
+        flowCycleControls.Name = "flowCycleControls";
+        flowCycleControls.Padding = new Padding(0);
+        flowCycleControls.Size = new System.Drawing.Size(1016, 33);
+        flowCycleControls.TabIndex = 0;
+        flowCycleControls.WrapContents = false;
+        flowCycleControls.Controls.Add(btnCyclePlay);
+        flowCycleControls.Controls.Add(btnCycleStep);
+        flowCycleControls.Controls.Add(btnCycleStop);
+        flowCycleControls.Controls.Add(chkCycleRedeDisponivel);
+        //
+        // btnCyclePlay
+        //
+        btnCyclePlay.AutoSize = true;
+        btnCyclePlay.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnCyclePlay.Margin = new Padding(0, 0, 8, 0);
+        btnCyclePlay.Name = "btnCyclePlay";
+        btnCyclePlay.Size = new System.Drawing.Size(68, 25);
+        btnCyclePlay.TabIndex = 0;
+        btnCyclePlay.Text = "Executar";
+        btnCyclePlay.UseVisualStyleBackColor = true;
+        btnCyclePlay.Click += btnCyclePlay_Click;
+        //
+        // btnCycleStep
+        //
+        btnCycleStep.AutoSize = true;
+        btnCycleStep.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnCycleStep.Margin = new Padding(0, 0, 8, 0);
+        btnCycleStep.Name = "btnCycleStep";
+        btnCycleStep.Size = new System.Drawing.Size(64, 25);
+        btnCycleStep.TabIndex = 1;
+        btnCycleStep.Text = "Avançar";
+        btnCycleStep.UseVisualStyleBackColor = true;
+        btnCycleStep.Click += btnCycleStep_Click;
+        //
+        // btnCycleStop
+        //
+        btnCycleStop.AutoSize = true;
+        btnCycleStop.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnCycleStop.Enabled = false;
+        btnCycleStop.Margin = new Padding(0, 0, 16, 0);
+        btnCycleStop.Name = "btnCycleStop";
+        btnCycleStop.Size = new System.Drawing.Size(47, 25);
+        btnCycleStop.TabIndex = 2;
+        btnCycleStop.Text = "Parar";
+        btnCycleStop.UseVisualStyleBackColor = true;
+        btnCycleStop.Click += btnCycleStop_Click;
+        //
+        // chkCycleRedeDisponivel
+        //
+        chkCycleRedeDisponivel.AutoSize = true;
+        chkCycleRedeDisponivel.Checked = true;
+        chkCycleRedeDisponivel.CheckState = CheckState.Checked;
+        chkCycleRedeDisponivel.Margin = new Padding(0, 4, 0, 0);
+        chkCycleRedeDisponivel.Name = "chkCycleRedeDisponivel";
+        chkCycleRedeDisponivel.Size = new System.Drawing.Size(120, 19);
+        chkCycleRedeDisponivel.TabIndex = 3;
+        chkCycleRedeDisponivel.Text = "Rede disponível";
+        chkCycleRedeDisponivel.UseVisualStyleBackColor = true;
+        chkCycleRedeDisponivel.CheckedChanged += chkCycleRedeDisponivel_CheckedChanged;
+        //
+        // flowCycleItems
+        //
+        flowCycleItems.AutoScroll = true;
+        flowCycleItems.BackColor = System.Drawing.SystemColors.ControlLightLight;
+        flowCycleItems.Dock = DockStyle.Fill;
+        flowCycleItems.Location = new System.Drawing.Point(0, 41);
+        flowCycleItems.Margin = new Padding(0);
+        flowCycleItems.Name = "flowCycleItems";
+        flowCycleItems.Padding = new Padding(0, 0, 0, 8);
+        flowCycleItems.Size = new System.Drawing.Size(1016, 563);
+        flowCycleItems.TabIndex = 1;
+        //
         // tpCiclo
         //
         tpCiclo.Controls.Add(tlpCycle);
@@ -536,133 +642,6 @@ partial class AppEditorForm
         tpCiclo.TabIndex = 4;
         tpCiclo.Text = "Ciclo";
         tpCiclo.UseVisualStyleBackColor = true;
-        //
-        // tlpCycle
-        //
-        tlpCycle.ColumnCount = 2;
-        tlpCycle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tlpCycle.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        tlpCycle.Controls.Add(dgvCycle, 0, 0);
-        tlpCycle.Controls.Add(flpCycleButtons, 1, 0);
-        tlpCycle.Dock = DockStyle.Fill;
-        tlpCycle.Location = new System.Drawing.Point(8, 8);
-        tlpCycle.Margin = new Padding(0);
-        tlpCycle.Name = "tlpCycle";
-        tlpCycle.RowCount = 1;
-        tlpCycle.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        tlpCycle.Size = new System.Drawing.Size(1016, 604);
-        tlpCycle.TabIndex = 0;
-        //
-        // dgvCycle
-        //
-        dgvCycle.AllowUserToAddRows = false;
-        dgvCycle.AllowUserToDeleteRows = false;
-        dgvCycle.AllowUserToResizeRows = false;
-        dgvCycle.AutoGenerateColumns = false;
-        dgvCycle.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        dgvCycle.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-        dgvCycle.Columns.AddRange(new DataGridViewColumn[] { colCycleApp, colCycleOrder, colCycleDelay, colCycleAsk, colCycleNetwork });
-        dgvCycle.DataSource = bsCycle;
-        dgvCycle.Dock = DockStyle.Fill;
-        dgvCycle.Location = new System.Drawing.Point(0, 0);
-        dgvCycle.Margin = new Padding(0, 0, 8, 0);
-        dgvCycle.MultiSelect = false;
-        dgvCycle.Name = "dgvCycle";
-        dgvCycle.RowHeadersVisible = false;
-        dgvCycle.RowTemplate.Height = 25;
-        dgvCycle.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        dgvCycle.Size = new System.Drawing.Size(920, 604);
-        dgvCycle.TabIndex = 0;
-        dgvCycle.CellEndEdit += dgvCycle_CellEndEdit;
-        dgvCycle.SelectionChanged += dgvCycle_SelectionChanged;
-        dgvCycle.CurrentCellDirtyStateChanged += dgvCycle_CurrentCellDirtyStateChanged;
-        dgvCycle.DataError += dgvCycle_DataError;
-        //
-        // colCycleApp
-        //
-        colCycleApp.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        colCycleApp.DataPropertyName = "Id";
-        colCycleApp.FillWeight = 35F;
-        colCycleApp.HeaderText = "App";
-        colCycleApp.Name = "colCycleApp";
-        colCycleApp.ReadOnly = true;
-        //
-        // colCycleOrder
-        //
-        colCycleOrder.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        colCycleOrder.DataPropertyName = "Order";
-        colCycleOrder.HeaderText = "Ordem";
-        colCycleOrder.Name = "colCycleOrder";
-        colCycleOrder.Width = 70;
-        //
-        // colCycleDelay
-        //
-        colCycleDelay.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        colCycleDelay.DataPropertyName = "DelayMs";
-        colCycleDelay.HeaderText = "Delay (ms)";
-        colCycleDelay.Name = "colCycleDelay";
-        colCycleDelay.Width = 94;
-        //
-        // colCycleAsk
-        //
-        colCycleAsk.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        colCycleAsk.DataPropertyName = "AskBeforeLaunch";
-        colCycleAsk.HeaderText = "Perguntar?";
-        colCycleAsk.Name = "colCycleAsk";
-        colCycleAsk.FalseValue = false;
-        colCycleAsk.TrueValue = true;
-        colCycleAsk.Width = 74;
-        //
-        // colCycleNetwork
-        //
-        colCycleNetwork.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
-        colCycleNetwork.DataPropertyName = "NetworkRequired";
-        colCycleNetwork.HeaderText = "Rede?";
-        colCycleNetwork.Name = "colCycleNetwork";
-        colCycleNetwork.ThreeState = true;
-        colCycleNetwork.FalseValue = false;
-        colCycleNetwork.TrueValue = true;
-        colCycleNetwork.IndeterminateValue = null;
-        colCycleNetwork.Width = 46;
-        //
-        // flpCycleButtons
-        //
-        flpCycleButtons.AutoSize = true;
-        flpCycleButtons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        flpCycleButtons.Controls.Add(btnCycleUp);
-        flpCycleButtons.Controls.Add(btnCycleDown);
-        flpCycleButtons.Dock = DockStyle.Fill;
-        flpCycleButtons.FlowDirection = FlowDirection.TopDown;
-        flpCycleButtons.Location = new System.Drawing.Point(928, 0);
-        flpCycleButtons.Margin = new Padding(0);
-        flpCycleButtons.Name = "flpCycleButtons";
-        flpCycleButtons.Padding = new Padding(0, 0, 0, 8);
-        flpCycleButtons.Size = new System.Drawing.Size(88, 604);
-        flpCycleButtons.TabIndex = 1;
-        //
-        // btnCycleUp
-        //
-        btnCycleUp.AutoSize = true;
-        btnCycleUp.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnCycleUp.Margin = new Padding(0, 0, 0, 8);
-        btnCycleUp.Name = "btnCycleUp";
-        btnCycleUp.Size = new System.Drawing.Size(61, 25);
-        btnCycleUp.TabIndex = 0;
-        btnCycleUp.Text = "Mover ↑";
-        btnCycleUp.UseVisualStyleBackColor = true;
-        btnCycleUp.Click += btnCycleUp_Click;
-        //
-        // btnCycleDown
-        //
-        btnCycleDown.AutoSize = true;
-        btnCycleDown.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnCycleDown.Margin = new Padding(0, 0, 0, 8);
-        btnCycleDown.Name = "btnCycleDown";
-        btnCycleDown.Size = new System.Drawing.Size(61, 25);
-        btnCycleDown.TabIndex = 1;
-        btnCycleDown.Text = "Mover ↓";
-        btnCycleDown.UseVisualStyleBackColor = true;
-        btnCycleDown.Click += btnCycleDown_Click;
         //
         // tpAvancado
         //
@@ -750,8 +729,12 @@ partial class AppEditorForm
         tpAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
         tpSites.ResumeLayout(false);
+        tlpCycle.ResumeLayout(false);
+        tlpCycle.PerformLayout();
+        flowCycleControls.ResumeLayout(false);
+        flowCycleControls.PerformLayout();
+        flowCycleItems.ResumeLayout(false);
         tpCiclo.ResumeLayout(false);
-        tpCiclo.PerformLayout();
         tpAvancado.ResumeLayout(false);
         tpAvancado.PerformLayout();
         painelRodape.ResumeLayout(false);
