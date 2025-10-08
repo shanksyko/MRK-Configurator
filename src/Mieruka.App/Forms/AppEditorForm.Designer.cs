@@ -82,6 +82,7 @@ partial class AppEditorForm
         tpAvancado = new TabPage();
         sitesEditorControl = new SitesEditorControl();
         appsTabControl = new AppsTab();
+        var tlpAplicativos = new TableLayoutPanel();
         var painelRodape = new FlowLayoutPanel();
         btnSalvar = new Button();
         btnCancelar = new Button();
@@ -142,6 +143,7 @@ partial class AppEditorForm
         tabEditor.SuspendLayout();
         tpGeral.SuspendLayout();
         tpAplicativos.SuspendLayout();
+        tlpAplicativos.SuspendLayout();
         tpJanela.SuspendLayout();
         tpSites.SuspendLayout();
         tlpCycle.SuspendLayout();
@@ -192,7 +194,7 @@ partial class AppEditorForm
         //
         // tpAplicativos
         //
-        tpAplicativos.Controls.Add(appsTabControl);
+        tpAplicativos.Controls.Add(tlpAplicativos);
         tpAplicativos.Location = new System.Drawing.Point(4, 24);
         tpAplicativos.Margin = new Padding(8);
         tpAplicativos.Name = "tpAplicativos";
@@ -207,7 +209,23 @@ partial class AppEditorForm
         appsTabControl.Dock = DockStyle.Fill;
         appsTabControl.Margin = new Padding(0);
         appsTabControl.Name = "appsTabControl";
-        appsTabControl.TabIndex = 0;
+        appsTabControl.TabIndex = 1;
+        //
+        // tlpAplicativos
+        //
+        tlpAplicativos.ColumnCount = 1;
+        tlpAplicativos.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpAplicativos.Controls.Add(grpInstalledApps, 0, 0);
+        tlpAplicativos.Controls.Add(appsTabControl, 0, 1);
+        tlpAplicativos.Dock = DockStyle.Fill;
+        tlpAplicativos.Location = new System.Drawing.Point(8, 8);
+        tlpAplicativos.Margin = new Padding(0);
+        tlpAplicativos.Name = "tlpAplicativos";
+        tlpAplicativos.RowCount = 2;
+        tlpAplicativos.RowStyles.Add(new RowStyle(SizeType.Percent, 45F));
+        tlpAplicativos.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
+        tlpAplicativos.Size = new System.Drawing.Size(1016, 604);
+        tlpAplicativos.TabIndex = 0;
         //
         // tlpGeral
         //
@@ -217,27 +235,24 @@ partial class AppEditorForm
         tlpGeral.Controls.Add(lblId, 0, 0);
         tlpGeral.Controls.Add(txtId, 1, 0);
         tlpGeral.Controls.Add(flowAppType, 0, 1);
-        tlpGeral.Controls.Add(grpInstalledApps, 0, 2);
-        tlpGeral.Controls.Add(lblExecutavel, 0, 3);
-        tlpGeral.Controls.Add(tlpExecutavel, 1, 3);
-        tlpGeral.Controls.Add(lblArgumentos, 0, 4);
-        tlpGeral.Controls.Add(txtArgumentos, 1, 4);
-        tlpGeral.Controls.Add(lblCmdPreviewExe, 0, 5);
-        tlpGeral.Controls.Add(txtCmdPreviewExe, 1, 5);
-        tlpGeral.Controls.Add(chkAutoStart, 1, 6);
+        tlpGeral.Controls.Add(lblExecutavel, 0, 2);
+        tlpGeral.Controls.Add(tlpExecutavel, 1, 2);
+        tlpGeral.Controls.Add(lblArgumentos, 0, 3);
+        tlpGeral.Controls.Add(txtArgumentos, 1, 3);
+        tlpGeral.Controls.Add(lblCmdPreviewExe, 0, 4);
+        tlpGeral.Controls.Add(txtCmdPreviewExe, 1, 4);
+        tlpGeral.Controls.Add(chkAutoStart, 1, 5);
         tlpGeral.SetColumnSpan(flowAppType, 2);
-        tlpGeral.SetColumnSpan(grpInstalledApps, 2);
         tlpGeral.Dock = DockStyle.Fill;
         tlpGeral.Location = new System.Drawing.Point(8, 8);
         tlpGeral.Margin = new Padding(0);
         tlpGeral.Name = "tlpGeral";
         tlpGeral.Padding = new Padding(0, 0, 0, 8);
-        tlpGeral.RowCount = 7;
+        tlpGeral.RowCount = 6;
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));
+        tlpGeral.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpGeral.Size = new System.Drawing.Size(1016, 604);
@@ -303,12 +318,12 @@ partial class AppEditorForm
         //
         grpInstalledApps.Controls.Add(lvApps);
         grpInstalledApps.Dock = DockStyle.Fill;
-        grpInstalledApps.Location = new System.Drawing.Point(0, 66);
+        grpInstalledApps.Location = new System.Drawing.Point(0, 0);
         grpInstalledApps.Margin = new Padding(0, 0, 0, 8);
         grpInstalledApps.Name = "grpInstalledApps";
         grpInstalledApps.Padding = new Padding(8);
-        grpInstalledApps.Size = new System.Drawing.Size(1016, 209);
-        grpInstalledApps.TabIndex = 3;
+        grpInstalledApps.Size = new System.Drawing.Size(1016, 266);
+        grpInstalledApps.TabIndex = 0;
         grpInstalledApps.TabStop = false;
         grpInstalledApps.Text = "Aplicativos instalados";
         //
@@ -965,6 +980,7 @@ partial class AppEditorForm
         tabEditor.ResumeLayout(false);
         tpGeral.ResumeLayout(false);
         tpAplicativos.ResumeLayout(false);
+        tlpAplicativos.ResumeLayout(false);
         tpJanela.ResumeLayout(false);
         tpSites.ResumeLayout(false);
         tlpCycleList.ResumeLayout(false);
