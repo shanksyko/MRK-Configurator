@@ -407,7 +407,7 @@ public partial class AppEditorForm : Form
 
             if (IsHandleCreated)
             {
-                BeginInvoke(new MethodInvoker(RebuildSimRects));
+                BeginInvoke(new Action(RebuildSimRects));
             }
 
             return;
@@ -480,7 +480,7 @@ public partial class AppEditorForm : Form
         items.Add(new AppCycleSimulator.SimRect(
             "app",
             $"Aplicativo: {appLabel}",
-            requiresNetwork: false,
+            RequiresNetwork: false,
             DelayMs: 400,
             Details: appDetails));
 
@@ -494,7 +494,7 @@ public partial class AppEditorForm : Form
             items.Add(new AppCycleSimulator.SimRect(
                 $"site:{index}",
                 $"Site: {siteId}",
-                requiresNetwork: true,
+                RequiresNetwork: true,
                 DelayMs: null,
                 Details: details));
         }
