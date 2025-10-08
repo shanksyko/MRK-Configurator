@@ -206,12 +206,19 @@ public partial class AppEditorForm : Form
 
     public string? SelectedMonitorId => _selectedMonitorId;
 
+    private IEnumerable<ProgramaConfig> CurrentProfileItems()
+    {
+        return _profileApps ?? Array.Empty<ProgramaConfig>();
+    }
+
     public void SetProfileApplications(IEnumerable<ProgramaConfig>? apps)
     {
-        _profileApplications.Clear();
+        List<ProgramaConfig>? replacements = null;
 
         if (apps is not null)
         {
+            replacements = new List<ProgramaConfig>();
+
             foreach (var app in apps)
             {
                 if (app is null)
@@ -219,7 +226,20 @@ public partial class AppEditorForm : Form
                     continue;
                 }
 
-                _profileApplications.Add(app with { });
+                replacements.Add(app);
+            }
+        }
+
+        if (_profileApps is not null)
+        {
+            _profileApps.Clear();
+
+            if (replacements is not null)
+            {
+                foreach (var app in replacements)
+                {
+                    _profileApps.Add(app);
+                }
             }
         }
 
@@ -1247,7 +1267,7 @@ public partial class AppEditorForm : Form
         var overlayApps = new List<ProgramaConfig>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var app in _profileApplications)
+        foreach (var app in CurrentProfileItems())
         {
             if (app is null)
             {
