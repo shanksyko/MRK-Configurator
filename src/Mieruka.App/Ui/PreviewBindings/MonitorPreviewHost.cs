@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Threading;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
@@ -32,6 +33,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private bool _hasActiveSession;
     private bool _lastPreferGpu;
     private volatile bool _isSuspended;
+    private int _resumeTicket;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
@@ -218,6 +220,8 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
+        var ticket = Interlocked.Increment(ref _resumeTicket);
+
         bool shouldResume;
         bool preferGpu;
 
@@ -225,10 +229,6 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             shouldResume = _hasActiveSession && _isSuspended;
             preferGpu = _lastPreferGpu;
-            if (shouldResume)
-            {
-                _isSuspended = false;
-            }
         }
 
         if (!shouldResume)
@@ -236,7 +236,46 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        Start(preferGpu);
+        void ResumeCore()
+        {
+            if (_disposed || _target.IsDisposed || ticket != Volatile.Read(ref _resumeTicket))
+            {
+                return;
+            }
+
+            bool resumeNow;
+            lock (_stateGate)
+            {
+                resumeNow = _hasActiveSession && _isSuspended && ticket == _resumeTicket;
+                if (resumeNow)
+                {
+                    _isSuspended = false;
+                }
+            }
+
+            if (!resumeNow)
+            {
+                return;
+            }
+
+            Start(preferGpu);
+        }
+
+        if (_target.InvokeRequired)
+        {
+            try
+            {
+                _target.BeginInvoke(new Action(ResumeCore));
+            }
+            catch
+            {
+                // Ignore invoke failures during shutdown.
+            }
+
+            return;
+        }
+
+        ResumeCore();
     }
 
     public void Dispose()
