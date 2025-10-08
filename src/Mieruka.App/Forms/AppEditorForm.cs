@@ -29,7 +29,7 @@ public partial class AppEditorForm : Form
 {
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
-    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
     private static readonly MethodInfo? ClearAppsInventorySelectionMethod =
         typeof(AppsTab).GetMethod("ClearSelection", BindingFlags.Instance | BindingFlags.NonPublic);
     private static readonly Color[] SimulationPalette =
