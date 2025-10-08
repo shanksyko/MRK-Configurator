@@ -27,6 +27,7 @@ public partial class MainForm : Form
     private readonly BindingList<ProgramaConfig> _programas = new();
     private readonly ITelemetry _telemetry = new UiTelemetry();
     private readonly Orchestrator _orchestrator;
+    private readonly IAppRunner _appRunner;
     private bool _busy;
     private readonly List<MonitorInfo> _monitorSnapshot = new();
     private readonly List<MonitorCardContext> _monitorCardOrder = new();
@@ -44,6 +45,7 @@ public partial class MainForm : Form
     private ProfileConfig? _currentProfile;
     private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
     private const string DefaultProfileId = "workspace";
+    private static readonly TimeSpan MonitorPreviewResumeDelay = TimeSpan.FromMilliseconds(150);
 
     public string? SelectedMonitorId { get; private set; }
 
@@ -52,6 +54,10 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+
+        _appRunner = new AppRunner();
+        _appRunner.BeforeMoveWindow += AppRunnerOnBeforeMoveWindow;
+        _appRunner.AfterMoveWindow += AppRunnerOnAfterMoveWindow;
 
         UpdateStatusText("Pronto");
 
@@ -75,6 +81,7 @@ public partial class MainForm : Form
         Shown += MainForm_Shown;
         Resize += MainForm_Resize;
         FormClosing += MainForm_FormClosing;
+        Disposed += MainForm_Disposed;
 
         LoadInitialData();
         LoadProfileFromStore();
@@ -1607,7 +1614,7 @@ public partial class MainForm : Form
             ? _monitorSnapshot.ToList()
             : CaptureMonitorSnapshot().ToList();
 
-        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId);
+        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId, _appRunner);
         var resultado = editor.ShowDialog(this);
         if (resultado != DialogResult.OK)
         {
@@ -1639,6 +1646,92 @@ public partial class MainForm : Form
             bsProgramas.ResetBindings(false);
             SelecionarPrograma(programa);
         }
+    }
+
+    private void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
+    {
+        SuspendMonitorPreviews();
+    }
+
+    private void AppRunnerOnAfterMoveWindow(object? sender, EventArgs e)
+    {
+        ScheduleMonitorPreviewResume();
+    }
+
+    private void SuspendMonitorPreviews()
+    {
+        foreach (var host in _monitorHosts.ToArray())
+        {
+            try
+            {
+                host.SuspendCapture();
+            }
+            catch
+            {
+                // Ignorar falhas ao suspender a captura durante movimentações de janela.
+            }
+        }
+    }
+
+    private void ScheduleMonitorPreviewResume()
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(new Action(ResumeMonitorPreviewsWithDelay));
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignorar quando o formulário estiver sendo finalizado.
+        }
+        catch (InvalidOperationException)
+        {
+            // Ignorar quando o handle não estiver disponível.
+        }
+    }
+
+    private async void ResumeMonitorPreviewsWithDelay()
+    {
+        try
+        {
+            await Task.Delay(MonitorPreviewResumeDelay).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Ignorar interrupções não previstas ao aguardar o reagendamento.
+        }
+
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        ResumeMonitorPreviews();
+    }
+
+    private void ResumeMonitorPreviews()
+    {
+        foreach (var host in _monitorHosts.ToArray())
+        {
+            try
+            {
+                host.ResumeCapture();
+            }
+            catch
+            {
+                // Ignorar falhas ao retomar a captura.
+            }
+        }
+    }
+
+    private void MainForm_Disposed(object? sender, EventArgs e)
+    {
+        _appRunner.BeforeMoveWindow -= AppRunnerOnBeforeMoveWindow;
+        _appRunner.AfterMoveWindow -= AppRunnerOnAfterMoveWindow;
     }
 
     private readonly struct MonitorCardSource

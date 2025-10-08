@@ -26,6 +26,7 @@ public partial class AppEditorForm : Form
 {
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
+    private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(150);
 
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
@@ -61,6 +62,8 @@ public partial class AppEditorForm : Form
         CancelButton = btnCancelar;
 
         _appRunner = appRunner ?? new AppRunner();
+        _appRunner.BeforeMoveWindow += AppRunnerOnBeforeMoveWindow;
+        _appRunner.AfterMoveWindow += AppRunnerOnAfterMoveWindow;
         _providedMonitors = monitors;
         _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
@@ -96,6 +99,8 @@ public partial class AppEditorForm : Form
         AdjustMonitorPreviewWidth();
         UpdateWindowInputsState();
         UpdateMonitorCoordinateLabel(null);
+
+        Disposed += AppEditorForm_Disposed;
 
         if (programa is not null)
         {
@@ -1007,7 +1012,15 @@ public partial class AppEditorForm : Form
         {
             var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
             var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
-            WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
+            SuspendPreviewCapture();
+            try
+            {
+                WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
+            }
+            finally
+            {
+                SchedulePreviewResume();
+            }
             await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
         }
         finally
@@ -1030,6 +1043,72 @@ public partial class AppEditorForm : Form
 
             process.Dispose();
         }
+    }
+
+    private void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
+    {
+        SuspendPreviewCapture();
+    }
+
+    private void AppRunnerOnAfterMoveWindow(object? sender, EventArgs e)
+    {
+        SchedulePreviewResume();
+    }
+
+    private void SuspendPreviewCapture()
+    {
+        monitorPreviewDisplay?.SuspendCapture();
+    }
+
+    private void SchedulePreviewResume()
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(new Action(ResumePreviewCaptureWithDelay));
+        }
+        catch (ObjectDisposedException)
+        {
+            // Ignorar quando o formulário estiver sendo finalizado.
+        }
+        catch (InvalidOperationException)
+        {
+            // Ignorar quando o handle não estiver disponível.
+        }
+    }
+
+    private async void ResumePreviewCaptureWithDelay()
+    {
+        try
+        {
+            await Task.Delay(PreviewResumeDelay).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Ignorar interrupções inesperadas.
+        }
+
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        ResumePreviewCapture();
+    }
+
+    private void ResumePreviewCapture()
+    {
+        monitorPreviewDisplay?.ResumeCapture();
+    }
+
+    private void AppEditorForm_Disposed(object? sender, EventArgs e)
+    {
+        _appRunner.BeforeMoveWindow -= AppRunnerOnBeforeMoveWindow;
+        _appRunner.AfterMoveWindow -= AppRunnerOnAfterMoveWindow;
     }
 
     private void btnSalvar_Click(object? sender, EventArgs e)
