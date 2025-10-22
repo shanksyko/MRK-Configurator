@@ -230,38 +230,28 @@ public sealed class MonitorService : IMonitorService
             return false;
         }
 
-        var located = false;
-        var locatedBounds = Rectangle.Empty;
-        var locatedWorkArea = Rectangle.Empty;
-        var callback = new MonitorEnumProc((IntPtr hMonitor, IntPtr _, ref RECT clip, IntPtr __) =>
+        var context = new MonitorRectEnumerationContext(deviceName);
+        var handle = GCHandle.Alloc(context, GCHandleType.Pinned);
+        try
         {
-            var info = MONITORINFOEX.Create();
-            if (!GetMonitorInfo(hMonitor, ref info))
-            {
-                return true;
-            }
-
-            if (!string.Equals(info.szDevice, deviceName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            locatedBounds = ToRectangle(info.rcMonitor);
-            locatedWorkArea = ToRectangle(info.rcWork);
-            located = true;
-            return false;
-        });
-
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
-        GC.KeepAlive(callback);
-
-        if (located)
+            var callback = new MonitorEnumProc(MonitorRectEnumerationCallback);
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
+        }
+        finally
         {
-            bounds = locatedBounds;
-            workArea = locatedWorkArea;
+            if (handle.IsAllocated)
+            {
+                handle.Free();
+            }
         }
 
-        return located;
+        if (context.Located)
+        {
+            bounds = context.LocatedBounds;
+            workArea = context.LocatedWorkArea;
+        }
+
+        return context.Located;
     }
 
     private static Rectangle ToRectangle(RECT rect)
@@ -331,48 +321,127 @@ public sealed class MonitorService : IMonitorService
     private static List<MonitorDescriptor> EnumerateGdi()
     {
         var descriptors = new List<MonitorDescriptor>();
-
-        var callback = new MonitorEnumProc((IntPtr handle, IntPtr _, ref RECT clip, IntPtr __) =>
+        var context = new MonitorEnumerationContext(descriptors);
+        var handle = GCHandle.Alloc(context, GCHandleType.Pinned);
+        try
         {
-            var info = MONITORINFOEX.Create();
-            if (!GetMonitorInfo(handle, ref info))
+            var callback = new MonitorEnumProc(GdiMonitorEnumerationCallback);
+            return EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle))
+                ? descriptors
+                : new List<MonitorDescriptor>();
+        }
+        finally
+        {
+            if (handle.IsAllocated)
             {
-                return true;
+                handle.Free();
             }
+        }
+    }
 
-            var deviceName = info.szDevice ?? string.Empty;
-            var bounds = ToRectangle(info.rcMonitor);
-            var workArea = ToRectangle(info.rcWork);
-            var refresh = 0;
-            var orientation = MonitorOrientation.Unknown;
-            var rotation = 0;
-            if (TryGetDisplaySettings(deviceName, out var hz, out var orient, out var rot))
-            {
-                refresh = hz;
-                orientation = orient;
-                rotation = rot;
-            }
+    private sealed class MonitorRectEnumerationContext
+    {
+        public MonitorRectEnumerationContext(string deviceName)
+        {
+            DeviceName = deviceName;
+        }
 
-            descriptors.Add(new MonitorDescriptor
-            {
-                DeviceName = deviceName,
-                FriendlyName = ResolveFriendlyName(deviceName),
-                Width = bounds.Width,
-                Height = bounds.Height,
-                RefreshHz = refresh,
-                IsPrimary = (info.dwFlags & MonitorInfoFlags.Primary) != 0,
-                Bounds = bounds,
-                WorkArea = workArea,
-                Orientation = orientation,
-                Rotation = rotation,
-            });
+        public string DeviceName { get; }
 
+        public bool Located { get; set; }
+
+        public Rectangle LocatedBounds { get; set; }
+
+        public Rectangle LocatedWorkArea { get; set; }
+    }
+
+    private sealed class MonitorEnumerationContext
+    {
+        public MonitorEnumerationContext(List<MonitorDescriptor> descriptors)
+        {
+            Descriptors = descriptors;
+        }
+
+        public List<MonitorDescriptor> Descriptors { get; }
+    }
+
+    private static bool MonitorRectEnumerationCallback(IntPtr hMonitor, IntPtr hdc, ref RECT clip, IntPtr data)
+    {
+        if (data == IntPtr.Zero)
+        {
             return true;
+        }
+
+        var handle = GCHandle.FromIntPtr(data);
+        if (!handle.IsAllocated || handle.Target is not MonitorRectEnumerationContext context)
+        {
+            return true;
+        }
+
+        var info = MONITORINFOEX.Create();
+        if (!GetMonitorInfo(hMonitor, ref info))
+        {
+            return true;
+        }
+
+        if (!string.Equals(info.szDevice, context.DeviceName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        context.LocatedBounds = ToRectangle(info.rcMonitor);
+        context.LocatedWorkArea = ToRectangle(info.rcWork);
+        context.Located = true;
+        return false;
+    }
+
+    private static bool GdiMonitorEnumerationCallback(IntPtr handle, IntPtr hdc, ref RECT clip, IntPtr data)
+    {
+        if (data == IntPtr.Zero)
+        {
+            return true;
+        }
+
+        var gcHandle = GCHandle.FromIntPtr(data);
+        if (!gcHandle.IsAllocated || gcHandle.Target is not MonitorEnumerationContext context)
+        {
+            return true;
+        }
+
+        var info = MONITORINFOEX.Create();
+        if (!GetMonitorInfo(handle, ref info))
+        {
+            return true;
+        }
+
+        var deviceName = info.szDevice ?? string.Empty;
+        var bounds = ToRectangle(info.rcMonitor);
+        var workArea = ToRectangle(info.rcWork);
+        var refresh = 0;
+        var orientation = MonitorOrientation.Unknown;
+        var rotation = 0;
+        if (TryGetDisplaySettings(deviceName, out var hz, out var orient, out var rot))
+        {
+            refresh = hz;
+            orientation = orient;
+            rotation = rot;
+        }
+
+        context.Descriptors.Add(new MonitorDescriptor
+        {
+            DeviceName = deviceName,
+            FriendlyName = ResolveFriendlyName(deviceName),
+            Width = bounds.Width,
+            Height = bounds.Height,
+            RefreshHz = refresh,
+            IsPrimary = (info.dwFlags & MonitorInfoFlags.Primary) != 0,
+            Bounds = bounds,
+            WorkArea = workArea,
+            Orientation = orientation,
+            Rotation = rotation,
         });
 
-        return EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero)
-            ? descriptors
-            : new List<MonitorDescriptor>();
+        return true;
     }
 
     private static string ResolveFriendlyName(string? deviceName)
