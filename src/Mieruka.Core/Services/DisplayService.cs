@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
@@ -377,6 +378,17 @@ public sealed class DisplayService : IDisplayService
             _ => (MonitorOrientation.Unknown, 0),
         };
 
+    private sealed class MonitorRectContext
+    {
+        public string DeviceName { get; init; } = string.Empty;
+
+        public bool Located { get; set; }
+
+        public Rectangle Bounds { get; set; }
+
+        public Rectangle WorkArea { get; set; }
+    }
+
     private static bool TryGetMonitorRectangles(string? deviceName, out Rectangle bounds, out Rectangle workArea)
     {
         bounds = Rectangle.Empty;
@@ -387,38 +399,66 @@ public sealed class DisplayService : IDisplayService
             return false;
         }
 
-        var located = false;
-        var locatedBounds = Rectangle.Empty;
-        var locatedWorkArea = Rectangle.Empty;
-        var callback = new MonitorEnumProc((IntPtr monitor, IntPtr _, ref RECT rect, IntPtr __) =>
+        var context = new MonitorRectContext
         {
-            var info = MONITORINFOEX.Create();
-            if (!GetMonitorInfo(monitor, ref info))
-            {
-                return true;
-            }
+            DeviceName = deviceName,
+        };
 
-            if (!string.Equals(info.szDevice, deviceName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+        var handle = GCHandle.Alloc(context);
 
-            locatedBounds = ToRectangle(info.rcMonitor);
-            locatedWorkArea = ToRectangle(info.rcWork);
-            located = true;
-            return false;
-        });
-
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
-        GC.KeepAlive(callback);
-
-        if (located)
+        try
         {
-            bounds = locatedBounds;
-            workArea = locatedWorkArea;
+            var data = GCHandle.ToIntPtr(handle);
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, TryGetMonitorRectanglesCallback, data);
+        }
+        finally
+        {
+            if (handle.IsAllocated)
+            {
+                handle.Free();
+            }
         }
 
-        return located;
+        bounds = context.Bounds;
+        workArea = context.WorkArea;
+
+        return context.Located;
+    }
+
+    private static bool TryGetMonitorRectanglesCallback(IntPtr monitor, IntPtr hdc, ref RECT rect, IntPtr data)
+    {
+        var handle = GCHandle.FromIntPtr(data);
+        var context = handle.Target;
+
+        Debug.Assert(context is MonitorRectContext);
+
+        if (context is not MonitorRectContext monitorContext)
+        {
+            return false;
+        }
+
+        var monitorRect = rect;
+        var info = MONITORINFOEX.Create();
+
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return true;
+        }
+
+        if (!string.Equals(info.szDevice, monitorContext.DeviceName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var monitorInfo = info;
+
+        Debug.Assert(ToRectangle(monitorRect) == ToRectangle(monitorInfo.rcMonitor));
+
+        monitorContext.Bounds = ToRectangle(monitorInfo.rcMonitor);
+        monitorContext.WorkArea = ToRectangle(monitorInfo.rcWork);
+        monitorContext.Located = true;
+
+        return false;
     }
 
     private static Rectangle ToRectangle(RECT rect)
