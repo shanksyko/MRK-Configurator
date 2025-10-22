@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -12,46 +13,89 @@ internal static class MonitorUtilities
         monitorHandle = IntPtr.Zero;
         bounds = default;
 
-        var locatedMonitor = IntPtr.Zero;
-        var locatedBounds = default(RECT);
-
         if (string.IsNullOrWhiteSpace(deviceName))
         {
             return false;
         }
 
-        var callback = new MonitorEnumProc((IntPtr hMonitor, IntPtr _, ref RECT rect, IntPtr __) =>
+        var context = new MonitorSearchContext
         {
-            var info = new MONITORINFOEX
-            {
-                cbSize = Marshal.SizeOf<MONITORINFOEX>(),
-            };
+            DeviceName = deviceName,
+            Monitor = IntPtr.Zero,
+            Bounds = default,
+            Located = false,
+        };
 
-            if (!GetMonitorInfo(hMonitor, ref info))
+        var handle = GCHandle.Alloc(context);
+        try
+        {
+            var callback = new MonitorEnumProc(EnumMonitorCallback);
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
+            GC.KeepAlive(callback);
+
+            var finalContext = (MonitorSearchContext)handle.Target;
+            if (!finalContext.Located)
             {
-                return true;
+                return false;
             }
 
-            if (!string.Equals(info.szDevice, deviceName, StringComparison.OrdinalIgnoreCase))
+            monitorHandle = finalContext.Monitor;
+            bounds = finalContext.Bounds;
+            return true;
+        }
+        finally
+        {
+            if (handle.IsAllocated)
             {
-                return true;
+                handle.Free();
             }
+        }
+    }
 
-            locatedMonitor = hMonitor;
-            locatedBounds = info.rcMonitor;
-            return false;
-        });
+    private struct MonitorSearchContext
+    {
+        public string DeviceName;
+        public IntPtr Monitor;
+        public RECT Bounds;
+        public bool Located;
+    }
 
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
-        GC.KeepAlive(callback);
-        if (locatedMonitor == IntPtr.Zero)
+    private static bool EnumMonitorCallback(IntPtr monitor, IntPtr hdc, ref RECT rect, IntPtr data)
+    {
+        if (data == IntPtr.Zero)
         {
             return false;
         }
 
-        monitorHandle = locatedMonitor;
-        bounds = locatedBounds;
-        return true;
+        var handle = GCHandle.FromIntPtr(data);
+        Debug.Assert(handle.IsAllocated);
+
+        var contextObject = handle.Target;
+        Debug.Assert(contextObject is MonitorSearchContext);
+
+        var context = (MonitorSearchContext)contextObject;
+        Debug.Assert(!string.IsNullOrEmpty(context.DeviceName));
+
+        var info = new MONITORINFOEX
+        {
+            cbSize = Marshal.SizeOf<MONITORINFOEX>(),
+        };
+
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return true;
+        }
+
+        if (!string.Equals(info.szDevice, context.DeviceName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        context.Monitor = monitor;
+        context.Bounds = info.rcMonitor;
+        context.Located = true;
+        handle.Target = context;
+        return false;
     }
 
     [StructLayout(LayoutKind.Sequential)]
