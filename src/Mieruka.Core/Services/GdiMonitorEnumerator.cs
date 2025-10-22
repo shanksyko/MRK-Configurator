@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -27,39 +28,62 @@ public sealed class GdiMonitorEnumerator
         }
 
         var probes = new List<MonitorProbe>();
-        var callback = new MonitorEnumProc((IntPtr handle, IntPtr hdc, ref RECT clip, IntPtr data) =>
+        var context = new GdiEnumContext(probes);
+        var handle = GCHandle.Alloc(context);
+
+        try
         {
-            var info = MONITORINFOEX.Create();
-            if (!GetMonitorInfo(handle, ref info))
+            var callback = new MonitorEnumProc(EnumMonitorsCallback);
+            if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle)))
             {
-                return true;
+                return Array.Empty<MonitorProbe>();
             }
 
-            var bounds = Rectangle.FromLTRB(info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom);
-            var deviceName = info.szDevice ?? string.Empty;
-            var friendlyName = ResolveFriendlyName(deviceName);
-            var index = probes.Count;
-            var scale = TryGetScale(handle);
-
-            probes.Add(new MonitorProbe
-            {
-                DeviceName = deviceName,
-                FriendlyName = friendlyName,
-                DisplayIndex = index,
-                Bounds = bounds,
-                IsPrimary = (info.dwFlags & MonitorInfoFlags.Primary) != 0,
-                Scale = scale,
-            });
-
-            return true;
-        });
-
-        if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero))
+            return new ReadOnlyCollection<MonitorProbe>(context.Probes);
+        }
+        finally
         {
-            return Array.Empty<MonitorProbe>();
+            if (handle.IsAllocated)
+            {
+                handle.Free();
+            }
+        }
+    }
+
+    private static bool EnumMonitorsCallback(IntPtr monitor, IntPtr hdc, ref RECT clip, IntPtr data)
+    {
+        var handle = GCHandle.FromIntPtr(data);
+        var boxedContext = handle.Target;
+        Debug.Assert(boxedContext is GdiEnumContext);
+
+        if (boxedContext is not GdiEnumContext context)
+        {
+            return false;
         }
 
-        return new ReadOnlyCollection<MonitorProbe>(probes);
+        var info = MONITORINFOEX.Create();
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return true;
+        }
+
+        var bounds = Rectangle.FromLTRB(info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom);
+        var deviceName = info.szDevice ?? string.Empty;
+        var friendlyName = ResolveFriendlyName(deviceName);
+        var index = context.Probes.Count;
+        var scale = TryGetScale(monitor);
+
+        context.Probes.Add(new MonitorProbe
+        {
+            DeviceName = deviceName,
+            FriendlyName = friendlyName,
+            DisplayIndex = index,
+            Bounds = bounds,
+            IsPrimary = (info.dwFlags & MonitorInfoFlags.Primary) != 0,
+            Scale = scale,
+        });
+
+        return true;
     }
 
     private static string ResolveFriendlyName(string deviceName)
@@ -97,6 +121,16 @@ public sealed class GdiMonitorEnumerator
     }
 
     private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr dc, ref RECT clip, IntPtr data);
+
+    private struct GdiEnumContext
+    {
+        public GdiEnumContext(List<MonitorProbe> probes)
+        {
+            Probes = probes;
+        }
+
+        public List<MonitorProbe> Probes { get; }
+    }
 
     [DllImport("user32.dll")]
     private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
