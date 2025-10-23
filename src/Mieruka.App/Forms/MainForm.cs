@@ -1787,6 +1787,8 @@ public partial class MainForm : Form
 
         public MonitorTestForm? TestWindow { get; private set; }
 
+        private bool _pausedForTestWindow;
+
         public void SetTestWindow(MonitorTestForm window)
         {
             ArgumentNullException.ThrowIfNull(window);
@@ -1800,6 +1802,7 @@ public partial class MainForm : Form
 
             TestWindow = window;
             TestWindow.FormClosed += OnTestWindowClosed;
+            PauseHostForTestWindow();
         }
 
         public void CloseTestWindow()
@@ -1807,6 +1810,7 @@ public partial class MainForm : Form
             if (TestWindow is not { IsDisposed: false } window)
             {
                 TestWindow = null;
+                ResumeHostFromTestWindow();
                 return;
             }
 
@@ -1821,17 +1825,63 @@ public partial class MainForm : Form
             {
                 // Ignorar falhas ao fechar a janela de teste.
             }
+            finally
+            {
+                ResumeHostFromTestWindow();
+            }
         }
 
         private void OnTestWindowClosed(object? sender, FormClosedEventArgs e)
         {
-            if (sender is not MonitorTestForm window || !ReferenceEquals(window, TestWindow))
+            if (sender is not MonitorTestForm window)
             {
                 return;
             }
 
             window.FormClosed -= OnTestWindowClosed;
-            TestWindow = null;
+            if (ReferenceEquals(window, TestWindow))
+            {
+                TestWindow = null;
+            }
+
+            ResumeHostFromTestWindow();
+        }
+
+        private void PauseHostForTestWindow()
+        {
+            if (_pausedForTestWindow)
+            {
+                return;
+            }
+
+            try
+            {
+                Host.Pause();
+                _pausedForTestWindow = true;
+            }
+            catch
+            {
+                _pausedForTestWindow = false;
+            }
+        }
+
+        private void ResumeHostFromTestWindow()
+        {
+            if (!_pausedForTestWindow)
+            {
+                return;
+            }
+
+            _pausedForTestWindow = false;
+
+            try
+            {
+                Host.Resume();
+            }
+            catch
+            {
+                // Ignorar falhas ao retomar o host após o teste.
+            }
         }
     }
 

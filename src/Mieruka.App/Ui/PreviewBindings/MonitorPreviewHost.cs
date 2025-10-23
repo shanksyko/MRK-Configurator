@@ -34,6 +34,8 @@ public sealed class MonitorPreviewHost : IDisposable
     private bool _lastPreferGpu;
     private volatile bool _isSuspended;
     private int _resumeTicket;
+    private volatile bool _isPaused;
+    private int _busy;
 
     public MonitorPreviewHost(string monitorId, PictureBox target)
     {
@@ -61,6 +63,16 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Gets the active capture session, if any.
     /// </summary>
     public IMonitorCapture? Capture { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the host is currently executing a mutating operation.
+    /// </summary>
+    public bool IsBusy => Volatile.Read(ref _busy) != 0;
+
+    /// <summary>
+    /// Gets a value indicating whether the host is currently paused.
+    /// </summary>
+    public bool IsPaused => Volatile.Read(ref _isPaused);
 
     /// <summary>
     /// Gets the bounds of the monitor being captured when available.
@@ -113,6 +125,247 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public bool Start(bool preferGpu)
     {
+        if (!TryEnterBusy(out var scope))
+        {
+            return Capture is not null;
+        }
+
+        try
+        {
+            return StartCore(preferGpu);
+        }
+        finally
+        {
+            scope.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Stops the current preview session.
+    /// </summary>
+    public void Stop()
+    {
+        if (!TryEnterBusy(out var scope))
+        {
+            return;
+        }
+
+        try
+        {
+            lock (_stateGate)
+            {
+                _hasActiveSession = false;
+                _isSuspended = false;
+            }
+
+            Volatile.Write(ref _isPaused, false);
+            StopCaptureCore(clearFrame: true);
+        }
+        finally
+        {
+            scope.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Temporarily suspends the capture pipeline while keeping the current frame.
+    /// </summary>
+    public void SuspendCapture()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (!TryEnterBusy(out var scope))
+        {
+            return;
+        }
+
+        try
+        {
+            var shouldSuspend = false;
+
+            lock (_stateGate)
+            {
+                if (_hasActiveSession && !_isSuspended)
+                {
+                    _isSuspended = true;
+                    shouldSuspend = true;
+                }
+            }
+
+            if (!shouldSuspend)
+            {
+                return;
+            }
+
+            StopCaptureCore(clearFrame: false);
+        }
+        finally
+        {
+            scope.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Resumes a previously suspended capture session.
+    /// </summary>
+    public void ResumeCapture()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (!TryEnterBusy(out var scope))
+        {
+            return;
+        }
+
+        int ticket;
+        bool shouldResume;
+        bool preferGpu;
+
+        try
+        {
+            ticket = Interlocked.Increment(ref _resumeTicket);
+
+            lock (_stateGate)
+            {
+                shouldResume = _hasActiveSession && _isSuspended;
+                preferGpu = _lastPreferGpu;
+            }
+
+            if (!shouldResume)
+            {
+                return;
+            }
+        }
+        finally
+        {
+            scope.Dispose();
+        }
+
+        void ResumeCore()
+        {
+            if (!TryEnterBusy(out var resumeScope))
+            {
+                return;
+            }
+
+            try
+            {
+                if (_disposed || _target.IsDisposed || ticket != Volatile.Read(ref _resumeTicket))
+                {
+                    return;
+                }
+
+                bool resumeNow;
+                lock (_stateGate)
+                {
+                    resumeNow = _hasActiveSession && _isSuspended && ticket == _resumeTicket;
+                    if (resumeNow)
+                    {
+                        _isSuspended = false;
+                    }
+                }
+
+                if (!resumeNow)
+                {
+                    return;
+                }
+
+                StartCore(preferGpu);
+            }
+            finally
+            {
+                resumeScope.Dispose();
+            }
+        }
+
+        if (_target.InvokeRequired)
+        {
+            try
+            {
+                _target.BeginInvoke(new Action(ResumeCore));
+            }
+            catch
+            {
+                // Ignore invoke failures during shutdown.
+            }
+
+            return;
+        }
+
+        ResumeCore();
+    }
+
+    public void Pause()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _isPaused, true);
+    }
+
+    public void Resume()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _isPaused, false);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        Stop();
+        GC.SuppressFinalize(this);
+    }
+
+    private bool TryEnterBusy(out BusyScope scope)
+    {
+        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
+        {
+            scope = default;
+            return false;
+        }
+
+        scope = new BusyScope(this);
+        return true;
+    }
+
+    private void ExitBusy()
+    {
+        Interlocked.Exchange(ref _busy, 0);
+    }
+
+    private IEnumerable<Func<IMonitorCapture>> EnumerateFactories(bool preferGpu)
+    {
+        if (preferGpu)
+        {
+            yield return () => CreateForMonitor.Gpu(MonitorId);
+            yield return () => CreateForMonitor.Gdi(MonitorId);
+        }
+        else
+        {
+            yield return () => CreateForMonitor.Gdi(MonitorId);
+            yield return () => CreateForMonitor.Gpu(MonitorId);
+        }
+    }
+
+    private bool StartCore(bool preferGpu)
+    {
         if (_disposed)
         {
             return false;
@@ -132,6 +385,8 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             return false;
         }
+
+        Volatile.Write(ref _isPaused, false);
 
         foreach (var factory in EnumerateFactories(preferGpu))
         {
@@ -177,146 +432,9 @@ public sealed class MonitorPreviewHost : IDisposable
         return false;
     }
 
-    /// <summary>
-    /// Stops the current preview session.
-    /// </summary>
-    public void Stop()
-    {
-        lock (_stateGate)
-        {
-            _hasActiveSession = false;
-            _isSuspended = false;
-        }
-
-        StopCaptureCore(clearFrame: true);
-    }
-
-    /// <summary>
-    /// Temporarily suspends the capture pipeline while keeping the current frame.
-    /// </summary>
-    public void SuspendCapture()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        var shouldSuspend = false;
-
-        lock (_stateGate)
-        {
-            if (_hasActiveSession && !_isSuspended)
-            {
-                _isSuspended = true;
-                shouldSuspend = true;
-            }
-        }
-
-        if (!shouldSuspend)
-        {
-            return;
-        }
-
-        StopCaptureCore(clearFrame: false);
-    }
-
-    /// <summary>
-    /// Resumes a previously suspended capture session.
-    /// </summary>
-    public void ResumeCapture()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        var ticket = Interlocked.Increment(ref _resumeTicket);
-
-        bool shouldResume;
-        bool preferGpu;
-
-        lock (_stateGate)
-        {
-            shouldResume = _hasActiveSession && _isSuspended;
-            preferGpu = _lastPreferGpu;
-        }
-
-        if (!shouldResume)
-        {
-            return;
-        }
-
-        void ResumeCore()
-        {
-            if (_disposed || _target.IsDisposed || ticket != Volatile.Read(ref _resumeTicket))
-            {
-                return;
-            }
-
-            bool resumeNow;
-            lock (_stateGate)
-            {
-                resumeNow = _hasActiveSession && _isSuspended && ticket == _resumeTicket;
-                if (resumeNow)
-                {
-                    _isSuspended = false;
-                }
-            }
-
-            if (!resumeNow)
-            {
-                return;
-            }
-
-            Start(preferGpu);
-        }
-
-        if (_target.InvokeRequired)
-        {
-            try
-            {
-                _target.BeginInvoke(new Action(ResumeCore));
-            }
-            catch
-            {
-                // Ignore invoke failures during shutdown.
-            }
-
-            return;
-        }
-
-        ResumeCore();
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        Stop();
-        GC.SuppressFinalize(this);
-    }
-
-    private IEnumerable<Func<IMonitorCapture>> EnumerateFactories(bool preferGpu)
-    {
-        if (preferGpu)
-        {
-            yield return () => CreateForMonitor.Gpu(MonitorId);
-            yield return () => CreateForMonitor.Gdi(MonitorId);
-        }
-        else
-        {
-            yield return () => CreateForMonitor.Gdi(MonitorId);
-            yield return () => CreateForMonitor.Gpu(MonitorId);
-        }
-    }
-
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
-        if (!ShouldDisplayFrame())
+        if (Volatile.Read(ref _isPaused) || IsBusy || !ShouldDisplayFrame())
         {
             e.Dispose();
             return;
@@ -450,6 +568,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
 
         DisposePendingFrames();
+        Volatile.Write(ref _isPaused, false);
 
         if (clearFrame)
         {
@@ -497,7 +616,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private bool ShouldDisplayFrame()
     {
-        if (_isSuspended)
+        if (Volatile.Read(ref _isPaused) || _isSuspended)
         {
             return false;
         }
@@ -754,4 +873,19 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 #endif
+
+    private readonly struct BusyScope : IDisposable
+    {
+        private readonly MonitorPreviewHost? _owner;
+
+        public BusyScope(MonitorPreviewHost owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            _owner?.ExitBusy();
+        }
+    }
 }
