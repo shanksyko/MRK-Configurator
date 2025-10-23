@@ -33,7 +33,11 @@ internal static class MonitorUtilities
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
             GC.KeepAlive(callback);
 
-            var finalContext = (MonitorSearchContext)handle.Target;
+            if (handle.Target is not MonitorSearchContext finalContext)
+            {
+                return false;
+            }
+
             if (!finalContext.Located)
             {
                 return false;
@@ -68,12 +72,15 @@ internal static class MonitorUtilities
         }
 
         var handle = GCHandle.FromIntPtr(data);
-        Debug.Assert(handle.IsAllocated);
+        if (!handle.IsAllocated)
+        {
+            return false;
+        }
 
-        var contextObject = handle.Target;
-        Debug.Assert(contextObject is MonitorSearchContext);
-
-        var context = (MonitorSearchContext)contextObject;
+        if (handle.Target is not MonitorSearchContext context)
+        {
+            return false;
+        }
         Debug.Assert(!string.IsNullOrEmpty(context.DeviceName));
 
         var info = new MONITORINFOEX
