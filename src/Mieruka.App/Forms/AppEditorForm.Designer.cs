@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
+using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui.PreviewBindings;
 
 namespace Mieruka.App.Forms;
@@ -144,7 +145,7 @@ partial class AppEditorForm
         flowCycleItems = new FlowLayoutPanel();
         var lblAvancado = new Label();
         errorProvider = new ErrorProvider(components);
-        cycleToolTip = new ToolTip(components);
+        cycleToolTip = ToolTipTamer.Create(components);
         grpInstalledApps.SuspendLayout();
         tlpExecutavel.SuspendLayout();
         flowAppType.SuspendLayout();

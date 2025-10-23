@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
+using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui;
 using Mieruka.App.Services;
 using Mieruka.Automation.Execution;
@@ -54,6 +55,7 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+        ToolTipTamer.Tame(this, components);
 
         _appRunner = new AppRunner();
         _appRunner.BeforeMoveWindow += AppRunnerOnBeforeMoveWindow;

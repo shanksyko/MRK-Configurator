@@ -97,6 +97,7 @@ public partial class AppEditorForm : Form
         IList<ProgramaConfig>? profileApps = null)
     {
         InitializeComponent();
+        ToolTipTamer.Tame(this, components);
 
         var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
         var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos não foi configurada.");
