@@ -1667,6 +1667,11 @@ public partial class AppEditorForm : Form
 
     private void MonitorPreviewDisplay_MouseMovedInMonitorSpace(object? sender, Point point)
     {
+        if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
+        {
+            return;
+        }
+
         UpdateMonitorCoordinateLabel(point);
 
         _hoverPendingPoint = point;
@@ -1752,6 +1757,11 @@ public partial class AppEditorForm : Form
 
     private void ApplyPendingHoverPoint(bool enforceInterval)
     {
+        if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
+        {
+            return;
+        }
+
         if (_hoverPendingPoint is not Point pending)
         {
             return;

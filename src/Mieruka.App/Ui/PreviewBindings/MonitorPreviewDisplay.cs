@@ -66,6 +66,17 @@ public sealed class MonitorPreviewDisplay : UserControl
     public event EventHandler? MonitorMouseLeft;
 
     /// <summary>
+    /// Gets a value indicating whether user interactions should be ignored due to the host being paused or busy.
+    /// </summary>
+    public bool IsInteractionSuppressed
+        => _host is { IsPaused: true } || _host is { IsBusy: true };
+
+    /// <summary>
+    /// Gets a value indicating whether the underlying host is currently paused.
+    /// </summary>
+    public bool IsPaused => _host?.IsPaused ?? false;
+
+    /// <summary>
     /// Represents a simulated rectangle drawn on top of the monitor preview.
     /// </summary>
     public sealed class SimRect
@@ -163,6 +174,22 @@ public sealed class MonitorPreviewDisplay : UserControl
     public void ResumeCapture()
     {
         _host?.ResumeCapture();
+    }
+
+    /// <summary>
+    /// Pauses frame processing while keeping the current frame visible.
+    /// </summary>
+    public void Pause()
+    {
+        _host?.Pause();
+    }
+
+    /// <summary>
+    /// Resumes frame processing after a pause.
+    /// </summary>
+    public void Resume()
+    {
+        _host?.Resume();
     }
 
     /// <inheritdoc />
