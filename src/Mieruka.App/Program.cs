@@ -17,10 +17,15 @@ internal static class Program
         Application.ThreadException += OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
-        var mouseMoveFilter = new MouseMoveCoalescer(TimeSpan.FromMilliseconds(16));
-        Application.AddMessageFilter(mouseMoveFilter);
+        using var mainForm = new MainForm();
 
-        Application.Run(new MainForm());
+        _ = mainForm.Handle;
+        WindowStyles.SetComposited(mainForm.Handle, true);
+        mainForm.UpdateStyles();
+        mainForm.Invalidate(true);
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(mainForm);
+
+        Application.Run(mainForm);
     }
 
     private static void OnThreadException(object? sender, ThreadExceptionEventArgs e)
