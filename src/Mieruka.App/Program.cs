@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Windows.Forms;
 using Mieruka.App.Forms;
+using Mieruka.App.Services.Ui;
 using Mieruka.Core.Infra;
 
 namespace Mieruka.App;
@@ -16,7 +17,9 @@ internal static class Program
         Application.ThreadException += OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
-        Application.Run(new MainForm());
+        var mainForm = new MainForm();
+        TabLayoutGuard.Attach(mainForm);
+        Application.Run(mainForm);
     }
 
     private static void OnThreadException(object? sender, ThreadExceptionEventArgs e)

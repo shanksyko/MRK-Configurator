@@ -12,6 +12,7 @@ using System.Globalization;
 using Mieruka.App.Config;
 using Mieruka.App.Controls;
 using Mieruka.App.Services;
+using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui;
 using Mieruka.Automation.Login;
 using Mieruka.Automation.Tabs;
@@ -325,6 +326,8 @@ internal sealed class ConfigForm : Form
         PopulateLists();
         BuildMonitorPreviews();
         RefreshValidation();
+
+        TabLayoutGuard.Attach(this);
 
         if (_displayService is not null)
         {
