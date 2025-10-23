@@ -274,7 +274,10 @@ public partial class MainForm : Form
             {
                 try
                 {
-                    host.Start(preferGpu: true);
+                    if (!host.Start(preferGpu: true))
+                    {
+                        _telemetry.Warn($"Pré-visualização do monitor '{monitorId}' não pôde ser iniciada.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -614,7 +617,16 @@ public partial class MainForm : Form
 
             if (context.Host.Capture is null)
             {
-                context.Host.Start(preferGpu: true);
+                if (!context.Host.Start(preferGpu: true))
+                {
+                    MessageBox.Show(
+                        this,
+                        "Não foi possível iniciar o preview para este monitor.",
+                        "Preview",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
             }
 
             ShowMonitorTestWindow(context);
@@ -789,7 +801,10 @@ public partial class MainForm : Form
                 continue;
             }
 
-            context.Host.Start(preferGpu: true);
+            if (!context.Host.Start(preferGpu: true))
+            {
+                _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
+            }
         }
     }
 
