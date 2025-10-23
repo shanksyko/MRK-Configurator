@@ -111,19 +111,27 @@ public sealed class MonitorPreviewHost : IDisposable
     /// <summary>
     /// Starts the preview using GPU capture when available.
     /// </summary>
-    public void Start(bool preferGpu)
+    public bool Start(bool preferGpu)
     {
-        if (_disposed || Capture is not null)
+        if (_disposed)
         {
-            return;
+            return false;
+        }
+
+        if (Capture is not null)
+        {
+            return true;
         }
 
         if (!OperatingSystem.IsWindows())
         {
-            return;
+            return false;
         }
 
-        PopulateMetadataFromMonitor();
+        if (!PopulateMetadataFromMonitor())
+        {
+            return false;
+        }
 
         foreach (var factory in EnumerateFactories(preferGpu))
         {
@@ -145,7 +153,7 @@ public sealed class MonitorPreviewHost : IDisposable
                     _isSuspended = false;
                 }
 
-                return;
+                return true;
             }
             catch (Exception ex)
             {
@@ -165,6 +173,8 @@ public sealed class MonitorPreviewHost : IDisposable
                 _hasActiveSession = false;
             }
         }
+
+        return false;
     }
 
     /// <summary>
@@ -596,47 +606,113 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private void PopulateMetadataFromMonitor()
+    private bool PopulateMetadataFromMonitor()
     {
         if (_monitorBounds != Rectangle.Empty)
         {
-            return;
+            return true;
         }
 
-        MonitorInfo info;
+        MonitorInfo? info = null;
         try
         {
-            info = MonitorLocator.Find(MonitorId)
-                ?? throw new InvalidOperationException($"Monitor '{MonitorId}' não foi encontrado para preencher metadados de preview.");
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
+            info = MonitorLocator.Find(MonitorId);
         }
         catch
         {
             // Metadata retrieval is best-effort only.
-            return;
         }
 
-        if (info.Bounds != Rectangle.Empty)
+        if (info is not null)
         {
-            _monitorBounds = info.Bounds;
+            if (info.Bounds != Rectangle.Empty)
+            {
+                _monitorBounds = info.Bounds;
+            }
+
+            if (info.WorkArea != Rectangle.Empty)
+            {
+                _monitorWorkArea = info.WorkArea;
+            }
+
+            if (info.Orientation != MonitorOrientation.Unknown)
+            {
+                _orientation = info.Orientation;
+            }
+
+            if (info.Rotation != 0)
+            {
+                _rotation = info.Rotation;
+            }
+
+            if (_monitorBounds == Rectangle.Empty && info.Width > 0 && info.Height > 0)
+            {
+                _monitorBounds = new Rectangle(0, 0, info.Width, info.Height);
+            }
+
+            if (_monitorWorkArea == Rectangle.Empty && _monitorBounds != Rectangle.Empty)
+            {
+                _monitorWorkArea = _monitorBounds;
+            }
+
+            if (_monitorBounds != Rectangle.Empty)
+            {
+                return true;
+            }
         }
 
-        if (info.WorkArea != Rectangle.Empty)
-        {
-            _monitorWorkArea = info.WorkArea;
-        }
+        return TryPopulateMetadataFallback();
+    }
 
-        if (info.Orientation != MonitorOrientation.Unknown)
+    private bool TryPopulateMetadataFallback()
+    {
+        try
         {
-            _orientation = info.Orientation;
-        }
+            var service = new MonitorService();
+            var fallback = service.PrimaryOrFirst();
+            if (fallback is null)
+            {
+                return false;
+            }
 
-        if (info.Rotation != 0)
+            if (fallback.Bounds != Rectangle.Empty)
+            {
+                _monitorBounds = fallback.Bounds;
+            }
+            else if (fallback.Width > 0 && fallback.Height > 0)
+            {
+                _monitorBounds = new Rectangle(0, 0, fallback.Width, fallback.Height);
+            }
+
+            if (fallback.WorkArea != Rectangle.Empty)
+            {
+                _monitorWorkArea = fallback.WorkArea;
+            }
+            else if (_monitorBounds != Rectangle.Empty)
+            {
+                _monitorWorkArea = _monitorBounds;
+            }
+
+            if (fallback.Orientation != MonitorOrientation.Unknown)
+            {
+                _orientation = fallback.Orientation;
+            }
+
+            if (fallback.Rotation != 0)
+            {
+                _rotation = fallback.Rotation;
+            }
+
+            if (fallback.RefreshHz > 0)
+            {
+                _refreshRate = fallback.RefreshHz;
+            }
+
+            return _monitorBounds != Rectangle.Empty;
+        }
+        catch
         {
-            _rotation = info.Rotation;
+            return false;
         }
     }
 

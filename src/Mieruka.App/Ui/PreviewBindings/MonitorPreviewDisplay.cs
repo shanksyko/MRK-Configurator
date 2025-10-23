@@ -20,6 +20,7 @@ public sealed class MonitorPreviewDisplay : UserControl
     private MonitorPreviewHost? _host;
     private MonitorInfo? _monitor;
     private string? _currentGlyphTooltip;
+    private string? _placeholderMessage;
 
     private const string AskGlyph = "❓";
     private const string AskTooltipText = "Solicitar confirmação antes de iniciar.";
@@ -108,8 +109,18 @@ public sealed class MonitorPreviewDisplay : UserControl
         }
 
         // The editor always prefers the BitBlt path to avoid GPU capture glitches in nested previews.
-        host.Start(preferGpu: false);
+        var started = host.Start(preferGpu: false);
         _host = host;
+
+        if (!started)
+        {
+            _monitor = null;
+            SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+        }
+        else
+        {
+            SetPlaceholder(null);
+        }
     }
 
     /// <summary>
@@ -120,6 +131,8 @@ public sealed class MonitorPreviewDisplay : UserControl
         var host = _host;
         _host = null;
         _monitor = null;
+
+        SetPlaceholder(null);
 
         if (host is null)
         {
@@ -233,6 +246,13 @@ public sealed class MonitorPreviewDisplay : UserControl
 
     private void PictureBoxOnPaint(object? sender, PaintEventArgs e)
     {
+        if (!string.IsNullOrEmpty(_placeholderMessage))
+        {
+            DrawPlaceholder(e.Graphics, _placeholderMessage);
+            _glyphRegions.Clear();
+            return;
+        }
+
         if (_monitor is null || _simRects.Count == 0)
         {
             _glyphRegions.Clear();
@@ -301,6 +321,43 @@ public sealed class MonitorPreviewDisplay : UserControl
             DrawLabel(graphics, rect, canvasRect);
             DrawIndicatorGlyphs(graphics, rect, canvasRect, borderColor);
         }
+    }
+
+    private void DrawPlaceholder(Graphics graphics, string message)
+    {
+        var bounds = _pictureBox.ClientRectangle;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var text = string.IsNullOrWhiteSpace(message) ? string.Empty : message.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var marginX = Math.Min(32, bounds.Width / 8);
+        var marginY = Math.Min(32, bounds.Height / 8);
+        var layout = Rectangle.Inflate(bounds, -marginX, -marginY);
+        if (layout.Width <= 0 || layout.Height <= 0)
+        {
+            layout = bounds;
+        }
+
+        using var background = new SolidBrush(Color.FromArgb(210, Color.White));
+        using var border = new Pen(Color.FromArgb(160, 0, 0, 0), 1.5f);
+        graphics.FillRectangle(background, layout);
+        graphics.DrawRectangle(border, layout);
+
+        var font = Font ?? Control.DefaultFont;
+        TextRenderer.DrawText(
+            graphics,
+            text,
+            font,
+            layout,
+            Color.Black,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
     }
 
     private void DrawLabel(Graphics graphics, SimRect rect, RectangleF canvasRect)
@@ -473,5 +530,19 @@ public sealed class MonitorPreviewDisplay : UserControl
             _tooltip.SetToolTip(_pictureBox, null);
             _currentGlyphTooltip = null;
         }
+    }
+
+    private void SetPlaceholder(string? message)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(message) ? null : message.Trim();
+        _placeholderMessage = trimmed;
+
+        if (trimmed is not null)
+        {
+            ClearGlyphTooltip();
+            _pictureBox.Image = null;
+        }
+
+        _pictureBox.Invalidate();
     }
 }

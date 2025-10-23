@@ -63,6 +63,25 @@ public sealed class MonitorService : IMonitorService
         }
     }
 
+    public MonitorDescriptor? PrimaryOrFirst()
+    {
+        var monitors = GetAll();
+        if (monitors.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var monitor in monitors)
+        {
+            if (monitor is not null && monitor.IsPrimary)
+            {
+                return monitor;
+            }
+        }
+
+        return monitors[0];
+    }
+
     private static List<MonitorDescriptor> EnumerateDisplayConfig()
     {
         var descriptors = new List<MonitorDescriptor>();
