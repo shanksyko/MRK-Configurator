@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Windows.Forms;
 using Mieruka.App.Forms;
+using Mieruka.App.Services.Ui;
 using Mieruka.Core.Infra;
 
 namespace Mieruka.App;
@@ -15,6 +16,9 @@ internal static class Program
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+
+        var mouseMoveFilter = new MouseMoveCoalescer(TimeSpan.FromMilliseconds(16));
+        Application.AddMessageFilter(mouseMoveFilter);
 
         Application.Run(new MainForm());
     }
