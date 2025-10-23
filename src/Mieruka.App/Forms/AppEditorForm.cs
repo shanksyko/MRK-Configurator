@@ -16,6 +16,7 @@ using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Services;
+using Mieruka.App.Services.Ui;
 using Mieruka.App.Simulation;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
@@ -96,6 +97,7 @@ public partial class AppEditorForm : Form
         IList<ProgramaConfig>? profileApps = null)
     {
         InitializeComponent();
+        ToolTipTamer.Tame(this, components);
 
         var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
         var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos não foi configurada.");

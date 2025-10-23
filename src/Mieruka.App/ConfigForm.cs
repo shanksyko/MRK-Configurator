@@ -12,6 +12,7 @@ using System.Globalization;
 using Mieruka.App.Config;
 using Mieruka.App.Controls;
 using Mieruka.App.Services;
+using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui;
 using Mieruka.Automation.Login;
 using Mieruka.Automation.Tabs;
@@ -97,13 +98,7 @@ internal sealed class ConfigForm : Form
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
         _monitorSeeder = new MonitorSeeder();
 
-        _toolTip = new ToolTip
-        {
-            AutoPopDelay = 8000,
-            InitialDelay = 400,
-            ReshowDelay = 200,
-            ShowAlways = true,
-        };
+        _toolTip = ToolTipTamer.Create();
 
         _footerPanel = new FlowLayoutPanel
         {
@@ -321,6 +316,8 @@ internal sealed class ConfigForm : Form
         Controls.Add(_statusStrip);
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
+
+        ToolTipTamer.Tame(this, null);
 
         PopulateLists();
         BuildMonitorPreviews();

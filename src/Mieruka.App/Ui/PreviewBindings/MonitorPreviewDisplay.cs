@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Windows.Forms;
+using Mieruka.App.Services.Ui;
 using Mieruka.Core.Models;
 
 namespace Mieruka.App.Ui.PreviewBindings;
@@ -45,13 +46,7 @@ public sealed class MonitorPreviewDisplay : UserControl
 
         _simRects = new List<SimRect>();
         _glyphRegions = new List<(RectangleF Bounds, string Text)>();
-        _tooltip = new ToolTip
-        {
-            ShowAlways = true,
-            InitialDelay = 150,
-            ReshowDelay = 100,
-            AutoPopDelay = 5000,
-        };
+        _tooltip = ToolTipTamer.Create();
 
         _pictureBox.MouseMove += PictureBoxOnMouseMove;
         _pictureBox.MouseLeave += PictureBoxOnMouseLeave;
