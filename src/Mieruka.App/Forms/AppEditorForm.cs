@@ -16,6 +16,7 @@ using System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Services;
+using Mieruka.App.Services.Ui;
 using Mieruka.App.Simulation;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
@@ -245,6 +246,8 @@ public partial class AppEditorForm : Form
         UpdateExePreview();
 
         InitializeCycleSimulation();
+
+        TabLayoutGuard.Attach(this);
 
         if (rbExe is not null && rbBrowser is not null)
         {

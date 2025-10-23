@@ -17,14 +17,8 @@ internal static class Program
         Application.ThreadException += OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
-        using var mainForm = new MainForm();
-
-        _ = mainForm.Handle;
-        WindowStyles.SetComposited(mainForm.Handle, true);
-        mainForm.UpdateStyles();
-        mainForm.Invalidate(true);
-        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(mainForm);
-
+        var mainForm = new MainForm();
+        TabLayoutGuard.Attach(mainForm);
         Application.Run(mainForm);
     }
 
