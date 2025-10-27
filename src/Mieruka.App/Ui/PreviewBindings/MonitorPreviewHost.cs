@@ -789,10 +789,6 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             var service = new MonitorService();
             var fallback = service.PrimaryOrFirst();
-            if (fallback is null)
-            {
-                return false;
-            }
 
             if (fallback.Bounds != Rectangle.Empty)
             {
@@ -828,6 +824,10 @@ public sealed class MonitorPreviewHost : IDisposable
             }
 
             return _monitorBounds != Rectangle.Empty;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
         catch
         {

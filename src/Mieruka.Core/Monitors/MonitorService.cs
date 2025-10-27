@@ -63,12 +63,12 @@ public sealed class MonitorService : IMonitorService
         }
     }
 
-    public MonitorDescriptor? PrimaryOrFirst()
+    public MonitorDescriptor PrimaryOrFirst()
     {
         var monitors = GetAll();
         if (monitors.Count == 0)
         {
-            return null;
+            throw new InvalidOperationException("No monitors are currently available to select.");
         }
 
         foreach (var monitor in monitors)

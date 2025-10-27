@@ -11,7 +11,9 @@ using System.Threading.Tasks;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
+using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
@@ -32,10 +34,13 @@ internal static class WindowPlacementHelper
     private const uint SwpShowWindow = 0x0040;
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint SwpNoActivate = 0x0010;
+    private const int MinVisiblePixels = 32;
+    private static readonly Size DefaultFallbackSize = new(1280, 720);
     private static readonly TimeSpan ForegroundActivationCooldown = TimeSpan.FromSeconds(2);
     private static readonly object ForegroundActivationLock = new();
     private static IntPtr s_lastForegroundHandle;
     private static DateTime s_lastForegroundActivationUtc = DateTime.MinValue;
+    private static readonly ILogger Logger = Log.ForContext(typeof(WindowPlacementHelper));
 
     /// <summary>
     /// Represents a rectangular region defined as percentages of a monitor surface.
@@ -122,7 +127,153 @@ internal static class WindowPlacementHelper
         ArgumentNullException.ThrowIfNull(monitor);
 
         var monitorBounds = GetMonitorBounds(monitor);
-        return CalculateBounds(window, monitor, monitorBounds);
+        var desired = CalculateBounds(window, monitor, monitorBounds);
+        return ValidateAndClamp(desired, monitor, useWorkArea: false);
+    }
+
+    public static Rectangle ValidateAndClamp(Rectangle desired, MonitorInfo? monitor, bool useWorkArea)
+    {
+        var original = desired;
+        Rectangle monitorBounds = Rectangle.Empty;
+        Rectangle workArea = Rectangle.Empty;
+
+        if (monitor is not null)
+        {
+            if (!TryGetMonitorAreas(monitor, out monitorBounds, out workArea))
+            {
+                monitorBounds = monitor.Bounds;
+                workArea = monitor.WorkArea;
+
+                if ((monitorBounds.Width <= 0 || monitorBounds.Height <= 0) && monitor.Width > 0 && monitor.Height > 0)
+                {
+                    monitorBounds = new Rectangle(monitorBounds.Left, monitorBounds.Top, monitor.Width, monitor.Height);
+                }
+
+                if (workArea.Width <= 0 || workArea.Height <= 0)
+                {
+                    workArea = monitorBounds;
+                }
+            }
+        }
+
+        Rectangle usableArea = useWorkArea ? workArea : monitorBounds;
+
+        if (usableArea.Width <= 0 || usableArea.Height <= 0)
+        {
+            try
+            {
+                var descriptor = new MonitorService().PrimaryOrFirst();
+                monitorBounds = descriptor.Bounds;
+                workArea = descriptor.WorkArea;
+
+                if (monitorBounds.Width <= 0 || monitorBounds.Height <= 0)
+                {
+                    if (descriptor.Width > 0 && descriptor.Height > 0)
+                    {
+                        monitorBounds = new Rectangle(
+                            monitorBounds.Left,
+                            monitorBounds.Top,
+                            descriptor.Width,
+                            descriptor.Height);
+                    }
+                    else
+                    {
+                        monitorBounds = new Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
+                    }
+                }
+
+                if (workArea.Width <= 0 || workArea.Height <= 0)
+                {
+                    workArea = monitorBounds;
+                }
+
+                usableArea = useWorkArea ? workArea : monitorBounds;
+
+                Logger.Warning(
+                    "MonitorFallback: Using fallback monitor {DeviceName} (Primary={IsPrimary}).",
+                    descriptor.DeviceName,
+                    descriptor.IsPrimary);
+            }
+            catch (InvalidOperationException ex)
+            {
+                var fallback = new Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
+                Logger.Warning(
+                    ex,
+                    "MonitorFallback: No monitors detected, using default bounds {FallbackBounds}.",
+                    fallback);
+                return fallback;
+            }
+        }
+
+        if (usableArea.Width <= 0 || usableArea.Height <= 0)
+        {
+            var fallback = new Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
+            Logger.Warning(
+                "InvalidBoundsDetected: Monitor area invalid, using default bounds {FallbackBounds}.",
+                fallback);
+            return fallback;
+        }
+
+        var adjusted = original;
+        if (adjusted.Width <= 0 || adjusted.Height <= 0)
+        {
+            Logger.Warning(
+                "InvalidBoundsDetected: Desired bounds {DesiredBounds} invalid, substituting monitor area {MonitorArea}.",
+                adjusted,
+                usableArea);
+            adjusted = usableArea;
+        }
+
+        var preClamp = adjusted;
+
+        var width = preClamp.Width;
+        if (width < MinVisiblePixels)
+        {
+            width = Math.Min(MinVisiblePixels, usableArea.Width);
+        }
+        width = Math.Clamp(width, 1, usableArea.Width);
+
+        var height = preClamp.Height;
+        if (height < MinVisiblePixels)
+        {
+            height = Math.Min(MinVisiblePixels, usableArea.Height);
+        }
+        height = Math.Clamp(height, 1, usableArea.Height);
+
+        var x = preClamp.Left;
+        var y = preClamp.Top;
+
+        if (x < usableArea.Left)
+        {
+            x = usableArea.Left;
+        }
+
+        if (y < usableArea.Top)
+        {
+            y = usableArea.Top;
+        }
+
+        if (x + width > usableArea.Right)
+        {
+            x = Math.Max(usableArea.Left, usableArea.Right - width);
+        }
+
+        if (y + height > usableArea.Bottom)
+        {
+            y = Math.Max(usableArea.Top, usableArea.Bottom - height);
+        }
+
+        var clamped = new Rectangle(x, y, width, height);
+        if (clamped != preClamp)
+        {
+            Logger.Information(
+                "PlacementClamped: Adjusted bounds from {OriginalBounds} to {ClampedBounds} within area {MonitorArea}.",
+                preClamp,
+                clamped,
+                usableArea);
+        }
+
+        return clamped;
     }
 
     /// <summary>
@@ -353,7 +504,7 @@ internal static class WindowPlacementHelper
         }
 
         var target = CalculateZoneRectangle(zone, monitorBounds);
-        return ClampToWorkArea(target, workArea);
+        return ValidateAndClamp(target, monitor, useWorkArea: true);
     }
 
     public static async Task ForcePlaceProcessWindowAsync(
@@ -538,32 +689,13 @@ internal static class WindowPlacementHelper
 
     private static Rectangle ComputeTargetRect(MonitorInfo monitor, ZoneRect zone)
     {
-        if (!TryGetMonitorAreas(monitor, out var monitorBounds, out var workArea))
+        if (!TryGetMonitorAreas(monitor, out var monitorBounds, out _))
         {
             monitorBounds = GetMonitorBounds(monitor);
-            workArea = monitorBounds;
         }
 
-        var left = monitorBounds.Left + (int)Math.Round(monitorBounds.Width * (zone.LeftPercentage / 100d), MidpointRounding.AwayFromZero);
-        var top = monitorBounds.Top + (int)Math.Round(monitorBounds.Height * (zone.TopPercentage / 100d), MidpointRounding.AwayFromZero);
-        var width = Math.Max(1, (int)Math.Round(monitorBounds.Width * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
-        var height = Math.Max(1, (int)Math.Round(monitorBounds.Height * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));
-
-        if (workArea.Width > 0 && workArea.Height > 0)
-        {
-            var clampedLeft = Math.Max(workArea.Left, Math.Min(left, workArea.Right - 1));
-            var clampedTop = Math.Max(workArea.Top, Math.Min(top, workArea.Bottom - 1));
-
-            var maxWidth = Math.Max(1, workArea.Right - clampedLeft);
-            var maxHeight = Math.Max(1, workArea.Bottom - clampedTop);
-
-            width = Math.Min(width, maxWidth);
-            height = Math.Min(height, maxHeight);
-            left = clampedLeft;
-            top = clampedTop;
-        }
-
-        return new Rectangle(left, top, width, height);
+        var target = CalculateZoneRectangle(zone, monitorBounds);
+        return ValidateAndClamp(target, monitor, useWorkArea: true);
     }
 
     private static async Task<IntPtr> WaitForMainWindowAsync(Process process, TimeSpan timeout, CancellationToken ct)
@@ -657,25 +789,6 @@ internal static class WindowPlacementHelper
         keybd_event(VkMenu, 0, KeyeventfKeyup, UIntPtr.Zero);
         SetForegroundWindow(handle);
         RecordForegroundActivation(handle);
-    }
-
-    private static Rectangle ClampToWorkArea(Rectangle target, Rectangle workArea)
-    {
-        if (workArea.Width <= 0 || workArea.Height <= 0)
-        {
-            return target;
-        }
-
-        var width = Math.Min(target.Width, workArea.Width);
-        var height = Math.Min(target.Height, workArea.Height);
-
-        var maxLeft = Math.Max(workArea.Left, workArea.Right - width);
-        var maxTop = Math.Max(workArea.Top, workArea.Bottom - height);
-
-        var x = Math.Clamp(target.Left, workArea.Left, maxLeft);
-        var y = Math.Clamp(target.Top, workArea.Top, maxTop);
-
-        return new Rectangle(x, y, width, height);
     }
 
     private static bool TryGetMonitorAreas(MonitorInfo monitor, out Rectangle bounds, out Rectangle workArea)
