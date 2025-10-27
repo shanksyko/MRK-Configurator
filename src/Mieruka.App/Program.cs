@@ -18,6 +18,7 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.AddMessageFilter(new MouseMoveCoalescer(16));
         Application.ThreadException += OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
@@ -31,7 +32,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "Aplicação encerrada devido a uma exceção não tratada no fluxo principal.");
+            Log.Fatal(ex, "UnhandledException: fluxo principal encerrou abruptamente.");
             throw;
         }
         finally
@@ -44,40 +45,28 @@ internal static class Program
     {
         if (e.Exception is not null)
         {
-            Log.Error(e.Exception, "Exceção não tratada no thread da interface.");
+            Log.Error(e.Exception, "ThreadException");
         }
-
-        MessageBox.Show(
-            "Ocorreu um erro inesperado. O problema foi registrado no log em %LOCALAPPDATA%.",
-            "Erro",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Error);
     }
 
     private static void OnUnhandledException(object? sender, UnhandledExceptionEventArgs e)
     {
         if (e.ExceptionObject is Exception exception)
         {
-            Log.Error(exception, "Exceção não tratada no domínio de aplicativo.");
+            Log.Fatal(exception, "UnhandledException");
         }
         else
         {
-            Log.Error("Exceção não tratada no domínio de aplicativo: {ExceptionObject}", e.ExceptionObject);
+            Log.Fatal("UnhandledException: {ExceptionObject}", e.ExceptionObject);
         }
-
-        MessageBox.Show(
-            "Ocorreu um erro crítico e o aplicativo precisa ser fechado. Consulte o log em %LOCALAPPDATA%.",
-            "Erro",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Error);
     }
 
     private static void ConfigureLogging()
     {
         const string directoryName = "MierukaConfiguratorPro";
         const string logsFolderName = "logs";
-        const string logFileName = "app-.log";
-        const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}";
+        const string logFileName = "mieruka-.log";
+        const string outputTemplate = "{Timestamp:HH:mm:ss.fff} [{Level:u3}] (T{ThreadId}) {SourceContext}: {Message:lj}{NewLine}{Exception}";
 
         var minimumLevel = LogEventLevel.Information;
 #if DEBUG
@@ -110,6 +99,7 @@ internal static class Program
             .MinimumLevel.Is(minimumLevel)
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", "MierukaConfigurator")
+            .Enrich.WithThreadId()
             .WriteTo.File(
                 path: Path.Combine(logDirectory, logFileName),
                 rollingInterval: RollingInterval.Day,
