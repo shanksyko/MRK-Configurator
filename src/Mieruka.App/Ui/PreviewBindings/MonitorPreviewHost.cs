@@ -438,7 +438,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        foreach (var factory in EnumerateFactories(preferGpu))
+        foreach (var (mode, factory) in EnumerateFactories(preferGpu))
         {
             IMonitorCapture? capture = null;
             try
