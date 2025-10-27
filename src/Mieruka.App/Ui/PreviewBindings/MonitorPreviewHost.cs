@@ -23,7 +23,6 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly HashSet<Bitmap> _pendingFrames = new();
-    private readonly ILogger _logger = Log.ForContext<MonitorPreviewHost>();
     private TimeSpan _frameThrottle = TimeSpan.FromMilliseconds(300);
     private Bitmap? _currentFrame;
     private bool _disposed;
