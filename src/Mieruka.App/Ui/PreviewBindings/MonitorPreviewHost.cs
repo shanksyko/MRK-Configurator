@@ -23,6 +23,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly HashSet<Bitmap> _pendingFrames = new();
+    private readonly ILogger _logger = Log.ForContext<MonitorPreviewHost>();
     private TimeSpan _frameThrottle = TimeSpan.FromMilliseconds(300);
     private Bitmap? _currentFrame;
     private bool _disposed;
@@ -36,9 +37,9 @@ public sealed class MonitorPreviewHost : IDisposable
     private bool _lastPreferGpu;
     private volatile bool _isSuspended;
     private int _resumeTicket;
-    private volatile bool _isPaused;
+    private int _paused;
     private int _busy;
-    private int _pausedDropAnnounced;
+    private int _frameCallbackGate;
 
     public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
     {
@@ -76,7 +77,7 @@ public sealed class MonitorPreviewHost : IDisposable
     /// <summary>
     /// Gets a value indicating whether the host is currently paused.
     /// </summary>
-    public bool IsPaused => Volatile.Read(ref _isPaused);
+    public bool IsPaused => Volatile.Read(ref _paused) == 1;
 
     /// <summary>
     /// Gets the bounds of the monitor being captured when available.
@@ -164,7 +165,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 _isSuspended = false;
             }
 
-            Volatile.Write(ref _isPaused, false);
+            Interlocked.Exchange(ref _paused, 0);
             StopCaptureCore(clearFrame: true);
         }
         finally
@@ -316,13 +317,25 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (Volatile.Read(ref _isPaused))
+        if (!TryEnterBusy(out var scope))
         {
             return;
         }
 
-        Volatile.Write(ref _isPaused, true);
-        ForEvent("PreviewPaused").Information("Pré-visualização pausada.");
+        try
+        {
+            var wasPaused = Interlocked.Exchange(ref _paused, 1) == 1;
+            var detached = DisposeCaptureRetainingFrame(resetPaused: false);
+
+            if (!wasPaused || detached)
+            {
+                _logger.Information("PreviewPaused");
+            }
+        }
+        finally
+        {
+            scope.Dispose();
+        }
     }
 
     public void Resume()
@@ -332,14 +345,33 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (!Volatile.Read(ref _isPaused))
+        if (!TryEnterBusy(out var scope))
         {
             return;
         }
 
-        Volatile.Write(ref _isPaused, false);
-        Interlocked.Exchange(ref _pausedDropAnnounced, 0);
-        ForEvent("PreviewResumed").Information("Pré-visualização retomada.");
+        try
+        {
+            if (Volatile.Read(ref _paused) == 0)
+            {
+                return;
+            }
+
+            bool preferGpu;
+            lock (_stateGate)
+            {
+                preferGpu = _lastPreferGpu;
+            }
+
+            if (StartCore(preferGpu))
+            {
+                _logger.Information("PreviewResumed");
+            }
+        }
+        finally
+        {
+            scope.Dispose();
+        }
     }
 
     public void Dispose()
@@ -407,9 +439,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        Volatile.Write(ref _isPaused, false);
-
-        foreach (var (mode, factory) in EnumerateFactories(preferGpu))
+        foreach (var factory in EnumerateFactories(preferGpu))
         {
             IMonitorCapture? capture = null;
             try
@@ -420,6 +450,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 lock (_gate)
                 {
                     Capture = capture;
+                    Interlocked.Exchange(ref _paused, 0);
                 }
 
                 lock (_stateGate)
@@ -463,49 +494,64 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
-        var paused = Volatile.Read(ref _isPaused);
-        if (paused || IsBusy || !ShouldDisplayFrame())
+        if (Interlocked.Exchange(ref _frameCallbackGate, 1) != 0)
         {
-            if (paused && Interlocked.CompareExchange(ref _pausedDropAnnounced, 1, 0) == 0)
-            {
-                ForEvent("FrameDroppedPaused").Debug("Quadros descartados enquanto a pré-visualização está pausada.");
-            }
-
+            _logger.Information("ReentrancyBlocked");
             e.Dispose();
             return;
         }
 
-        if (!ShouldProcessFrame())
-        {
-            e.Dispose();
-            return;
-        }
-
-        Bitmap? clone = null;
         try
         {
-            var bitmap = e.Frame;
-            clone = bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), bitmap.PixelFormat);
+            if (Volatile.Read(ref _paused) == 1)
+            {
+                _logger.Information("FrameDroppedPaused");
+                e.Dispose();
+                return;
+            }
+
+            if (IsBusy || !ShouldDisplayFrame())
+            {
+                e.Dispose();
+                return;
+            }
+
+            if (!ShouldProcessFrame())
+            {
+                e.Dispose();
+                return;
+            }
+
+            Bitmap? clone = null;
+            try
+            {
+                var bitmap = e.Frame;
+                clone = bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), bitmap.PixelFormat);
 #if DEBUG
-            DrawDebugOverlay(clone);
+                DrawDebugOverlay(clone);
 #endif
-        }
-        catch
-        {
-            // Ignore frame cloning issues.
+            }
+            catch
+            {
+                // Ignore frame cloning issues.
+            }
+            finally
+            {
+                e.Dispose();
+            }
+
+            if (clone is null)
+            {
+                return;
+            }
+
+            RegisterPendingFrame(clone);
+            UpdateTarget(clone);
         }
         finally
         {
-            e.Dispose();
+            Interlocked.Exchange(ref _frameCallbackGate, 0);
         }
-
-        if (clone is null)
-        {
-            return;
-        }
-
-        RegisterPendingFrame(clone);
-        UpdateTarget(clone);
     }
 
     private void UpdateTarget(Bitmap frame)
@@ -587,7 +633,7 @@ public sealed class MonitorPreviewHost : IDisposable
         ResetFrameThrottle();
     }
 
-    private void StopCaptureCore(bool clearFrame)
+    private void StopCaptureCore(bool clearFrame, bool resetPaused = true)
     {
         IMonitorCapture? capture;
         lock (_gate)
@@ -600,12 +646,15 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             capture.FrameArrived -= OnFrameArrived;
             SafeDispose(capture);
-            ForEvent("CaptureDisposed").Debug("Sessão de captura finalizada. Limpar quadro: {ClearFrame}.", clearFrame);
+            _logger.Information("CaptureDisposed");
         }
 
         DisposePendingFrames();
-        Volatile.Write(ref _isPaused, false);
-        Interlocked.Exchange(ref _pausedDropAnnounced, 0);
+
+        if (resetPaused)
+        {
+            Interlocked.Exchange(ref _paused, 0);
+        }
 
         if (clearFrame)
         {
@@ -615,6 +664,28 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             ResetFrameThrottle();
         }
+    }
+
+    private bool DisposeCaptureRetainingFrame(bool resetPaused)
+    {
+        bool hasCapture;
+        lock (_gate)
+        {
+            hasCapture = Capture is not null;
+        }
+
+        if (!hasCapture)
+        {
+            if (resetPaused)
+            {
+                Interlocked.Exchange(ref _paused, 0);
+            }
+
+            return false;
+        }
+
+        StopCaptureCore(clearFrame: false, resetPaused: resetPaused);
+        return true;
     }
 
     private bool ShouldProcessFrame()
@@ -653,7 +724,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private bool ShouldDisplayFrame()
     {
-        if (Volatile.Read(ref _isPaused) || _isSuspended)
+        if (Volatile.Read(ref _paused) == 1 || _isSuspended)
         {
             return false;
         }
