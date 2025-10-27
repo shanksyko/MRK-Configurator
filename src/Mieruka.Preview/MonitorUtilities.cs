@@ -2,11 +2,14 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Serilog;
 
 namespace Mieruka.Preview;
 
 internal static class MonitorUtilities
 {
+    private static readonly ILogger Logger = Log.ForContext(typeof(MonitorUtilities));
+
     [SupportedOSPlatform("windows")]
     public static bool TryGetMonitorHandle(string deviceName, out IntPtr monitorHandle, out RECT bounds)
     {
@@ -35,6 +38,8 @@ internal static class MonitorUtilities
 
             if (handle.Target is not MonitorSearchContext finalContext)
             {
+                ForEvent("InteropGuardTriggered")
+                    .Warning("Contexto inesperado ao enumerar monitor '{DeviceName}'.", deviceName);
                 return false;
             }
 
@@ -68,17 +73,21 @@ internal static class MonitorUtilities
     {
         if (data == IntPtr.Zero)
         {
+            ForEvent("InteropGuardTriggered").Warning("Enumeração de monitores abortada: ponteiro de contexto estava vazio.");
             return false;
         }
 
         var handle = GCHandle.FromIntPtr(data);
         if (!handle.IsAllocated)
         {
+            ForEvent("InteropGuardTriggered").Warning("Enumeração de monitores abortada: GCHandle não estava alocado.");
             return false;
         }
 
         if (handle.Target is not MonitorSearchContext context)
         {
+            ForEvent("InteropGuardTriggered")
+                .Warning("Enumeração de monitores abortada: tipo inesperado {TargetType}.", handle.Target?.GetType().FullName ?? "<null>");
             return false;
         }
         Debug.Assert(!string.IsNullOrEmpty(context.DeviceName));
@@ -139,4 +148,7 @@ internal static class MonitorUtilities
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+    private static ILogger ForEvent(string eventId)
+        => Logger.ForContext("EventId", eventId);
 }

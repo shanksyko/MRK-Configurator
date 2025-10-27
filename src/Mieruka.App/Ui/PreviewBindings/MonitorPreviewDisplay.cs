@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Windows.Forms;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.App.Ui.PreviewBindings;
 
@@ -77,6 +78,11 @@ public sealed class MonitorPreviewDisplay : UserControl
     public bool IsPaused => _host?.IsPaused ?? false;
 
     /// <summary>
+    /// Gets or sets the ambient edit session identifier used for logging correlation.
+    /// </summary>
+    public Guid? EditSessionId { get; set; }
+
+    /// <summary>
     /// Represents a simulated rectangle drawn on top of the monitor preview.
     /// </summary>
     public sealed class SimRect
@@ -107,7 +113,13 @@ public sealed class MonitorPreviewDisplay : UserControl
         _monitor = monitor;
 
         var monitorId = MonitorIdentifier.Create(monitor);
-        var host = new MonitorPreviewHost(monitorId, _pictureBox);
+        var hostLogger = Log.ForContext<MonitorPreviewHost>();
+        if (EditSessionId is Guid sessionId)
+        {
+            hostLogger = hostLogger.ForContext("EditSessionId", sessionId);
+        }
+
+        var host = new MonitorPreviewHost(monitorId, _pictureBox, hostLogger);
 
         if (cadence is TimeSpan cadenceValue)
         {
