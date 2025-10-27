@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using Mieruka.Core.Models;
 using Mieruka.Core.WinAPI;
+using Serilog;
 
 namespace Mieruka.Core.Monitors;
 
@@ -32,6 +33,8 @@ public sealed class MonitorDescriptor
 public sealed class MonitorService : IMonitorService
 {
     private const int ErrorSuccess = 0;
+    private static readonly ILogger Logger = Log.ForContext<MonitorService>();
+    private static ILogger ForEvent(string eventId) => Logger.ForContext("EventId", eventId);
 
     public IReadOnlyList<MonitorDescriptor> GetAll()
     {
@@ -47,28 +50,34 @@ public sealed class MonitorService : IMonitorService
             {
                 return monitors;
             }
+
+            ForEvent("MonitorFallback").Warning(
+                "QueryDisplayConfig não retornou monitores ativos; recorrendo à enumeração GDI.");
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore enumeration failures and fallback to GDI APIs.
+            ForEvent("MonitorFallback")
+                .Warning(ex, "Falha ao enumerar monitores via QueryDisplayConfig; recorrendo à enumeração GDI.");
         }
 
         try
         {
             return EnumerateGdi();
         }
-        catch
+        catch (Exception ex)
         {
+            ForEvent("MonitorFallback")
+                .Warning(ex, "Falha ao enumerar monitores via EnumDisplayMonitors; retornando lista vazia.");
             return Array.Empty<MonitorDescriptor>();
         }
     }
 
-    public MonitorDescriptor? PrimaryOrFirst()
+    public MonitorDescriptor PrimaryOrFirst()
     {
         var monitors = GetAll();
         if (monitors.Count == 0)
         {
-            return null;
+            throw new InvalidOperationException("No monitors are currently available to select.");
         }
 
         foreach (var monitor in monitors)
@@ -163,6 +172,15 @@ public sealed class MonitorService : IMonitorService
             {
                 descriptor.Bounds = bounds;
                 descriptor.WorkArea = bounds;
+            }
+
+            if (descriptor.Bounds.Width <= 0 || descriptor.Bounds.Height <= 0)
+            {
+                ForEvent("InvalidBoundsDetected")
+                    .Warning(
+                        "DisplayConfig retornou limites inválidos {Bounds} para o monitor '{DeviceName}'.",
+                        descriptor.Bounds,
+                        descriptor.DeviceName);
             }
 
             var (descriptorOrientation, descriptorRotation) = MapOrientation(target.rotation);
@@ -459,6 +477,15 @@ public sealed class MonitorService : IMonitorService
             Orientation = orientation,
             Rotation = rotation,
         });
+
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            ForEvent("InvalidBoundsDetected")
+                .Warning(
+                    "GDI retornou limites inválidos {Bounds} para o monitor '{DeviceName}'.",
+                    bounds,
+                    deviceName);
+        }
 
         return true;
     }
