@@ -109,7 +109,13 @@ internal static class WindowPlacementHelper
 
         if (monitors.Count > 0)
         {
-            return monitors[0];
+            var fallback = monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
+            ForEvent("MonitorFallback")
+                .Warning(
+                    "Nenhum monitor correspondente foi encontrado para {@RequestedMonitor}; usando fallback {FallbackStableId}.",
+                    window.Monitor,
+                    ResolveStableId(fallback));
+            return fallback;
         }
 
         return new MonitorInfo();
@@ -501,6 +507,14 @@ internal static class WindowPlacementHelper
         {
             monitorBounds = GetMonitorBounds(monitor);
             workArea = monitorBounds;
+            if (monitorBounds.Width <= 0 || monitorBounds.Height <= 0)
+            {
+                ForEvent("InvalidBoundsDetected")
+                    .Warning(
+                        "Limites inválidos {Bounds} reportados para monitor {MonitorId} durante o cálculo de zona.",
+                        monitorBounds,
+                        ResolveStableId(monitor));
+            }
         }
 
         var target = CalculateZoneRectangle(zone, monitorBounds);
@@ -804,6 +818,11 @@ internal static class WindowPlacementHelper
         var baseBounds = GetMonitorBounds(monitor);
         if (baseBounds.Width <= 0 || baseBounds.Height <= 0)
         {
+            ForEvent("InvalidBoundsDetected")
+                .Warning(
+                    "Limites base inválidos {Bounds} ao obter áreas do monitor {MonitorId}.",
+                    baseBounds,
+                    ResolveStableId(monitor));
             return false;
         }
 
@@ -912,6 +931,9 @@ internal static class WindowPlacementHelper
         bounds = new Rectangle(devMode.dmPositionX, devMode.dmPositionY, width, height);
         return width > 0 && height > 0;
     }
+
+    private static ILogger ForEvent(string eventId)
+        => Logger.ForContext("EventId", eventId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool EnumDisplaySettingsEx(

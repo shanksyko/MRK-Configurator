@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
@@ -15,6 +16,7 @@ namespace Mieruka.App.Services;
 /// </summary>
 internal sealed class BindingService : IDisposable
 {
+    private static readonly ILogger Logger = Log.ForContext<BindingService>();
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(1200);
 
     private readonly IDisplayService _displayService;
@@ -331,6 +333,13 @@ internal sealed class BindingService : IDisposable
             if (monitor is null)
             {
                 _telemetry.Warn($"Unable to find monitor for {kind} '{id}'.");
+                ForEvent("MonitorFallback")
+                    .Warning(
+                        "Nenhum monitor disponível para {Kind}:{Id}. Solicitado estável '{StableId}' com chave {@MonitorKey}.",
+                        kind,
+                        id,
+                        placement.MonitorStableId,
+                        placement.Window.Monitor);
                 return;
             }
 
@@ -345,11 +354,17 @@ internal sealed class BindingService : IDisposable
             else
             {
                 _telemetry.Warn($"Failed to reposition window for {kind} '{id}'.");
+                Logger.Warning(
+                    "Falha ao reposicionar {Kind}:{Id} no monitor {MonitorId}.",
+                    kind,
+                    id,
+                    WindowPlacementHelper.ResolveStableId(monitor));
             }
         }
         catch (Exception ex)
         {
             _telemetry.Error($"Failed to reposition window for {kind} '{id}'.", ex);
+            Logger.Error(ex, "Erro ao reposicionar {Kind}:{Id}.", kind, id);
         }
     }
 
@@ -367,6 +382,12 @@ internal sealed class BindingService : IDisposable
             {
                 return stable;
             }
+
+            ForEvent("MonitorFallback")
+                .Warning(
+                    "Monitor estável '{StableId}' não encontrado; utilizando chave {@MonitorKey}.",
+                    placement.MonitorStableId,
+                    placement.Window.Monitor);
         }
 
         var monitor = _displayService.FindBy(placement.Window.Monitor);
@@ -375,7 +396,13 @@ internal sealed class BindingService : IDisposable
             return monitor;
         }
 
-        return monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
+        var fallback = monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
+        ForEvent("MonitorFallback")
+            .Warning(
+                "Nenhum monitor ativo correspondeu à chave {@MonitorKey}; usando fallback {FallbackStableId}.",
+                placement.Window.Monitor,
+                WindowPlacementHelper.ResolveStableId(fallback));
+        return fallback;
     }
 
     private WindowPlacementHelper.ZoneRect ResolveZoneRect(MonitorInfo monitor, WindowPlacement placement)
@@ -491,4 +518,6 @@ internal sealed class BindingService : IDisposable
         {
         }
     }
+
+    private static ILogger ForEvent(string eventId) => Logger.ForContext("EventId", eventId);
 }

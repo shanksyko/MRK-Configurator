@@ -7,12 +7,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Services;
-using Mieruka.Core.Infra;
+using Serilog;
 
 namespace Mieruka.App.Forms.Controls.Apps;
 
 public sealed class AppsTab : UserControl
 {
+    private static readonly ILogger Logger = Log.ForContext<AppsTab>();
+
     private readonly TextBox _txtSearch;
     private readonly DataGridView _grid;
     private readonly Button _btnSelectExecutable;
@@ -242,7 +244,7 @@ public sealed class AppsTab : UserControl
         }
         catch (Exception ex)
         {
-            Logger.Error("Falha ao carregar a lista de aplicativos instalados.", ex);
+            Logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
 
             if (IsDisposed)
             {

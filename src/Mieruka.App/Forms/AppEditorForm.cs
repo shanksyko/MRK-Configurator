@@ -22,9 +22,9 @@ using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Services;
-using Mieruka.Core.Infra;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Serilog;
+using Serilog.Context;
 
 namespace Mieruka.App.Forms;
 
@@ -88,6 +88,8 @@ public partial class AppEditorForm : Form
     private readonly Label _installedAppsStatusLabel = new();
     private TextBox? _installedAppsSearchBox;
     private bool _appsListLoaded;
+    private readonly Guid _editSessionId;
+    private readonly IDisposable _logScope;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -96,6 +98,8 @@ public partial class AppEditorForm : Form
         IAppRunner? appRunner = null,
         IList<ProgramaConfig>? profileApps = null)
     {
+        _editSessionId = Guid.NewGuid();
+        _logScope = LogContext.PushProperty("EditSessionId", _editSessionId);
         InitializeComponent();
         ToolTipTamer.Tame(this, components);
 
@@ -125,6 +129,7 @@ public partial class AppEditorForm : Form
 
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
+        previewControl.EditSessionId = _editSessionId;
         _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
         var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
 
@@ -2642,6 +2647,7 @@ public partial class AppEditorForm : Form
         _appRunner.BeforeMoveWindow -= AppRunnerOnBeforeMoveWindow;
         _appRunner.AfterMoveWindow -= AppRunnerOnAfterMoveWindow;
         CancelHoverThrottleTimer();
+        _logScope.Dispose();
     }
 
     private void btnSalvar_Click(object? sender, EventArgs e)

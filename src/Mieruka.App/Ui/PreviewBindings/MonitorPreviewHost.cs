@@ -7,6 +7,7 @@ using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Preview;
+using Serilog;
 
 namespace Mieruka.App.Ui.PreviewBindings;
 
@@ -16,6 +17,7 @@ namespace Mieruka.App.Ui.PreviewBindings;
 public sealed class MonitorPreviewHost : IDisposable
 {
     private readonly PictureBox _target;
+    private readonly ILogger _logger;
     private readonly object _gate = new();
     private readonly object _frameTimingGate = new();
     private readonly object _stateGate = new();
@@ -36,16 +38,18 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _resumeTicket;
     private volatile bool _isPaused;
     private int _busy;
+    private int _pausedDropAnnounced;
 
-    public MonitorPreviewHost(string monitorId, PictureBox target)
+    public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
     {
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
+        _logger = (logger ?? Log.ForContext<MonitorPreviewHost>()).ForContext("MonitorId", MonitorId);
         EnsurePictureBoxSizeMode();
     }
 
-    public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target)
-        : this(CreateMonitorId(descriptor), target)
+    public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target, ILogger? logger = null)
+        : this(CreateMonitorId(descriptor), target, logger)
     {
         _monitorBounds = descriptor.Bounds;
         _monitorWorkArea = descriptor.WorkArea;
@@ -127,6 +131,7 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         if (!TryEnterBusy(out var scope))
         {
+            LogReentrancyBlocked(nameof(Start));
             return Capture is not null;
         }
 
@@ -147,6 +152,7 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         if (!TryEnterBusy(out var scope))
         {
+            LogReentrancyBlocked(nameof(Stop));
             return;
         }
 
@@ -179,6 +185,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         if (!TryEnterBusy(out var scope))
         {
+            LogReentrancyBlocked(nameof(SuspendCapture));
             return;
         }
 
@@ -251,6 +258,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             if (!TryEnterBusy(out var resumeScope))
             {
+                LogReentrancyBlocked(nameof(ResumeCapture));
                 return;
             }
 
@@ -308,7 +316,13 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
+        if (Volatile.Read(ref _isPaused))
+        {
+            return;
+        }
+
         Volatile.Write(ref _isPaused, true);
+        ForEvent("PreviewPaused").Information("Pré-visualização pausada.");
     }
 
     public void Resume()
@@ -318,7 +332,14 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
+        if (!Volatile.Read(ref _isPaused))
+        {
+            return;
+        }
+
         Volatile.Write(ref _isPaused, false);
+        Interlocked.Exchange(ref _pausedDropAnnounced, 0);
+        ForEvent("PreviewResumed").Information("Pré-visualização retomada.");
     }
 
     public void Dispose()
@@ -350,17 +371,17 @@ public sealed class MonitorPreviewHost : IDisposable
         Interlocked.Exchange(ref _busy, 0);
     }
 
-    private IEnumerable<Func<IMonitorCapture>> EnumerateFactories(bool preferGpu)
+    private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
     {
         if (preferGpu)
         {
-            yield return () => CreateForMonitor.Gpu(MonitorId);
-            yield return () => CreateForMonitor.Gdi(MonitorId);
+            yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
+            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
         }
         else
         {
-            yield return () => CreateForMonitor.Gdi(MonitorId);
-            yield return () => CreateForMonitor.Gpu(MonitorId);
+            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+            yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
         }
     }
 
@@ -388,7 +409,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         Volatile.Write(ref _isPaused, false);
 
-        foreach (var factory in EnumerateFactories(preferGpu))
+        foreach (var (mode, factory) in EnumerateFactories(preferGpu))
         {
             IMonitorCapture? capture = null;
             try
@@ -412,7 +433,15 @@ public sealed class MonitorPreviewHost : IDisposable
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Preview] Falha ao iniciar captura para {MonitorId}: {ex.Message}");
+                if (preferGpu && string.Equals(mode, "GPU", StringComparison.OrdinalIgnoreCase))
+                {
+                    ForEvent("MonitorFallback")
+                        .Warning(ex, "Falha ao iniciar captura via GPU para {MonitorId}; tentando fallback.", MonitorId);
+                }
+                else
+                {
+                    _logger.Warning(ex, "Falha ao iniciar captura ({Mode}) para {MonitorId}.", mode, MonitorId);
+                }
                 if (capture is not null)
                 {
                     capture.FrameArrived -= OnFrameArrived;
@@ -434,8 +463,14 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
-        if (Volatile.Read(ref _isPaused) || IsBusy || !ShouldDisplayFrame())
+        var paused = Volatile.Read(ref _isPaused);
+        if (paused || IsBusy || !ShouldDisplayFrame())
         {
+            if (paused && Interlocked.CompareExchange(ref _pausedDropAnnounced, 1, 0) == 0)
+            {
+                ForEvent("FrameDroppedPaused").Debug("Quadros descartados enquanto a pré-visualização está pausada.");
+            }
+
             e.Dispose();
             return;
         }
@@ -565,10 +600,12 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             capture.FrameArrived -= OnFrameArrived;
             SafeDispose(capture);
+            ForEvent("CaptureDisposed").Debug("Sessão de captura finalizada. Limpar quadro: {ClearFrame}.", clearFrame);
         }
 
         DisposePendingFrames();
         Volatile.Write(ref _isPaused, false);
+        Interlocked.Exchange(ref _pausedDropAnnounced, 0);
 
         if (clearFrame)
         {
@@ -716,6 +753,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
         return MonitorIdentifier.Create(key, descriptor.DeviceName);
     }
+
+    private ILogger ForEvent(string eventId)
+        => _logger.ForContext("EventId", eventId);
+
+    private void LogReentrancyBlocked(string operation)
+        => ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
 
     private void EnsurePictureBoxSizeMode()
     {
