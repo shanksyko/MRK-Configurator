@@ -25,6 +25,7 @@ using Mieruka.Core.Services;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Serilog;
 using Serilog.Context;
+using CoreBindingService = Mieruka.Core.Services.BindingService;
 
 namespace Mieruka.App.Forms;
 
@@ -90,6 +91,8 @@ public partial class AppEditorForm : Form
     private bool _appsListLoaded;
     private readonly Guid _editSessionId;
     private readonly IDisposable _logScope;
+    private readonly CoreBindingService _bindingBatchService = new();
+    private readonly TabEditCoordinator _tabEditCoordinator;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -176,6 +179,16 @@ public partial class AppEditorForm : Form
         sitesControl.AddRequested += SitesEditorControl_AddRequested;
         sitesControl.RemoveRequested += SitesEditorControl_RemoveRequested;
         sitesControl.CloneRequested += SitesEditorControl_CloneRequested;
+
+        _bindingBatchService.Track(_profileItems);
+        _bindingBatchService.Track(_sites);
+        _bindingBatchService.Track(cycleSource);
+        _tabEditCoordinator = new TabEditCoordinator(
+            this,
+            _bindingBatchService,
+            previewControl.Pause,
+            previewControl.Resume,
+            Log.ForContext<TabEditCoordinator>().ForContext("EditSessionId", _editSessionId));
 
         ConfigureInstalledAppsSection(installedAppsList);
 
@@ -480,6 +493,12 @@ public partial class AppEditorForm : Form
 
     private void ApplyAppTypeUI()
     {
+        using var scope = _tabEditCoordinator.BeginEditScope(nameof(ApplyAppTypeUI));
+        if (!scope.IsActive)
+        {
+            return;
+        }
+
         var isExecutable = rbExe?.Checked ?? false;
         var isBrowser = rbBrowser?.Checked ?? false;
 
