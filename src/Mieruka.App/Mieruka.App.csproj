@@ -6,16 +6,14 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Enrichers.Thread" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="../Mieruka.Core/Mieruka.Core.csproj" />
     <ProjectReference Include="../Mieruka.Automation/Mieruka.Automation.csproj" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="../Mieruka.Preview/Mieruka.Preview.csproj" />
   </ItemGroup>

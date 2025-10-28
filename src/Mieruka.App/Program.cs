@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
 using Serilog;
+using Serilog.Enrichers;
 using Serilog.Events;
 
 namespace Mieruka.App;
