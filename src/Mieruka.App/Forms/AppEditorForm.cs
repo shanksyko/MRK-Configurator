@@ -75,6 +75,7 @@ public partial class AppEditorForm : Form
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
+    private bool _suppressWindowInputHandlers;
     private readonly AppCycleSimulator _cycleSimulator = new();
     private readonly List<SimRectDisplay> _cycleDisplays = new();
     private CancellationTokenSource? _cycleSimulationCts;
@@ -215,22 +216,54 @@ public partial class AppEditorForm : Form
 
         if (nudJanelaX is not null)
         {
-            nudJanelaX.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+            nudJanelaX.ValueChanged += (_, _) =>
+            {
+                if (_suppressWindowInputHandlers)
+                {
+                    return;
+                }
+
+                InvalidateWindowPreviewOverlay();
+            };
         }
 
         if (nudJanelaY is not null)
         {
-            nudJanelaY.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+            nudJanelaY.ValueChanged += (_, _) =>
+            {
+                if (_suppressWindowInputHandlers)
+                {
+                    return;
+                }
+
+                InvalidateWindowPreviewOverlay();
+            };
         }
 
         if (nudJanelaLargura is not null)
         {
-            nudJanelaLargura.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+            nudJanelaLargura.ValueChanged += (_, _) =>
+            {
+                if (_suppressWindowInputHandlers)
+                {
+                    return;
+                }
+
+                InvalidateWindowPreviewOverlay();
+            };
         }
 
         if (nudJanelaAltura is not null)
         {
-            nudJanelaAltura.ValueChanged += (_, _) => InvalidateWindowPreviewOverlay();
+            nudJanelaAltura.ValueChanged += (_, _) =>
+            {
+                if (_suppressWindowInputHandlers)
+                {
+                    return;
+                }
+
+                InvalidateWindowPreviewOverlay();
+            };
         }
 
         AdjustMonitorPreviewWidth();
@@ -1863,58 +1896,72 @@ public partial class AppEditorForm : Form
 
         var changed = false;
 
-        var width = (int)nudJanelaLargura.Value;
-        if (monitor.Width > 0)
+        _suppressWindowInputHandlers = true;
+        using var redrawScope = RedrawScope.Begin(nudJanelaX!, nudJanelaY!, nudJanelaLargura!, nudJanelaAltura!);
+        try
         {
-            var clampedWidth = Math.Clamp(width, 1, monitor.Width);
-            changed |= UpdateNumericControl(nudJanelaLargura, clampedWidth);
-            width = clampedWidth;
-        }
-
-        var height = (int)nudJanelaAltura.Value;
-        if (monitor.Height > 0)
-        {
-            var clampedHeight = Math.Clamp(height, 1, monitor.Height);
-            changed |= UpdateNumericControl(nudJanelaAltura, clampedHeight);
-            height = clampedHeight;
-        }
-
-        if (pointer is Point target)
-        {
-            var targetX = target.X;
+            var width = (int)nudJanelaLargura.Value;
             if (monitor.Width > 0)
             {
-                var maxX = Math.Max(0, monitor.Width - width);
-                targetX = Math.Clamp(targetX, 0, maxX);
+                var clampedWidth = Math.Clamp(width, 1, monitor.Width);
+                changed |= UpdateNumericControl(nudJanelaLargura, clampedWidth);
+                width = clampedWidth;
             }
 
-            var targetY = target.Y;
+            var height = (int)nudJanelaAltura.Value;
             if (monitor.Height > 0)
             {
-                var maxY = Math.Max(0, monitor.Height - height);
-                targetY = Math.Clamp(targetY, 0, maxY);
+                var clampedHeight = Math.Clamp(height, 1, monitor.Height);
+                changed |= UpdateNumericControl(nudJanelaAltura, clampedHeight);
+                height = clampedHeight;
             }
 
-            changed |= UpdateNumericControl(nudJanelaX, targetX);
-            changed |= UpdateNumericControl(nudJanelaY, targetY);
+            if (pointer is Point target)
+            {
+                var targetX = target.X;
+                if (monitor.Width > 0)
+                {
+                    var maxX = Math.Max(0, monitor.Width - width);
+                    targetX = Math.Clamp(targetX, 0, maxX);
+                }
+
+                var targetY = target.Y;
+                if (monitor.Height > 0)
+                {
+                    var maxY = Math.Max(0, monitor.Height - height);
+                    targetY = Math.Clamp(targetY, 0, maxY);
+                }
+
+                changed |= UpdateNumericControl(nudJanelaX, targetX);
+                changed |= UpdateNumericControl(nudJanelaY, targetY);
+            }
+            else
+            {
+                if (monitor.Width > 0)
+                {
+                    var currentX = (int)nudJanelaX.Value;
+                    var maxX = Math.Max(0, monitor.Width - width);
+                    var clampedX = Math.Clamp(currentX, 0, maxX);
+                    changed |= UpdateNumericControl(nudJanelaX, clampedX);
+                }
+
+                if (monitor.Height > 0)
+                {
+                    var currentY = (int)nudJanelaY.Value;
+                    var maxY = Math.Max(0, monitor.Height - height);
+                    var clampedY = Math.Clamp(currentY, 0, maxY);
+                    changed |= UpdateNumericControl(nudJanelaY, clampedY);
+                }
+            }
         }
-        else
+        finally
         {
-            if (monitor.Width > 0)
-            {
-                var currentX = (int)nudJanelaX.Value;
-                var maxX = Math.Max(0, monitor.Width - width);
-                var clampedX = Math.Clamp(currentX, 0, maxX);
-                changed |= UpdateNumericControl(nudJanelaX, clampedX);
-            }
+            _suppressWindowInputHandlers = false;
+        }
 
-            if (monitor.Height > 0)
-            {
-                var currentY = (int)nudJanelaY.Value;
-                var maxY = Math.Max(0, monitor.Height - height);
-                var clampedY = Math.Clamp(currentY, 0, maxY);
-                changed |= UpdateNumericControl(nudJanelaY, clampedY);
-            }
+        if (changed)
+        {
+            InvalidateWindowPreviewOverlay();
         }
 
         return changed;
@@ -1930,6 +1977,47 @@ public partial class AppEditorForm : Form
         }
 
         return false;
+    }
+
+    private sealed class RedrawScope : IDisposable
+    {
+        private const int WmSetRedraw = 0x000B;
+        private readonly Control[] _controls;
+
+        private RedrawScope(Control[] controls)
+        {
+            _controls = controls;
+
+            foreach (var control in controls)
+            {
+                if (control.IsHandleCreated)
+                {
+                    SendMessage(control.Handle, WmSetRedraw, IntPtr.Zero, IntPtr.Zero);
+                }
+            }
+        }
+
+        public static RedrawScope Begin(params Control[] controls)
+        {
+            return new RedrawScope(controls);
+        }
+
+        public void Dispose()
+        {
+            foreach (var control in _controls)
+            {
+                if (!control.IsHandleCreated)
+                {
+                    continue;
+                }
+
+                SendMessage(control.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
+                control.Invalidate();
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
     }
 
     private void InvalidateWindowPreviewOverlay()
