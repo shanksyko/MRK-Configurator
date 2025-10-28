@@ -57,6 +57,13 @@ public partial class AppEditorForm : Form
         Custom,
     }
 
+    private readonly record struct WindowPreviewSnapshot(
+        string? MonitorId,
+        Rectangle WindowBounds,
+        bool IsFullScreen,
+        bool AutoStart,
+        string AppId);
+
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
     private readonly IReadOnlyList<MonitorInfo>? _providedMonitors;
@@ -93,6 +100,13 @@ public partial class AppEditorForm : Form
     private readonly IDisposable _logScope;
     private readonly CoreBindingService _bindingBatchService = new();
     private readonly TabEditCoordinator _tabEditCoordinator;
+    private readonly Stopwatch _windowPreviewStopwatch = Stopwatch.StartNew();
+    private WindowPreviewSnapshot _windowPreviewSnapshot;
+    private bool _hasWindowPreviewSnapshot;
+    private TimeSpan _lastWindowPreviewRebuild = TimeSpan.Zero;
+    private bool _windowPreviewRebuildScheduled;
+
+    private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -1934,9 +1948,103 @@ public partial class AppEditorForm : Form
 
     private void InvalidateWindowPreviewOverlay()
     {
+        if (monitorPreviewDisplay is null)
+        {
+            return;
+        }
+
+        var snapshot = CaptureWindowPreviewSnapshot();
+        var now = _windowPreviewStopwatch.Elapsed;
+
+        if (!_hasWindowPreviewSnapshot)
+        {
+            ApplyWindowPreviewSnapshot(snapshot, now);
+            return;
+        }
+
+        if (snapshot.Equals(_windowPreviewSnapshot))
+        {
+            monitorPreviewDisplay.Invalidate();
+            return;
+        }
+
+        var elapsed = now - _lastWindowPreviewRebuild;
+        if (elapsed < WindowPreviewRebuildInterval)
+        {
+            if (!_windowPreviewRebuildScheduled)
+            {
+                _windowPreviewRebuildScheduled = true;
+                var delay = WindowPreviewRebuildInterval - elapsed;
+                ScheduleWindowPreviewRebuild(delay);
+            }
+
+            monitorPreviewDisplay.Invalidate();
+            return;
+        }
+
+        ApplyWindowPreviewSnapshot(snapshot, now);
+    }
+
+    private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
+    {
+        var monitor = GetSelectedMonitor();
+        var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
+        var autoStart = chkAutoStart?.Checked ?? false;
+        var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
+        var appId = txtId?.Text?.Trim() ?? string.Empty;
+
+        var bounds = Rectangle.Empty;
+        if (nudJanelaX is not null &&
+            nudJanelaY is not null &&
+            nudJanelaLargura is not null &&
+            nudJanelaAltura is not null)
+        {
+            bounds = new Rectangle(
+                (int)nudJanelaX.Value,
+                (int)nudJanelaY.Value,
+                (int)nudJanelaLargura.Value,
+                (int)nudJanelaAltura.Value);
+        }
+
+        return new WindowPreviewSnapshot(monitorId, bounds, isFullScreen, autoStart, appId);
+    }
+
+    private void ApplyWindowPreviewSnapshot(WindowPreviewSnapshot snapshot, TimeSpan timestamp)
+    {
+        _windowPreviewSnapshot = snapshot;
+        _hasWindowPreviewSnapshot = true;
+        _lastWindowPreviewRebuild = timestamp;
+        _windowPreviewRebuildScheduled = false;
+
         RebuildSimulationOverlays();
         monitorPreviewDisplay?.Invalidate();
-        monitorPreviewDisplay?.Update();
+    }
+
+    private async void ScheduleWindowPreviewRebuild(TimeSpan delay)
+    {
+        try
+        {
+            if (delay < TimeSpan.Zero)
+            {
+                delay = TimeSpan.Zero;
+            }
+
+            await Task.Delay(delay).ConfigureAwait(true);
+        }
+        catch
+        {
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
+
+        if (IsDisposed)
+        {
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
+
+        _windowPreviewRebuildScheduled = false;
+        InvalidateWindowPreviewOverlay();
     }
 
     private void RebuildSimulationOverlays()
