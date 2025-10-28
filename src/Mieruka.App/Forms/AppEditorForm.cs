@@ -21,11 +21,10 @@ using Mieruka.App.Simulation;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
-using Mieruka.Core.Services;
+using Mieruka.Core.Contracts;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Serilog;
 using Serilog.Context;
-using CoreBindingService = Mieruka.Core.Services.BindingService;
 
 namespace Mieruka.App.Forms;
 
@@ -99,7 +98,7 @@ public partial class AppEditorForm : Form
     private bool _appsListLoaded;
     private readonly Guid _editSessionId;
     private readonly IDisposable _logScope;
-    private readonly CoreBindingService _bindingBatchService = new();
+    private readonly IBindingService _bindingBatchService = new BindingBatchService();
     private readonly TabEditCoordinator _tabEditCoordinator;
     private readonly Stopwatch _windowPreviewStopwatch = Stopwatch.StartNew();
     private WindowPreviewSnapshot _windowPreviewSnapshot;

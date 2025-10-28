@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Windows.Forms;
-using Mieruka.Core.Services;
+using Mieruka.Core.Contracts;
 using Serilog;
 
 namespace Mieruka.App.Services.Ui;
@@ -12,7 +12,7 @@ namespace Mieruka.App.Services.Ui;
 internal sealed class TabEditCoordinator
 {
     private readonly Control _root;
-    private readonly BindingService? _bindingService;
+    private readonly IBindingService? _bindingService;
     private readonly Action? _pausePreview;
     private readonly Action? _resumePreview;
     private readonly ILogger _logger;
@@ -22,7 +22,7 @@ internal sealed class TabEditCoordinator
 
     public TabEditCoordinator(
         Control root,
-        BindingService? bindingService,
+        IBindingService? bindingService,
         Action? pausePreview,
         Action? resumePreview,
         ILogger? logger = null)
