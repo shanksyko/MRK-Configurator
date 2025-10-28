@@ -4,24 +4,23 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using Mieruka.Core.Contracts;
 using Serilog;
 
-namespace Mieruka.Core.Services;
+namespace Mieruka.App.Services.Ui;
 
 /// <summary>
 /// Coordinates temporary suspension of WinForms binding pipelines while complex UI updates are performed.
 /// </summary>
-public sealed class BindingService
+internal sealed class BindingBatchService : IBindingService
 {
-    private static readonly ILogger Logger = Log.ForContext<BindingService>();
+    private static readonly ILogger Logger = Log.ForContext<BindingBatchService>();
 
     private readonly object _gate = new();
     private readonly List<IBatchParticipant> _participants = new();
     private int _batchDepth;
 
-    /// <summary>
-    /// Tracks a <see cref="BindingSource"/> so it participates in batch suspensions.
-    /// </summary>
+    /// <inheritdoc />
     public void Track(BindingSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -37,9 +36,7 @@ public sealed class BindingService
         }
     }
 
-    /// <summary>
-    /// Tracks a <see cref="BindingList{T}"/> so it participates in batch suspensions.
-    /// </summary>
+    /// <inheritdoc />
     public void Track<T>(BindingList<T> list)
     {
         ArgumentNullException.ThrowIfNull(list);
@@ -55,9 +52,7 @@ public sealed class BindingService
         }
     }
 
-    /// <summary>
-    /// Suspends change notifications for tracked bindings until the returned scope is disposed.
-    /// </summary>
+    /// <inheritdoc />
     public IDisposable BeginBatch()
     {
         EnterBatch();
@@ -234,9 +229,9 @@ public sealed class BindingService
 
     private sealed class BatchScope : IDisposable
     {
-        private BindingService? _owner;
+        private BindingBatchService? _owner;
 
-        public BatchScope(BindingService owner)
+        public BatchScope(BindingBatchService owner)
         {
             _owner = owner;
         }
