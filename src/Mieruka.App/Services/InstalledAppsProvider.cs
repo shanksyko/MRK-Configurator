@@ -249,8 +249,8 @@ public static class InstalledAppsProvider
 
         var startMenuRoots = new[]
         {
-            Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+            Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
         };
 
         var candidates = new List<(string Path, int Score)>();
