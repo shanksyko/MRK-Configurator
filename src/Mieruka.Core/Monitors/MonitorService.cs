@@ -268,7 +268,7 @@ public sealed class MonitorService : IMonitorService
         }
 
         var context = new MonitorRectEnumerationContext(deviceName);
-        var handle = GCHandle.Alloc(context, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(context);
         try
         {
             var callback = new MonitorEnumProc(MonitorRectEnumerationCallback);
@@ -359,7 +359,7 @@ public sealed class MonitorService : IMonitorService
     {
         var descriptors = new List<MonitorDescriptor>();
         var context = new MonitorEnumerationContext(descriptors);
-        var handle = GCHandle.Alloc(context, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(context);
         try
         {
             var callback = new MonitorEnumProc(GdiMonitorEnumerationCallback);
