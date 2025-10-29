@@ -64,9 +64,6 @@ internal static class Program
 
     private static void ConfigureLogging()
     {
-        const string directoryName = "MierukaConfiguratorPro";
-        const string logsFolderName = "logs";
-        const string logFileName = "mieruka-.log";
         const string outputTemplate = "{Timestamp:HH:mm:ss.fff} [{Level:u3}] (T{ThreadId}) {SourceContext}: {Message:lj}{NewLine}{Exception}";
 
         var minimumLevel = LogEventLevel.Information;
@@ -74,27 +71,11 @@ internal static class Program
         minimumLevel = LogEventLevel.Debug;
 #endif
 
-        var baseDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(baseDirectory))
-        {
-            baseDirectory = AppContext.BaseDirectory;
-        }
+        var now = DateTime.Now;
+        var (logRootDirectory, logDirectory) = ResolveLogDirectories(now);
+        PruneOldLogFiles(logRootDirectory, now.AddDays(-14));
 
-        if (string.IsNullOrWhiteSpace(baseDirectory))
-        {
-            baseDirectory = Path.GetTempPath();
-        }
-
-        var logDirectory = Path.Combine(baseDirectory, directoryName, logsFolderName);
-
-        try
-        {
-            Directory.CreateDirectory(logDirectory);
-        }
-        catch
-        {
-            // Ignorar falhas ao criar diretórios para não impactar a inicialização.
-        }
+        var logFilePath = Path.Combine(logDirectory, $"{now:yyyy-MM-dd}.log");
 
         var configuration = new LoggerConfiguration()
             .MinimumLevel.Is(minimumLevel)
@@ -102,16 +83,97 @@ internal static class Program
             .Enrich.WithProperty("Application", "MierukaConfigurator")
             .Enrich.WithThreadId()
             .WriteTo.File(
-                path: Path.Combine(logDirectory, logFileName),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 30,
+                path: logFilePath,
                 shared: true,
-                outputTemplate: outputTemplate);
+                outputTemplate: outputTemplate,
+                rollingInterval: RollingInterval.Infinite,
+                retainedFileCountLimit: null);
 
 #if DEBUG
         configuration = configuration.WriteTo.Console(outputTemplate: outputTemplate);
 #endif
 
         Log.Logger = configuration.CreateLogger();
+    }
+
+    private static (string logRootDirectory, string logDirectory) ResolveLogDirectories(DateTime timestamp)
+    {
+        var candidates = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppContext.BaseDirectory,
+            Path.GetTempPath()
+        };
+
+        var fallbackRoot = Path.Combine(Path.GetTempPath(), "Mieruka", "Logs");
+        var fallbackDirectory = Path.Combine(fallbackRoot, timestamp.ToString("yyyy-MM"));
+
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            var root = Path.Combine(candidate, "Mieruka", "Logs");
+            var directory = Path.Combine(root, timestamp.ToString("yyyy-MM"));
+
+            if (TryEnsureDirectory(directory))
+            {
+                return (root, directory);
+            }
+        }
+
+        TryEnsureDirectory(fallbackDirectory);
+        return (fallbackRoot, fallbackDirectory);
+    }
+
+    private static bool TryEnsureDirectory(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void PruneOldLogFiles(string logRootDirectory, DateTime threshold)
+    {
+        if (string.IsNullOrWhiteSpace(logRootDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!Directory.Exists(logRootDirectory))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(logRootDirectory, "*.log", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    var fileInfo = new FileInfo(file);
+                    if (fileInfo.LastWriteTime < threshold)
+                    {
+                        fileInfo.Delete();
+                    }
+                }
+                catch
+                {
+                    // Ignorar falhas ao remover arquivos individuais.
+                }
+            }
+        }
+        catch
+        {
+            // Ignorar falhas ao enumerar ou limpar registros antigos.
+        }
     }
 }
