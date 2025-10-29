@@ -25,7 +25,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan TerminationWaitTimeout = TimeSpan.FromSeconds(5);
 
-    private readonly BindingService _bindingService;
+    private readonly BindingTrayService _bindingService;
     private readonly ITelemetry _telemetry;
     private readonly HttpClient _httpClient;
     private readonly object _gate = new();
@@ -43,7 +43,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
     /// </summary>
     /// <param name="bindingService">Service responsible for applying window placement.</param>
     /// <param name="telemetry">Optional telemetry sink used to record watchdog events.</param>
-    public WatchdogService(BindingService bindingService, ITelemetry? telemetry = null)
+    public WatchdogService(BindingTrayService bindingService, ITelemetry? telemetry = null)
     {
         _bindingService = bindingService ?? throw new ArgumentNullException(nameof(bindingService));
         _telemetry = telemetry ?? NullTelemetry.Instance;

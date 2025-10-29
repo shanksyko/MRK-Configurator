@@ -7,11 +7,11 @@ using Mieruka.Core.Services;
 namespace Mieruka.App.Tray;
 
 /// <summary>
-/// Wraps the <see cref="BindingService"/> so it can participate in the orchestrator lifecycle.
+/// Wraps the <see cref="BindingTrayService"/> so it can participate in the orchestrator lifecycle.
 /// </summary>
 internal sealed class BindingOrchestrationComponent : IOrchestrationComponent
 {
-    private readonly BindingService _bindingService;
+    private readonly BindingTrayService _bindingService;
     private readonly ITelemetry _telemetry;
 
     /// <summary>
@@ -19,7 +19,7 @@ internal sealed class BindingOrchestrationComponent : IOrchestrationComponent
     /// </summary>
     /// <param name="bindingService">Service responsible for applying window bindings.</param>
     /// <param name="telemetry">Telemetry sink used to record lifecycle events.</param>
-    public BindingOrchestrationComponent(BindingService bindingService, ITelemetry telemetry)
+    public BindingOrchestrationComponent(BindingTrayService bindingService, ITelemetry telemetry)
     {
         ArgumentNullException.ThrowIfNull(bindingService);
         ArgumentNullException.ThrowIfNull(telemetry);

@@ -36,16 +36,35 @@ public sealed class MonitorService : IMonitorService
     private static readonly ILogger Logger = Log.ForContext<MonitorService>();
     private static ILogger ForEvent(string eventId) => Logger.ForContext("EventId", eventId);
 
+    private readonly Func<MonitorService, List<MonitorDescriptor>> _displayConfigProvider;
+    private readonly Func<MonitorService, List<MonitorDescriptor>> _gdiProvider;
+    private readonly Func<bool> _isWindows;
+
+    public MonitorService()
+        : this(static service => service.EnumerateDisplayConfigInternal(), static service => service.EnumerateGdiInternal())
+    {
+    }
+
+    internal MonitorService(
+        Func<MonitorService, List<MonitorDescriptor>> displayConfigProvider,
+        Func<MonitorService, List<MonitorDescriptor>> gdiProvider,
+        Func<bool>? platformCheck = null)
+    {
+        _displayConfigProvider = displayConfigProvider ?? throw new ArgumentNullException(nameof(displayConfigProvider));
+        _gdiProvider = gdiProvider ?? throw new ArgumentNullException(nameof(gdiProvider));
+        _isWindows = platformCheck ?? (() => OperatingSystem.IsWindows());
+    }
+
     public IReadOnlyList<MonitorDescriptor> GetAll()
     {
-        if (!OperatingSystem.IsWindows())
+        if (!_isWindows())
         {
             return Array.Empty<MonitorDescriptor>();
         }
 
         try
         {
-            var monitors = EnumerateDisplayConfig();
+            var monitors = _displayConfigProvider(this);
             if (monitors.Count > 0)
             {
                 return monitors;
@@ -62,7 +81,7 @@ public sealed class MonitorService : IMonitorService
 
         try
         {
-            return EnumerateGdi();
+            return _gdiProvider(this);
         }
         catch (Exception ex)
         {
@@ -91,7 +110,7 @@ public sealed class MonitorService : IMonitorService
         return monitors[0];
     }
 
-    private static List<MonitorDescriptor> EnumerateDisplayConfig()
+    private List<MonitorDescriptor> EnumerateDisplayConfigInternal()
     {
         var descriptors = new List<MonitorDescriptor>();
 
@@ -274,6 +293,7 @@ public sealed class MonitorService : IMonitorService
             var callback = new MonitorEnumProc(MonitorRectEnumerationCallback);
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
             GC.KeepAlive(callback);
+            GC.KeepAlive(context);
         }
         finally
         {
@@ -356,7 +376,7 @@ public sealed class MonitorService : IMonitorService
         return DisplayConfigGetDeviceInfo(ref sourceName) == ErrorSuccess;
     }
 
-    private static List<MonitorDescriptor> EnumerateGdi()
+    private List<MonitorDescriptor> EnumerateGdiInternal()
     {
         var descriptors = new List<MonitorDescriptor>();
         var context = new MonitorEnumerationContext(descriptors);
@@ -366,7 +386,15 @@ public sealed class MonitorService : IMonitorService
             var callback = new MonitorEnumProc(GdiMonitorEnumerationCallback);
             var success = EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
             GC.KeepAlive(callback);
-            return success ? descriptors : new List<MonitorDescriptor>();
+            GC.KeepAlive(context);
+
+            if (!success)
+            {
+                ForEvent("MonitorFallback").Warning("EnumDisplayMonitors retornou false; retornando lista vazia.");
+                return new List<MonitorDescriptor>();
+            }
+
+            return descriptors;
         }
         finally
         {
