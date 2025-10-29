@@ -273,6 +273,7 @@ public sealed class MonitorService : IMonitorService
         {
             var callback = new MonitorEnumProc(MonitorRectEnumerationCallback);
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
+            GC.KeepAlive(callback);
         }
         finally
         {
@@ -363,9 +364,9 @@ public sealed class MonitorService : IMonitorService
         try
         {
             var callback = new MonitorEnumProc(GdiMonitorEnumerationCallback);
-            return EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle))
-                ? descriptors
-                : new List<MonitorDescriptor>();
+            var success = EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, GCHandle.ToIntPtr(handle));
+            GC.KeepAlive(callback);
+            return success ? descriptors : new List<MonitorDescriptor>();
         }
         finally
         {
