@@ -14,9 +14,9 @@ namespace Mieruka.App.Services;
 /// <summary>
 /// Associates configuration entries with running windows and ensures they stay in the desired position.
 /// </summary>
-internal sealed class BindingService : IDisposable
+internal sealed class BindingTrayService : IDisposable
 {
-    private static readonly ILogger Logger = Log.ForContext<BindingService>();
+    private static readonly ILogger Logger = Log.ForContext<BindingTrayService>();
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(1200);
 
     private readonly IDisplayService _displayService;
@@ -30,11 +30,11 @@ internal sealed class BindingService : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BindingService"/> class.
+    /// Initializes a new instance of the <see cref="BindingTrayService"/> class.
     /// </summary>
     /// <param name="displayService">Service that provides monitor information.</param>
     /// <param name="telemetry">Telemetry sink used to log reposition operations.</param>
-    public BindingService(IDisplayService displayService, ITelemetry? telemetry = null)
+    public BindingTrayService(IDisplayService displayService, ITelemetry? telemetry = null)
     {
         _displayService = displayService ?? throw new ArgumentNullException(nameof(displayService));
         _telemetry = telemetry ?? NullTelemetry.Instance;
@@ -448,7 +448,7 @@ internal sealed class BindingService : IDisposable
     {
         if (_disposed)
         {
-            throw new ObjectDisposedException(nameof(BindingService));
+            throw new ObjectDisposedException(nameof(BindingTrayService));
         }
     }
 

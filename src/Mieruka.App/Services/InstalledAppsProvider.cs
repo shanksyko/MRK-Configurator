@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
@@ -13,12 +14,22 @@ public static class InstalledAppsProvider
     private const int MaxExecutableCandidates = 200;
     private const int MaxShortcutCandidates = 40;
 
-    private static readonly (RegistryKey Root, string Path, string Source)[] RegistryLocations =
+    private static readonly ILogger Logger = Log.ForContext(typeof(InstalledAppsProvider));
+
+    private static readonly (RegistryKey Root, string Path, string Source)[] DefaultRegistryLocations =
     {
         (Registry.LocalMachine, @"Software\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM"),
         (Registry.LocalMachine, @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM32"),
         (Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU"),
     };
+
+    private static readonly RuntimeFileSystemAccessor RuntimeFileSystem = new();
+
+    private static IFileSystemAccessor _fileSystem = RuntimeFileSystem;
+    private static IEnumerable<(RegistryKey Root, string Path, string Source)>? _registryLocationOverride;
+    private static IEnumerable<string>? _startMenuRootsOverride;
+
+    private static IFileSystemAccessor FileSystem => _fileSystem;
 
     public static List<InstalledAppInfo> GetAll()
     {
@@ -43,9 +54,26 @@ public static class InstalledAppsProvider
             .ToList();
     }
 
+    private static IEnumerable<(RegistryKey Root, string Path, string Source)> EnumerateRegistryLocations()
+        => _registryLocationOverride ?? DefaultRegistryLocations;
+
+    private static IEnumerable<string> EnumerateStartMenuRoots()
+    {
+        if (_startMenuRootsOverride is { })
+        {
+            return _startMenuRootsOverride;
+        }
+
+        return new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+        };
+    }
+
     private static IEnumerable<InstalledAppInfo> EnumerateRegistryEntries()
     {
-        foreach (var (root, path, source) in RegistryLocations)
+        foreach (var (root, path, source) in EnumerateRegistryLocations())
         {
             using var baseKey = root.OpenSubKey(path);
             if (baseKey is null)
@@ -90,7 +118,7 @@ public static class InstalledAppsProvider
     private static string? ResolveExecutablePath(string displayName, string? displayIcon, string? installLocation, string? uninstallCommand)
     {
         var candidate = ExtractExecutable(displayIcon);
-        if (LooksLikeLauncher(candidate) && !string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+        if (LooksLikeLauncher(candidate) && !string.IsNullOrWhiteSpace(candidate) && FileSystem.FileExists(candidate))
         {
             return candidate;
         }
@@ -102,7 +130,7 @@ public static class InstalledAppsProvider
         }
 
         candidate = ExtractExecutable(uninstallCommand);
-        if (LooksLikeLauncher(candidate) && !string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+        if (LooksLikeLauncher(candidate) && !string.IsNullOrWhiteSpace(candidate) && FileSystem.FileExists(candidate))
         {
             return candidate;
         }
@@ -121,6 +149,9 @@ public static class InstalledAppsProvider
 
         return null;
     }
+
+    internal static string? ResolveFromStartMenuShortcutsForTesting(string displayName)
+        => ResolveFromStartMenuShortcuts(displayName);
 
     private static readonly string[] _badTokens =
     {
@@ -156,17 +187,24 @@ public static class InstalledAppsProvider
 
     private static string? FindLauncherExecutable(string displayName, string? installLocation)
     {
-        if (string.IsNullOrWhiteSpace(installLocation) || !Directory.Exists(installLocation))
+        if (string.IsNullOrWhiteSpace(installLocation) || !FileSystem.DirectoryExists(installLocation))
         {
             return null;
         }
 
         try
         {
-            var candidates = Directory
-                .EnumerateFiles(installLocation, "*.exe", SearchOption.AllDirectories)
+            var options = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.System | FileAttributes.Temporary | FileAttributes.Offline,
+            };
+
+            var candidates = FileSystem
+                .EnumerateFiles(installLocation, "*.exe", options)
                 .Take(MaxExecutableCandidates)
-                .Where(path => LooksLikeLauncher(path) && File.Exists(path))
+                .Where(path => LooksLikeLauncher(path) && FileSystem.FileExists(path))
                 .Select(path => new { Path = path, Score = ScoreCandidate(displayName, path) })
                 .Where(item => item.Score > 0)
                 .OrderByDescending(item => item.Score)
@@ -175,8 +213,9 @@ public static class InstalledAppsProvider
 
             return candidates.FirstOrDefault()?.Path;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Warning(ex, "Failed to enumerate executables under {InstallLocation}.", installLocation);
             return null;
         }
     }
@@ -208,7 +247,7 @@ public static class InstalledAppsProvider
 
                 var rawPath = Convert.ToString(subKey.GetValue(null));
                 var candidatePath = ExtractExecutable(rawPath);
-                if (!LooksLikeLauncher(candidatePath) || string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+                if (!LooksLikeLauncher(candidatePath) || string.IsNullOrWhiteSpace(candidatePath) || !FileSystem.FileExists(candidatePath))
                 {
                     continue;
                 }
@@ -247,60 +286,48 @@ public static class InstalledAppsProvider
             return null;
         }
 
-        var startMenuRoots = new[]
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.Programs),
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
-        };
-
         var candidates = new List<(string Path, int Score)>();
 
-        foreach (var root in startMenuRoots)
+        foreach (var root in EnumerateStartMenuRoots())
         {
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            if (string.IsNullOrWhiteSpace(root) || !FileSystem.DirectoryExists(root))
             {
                 continue;
             }
 
-            IEnumerable<string> shortcuts;
+            List<string> shortcuts;
             try
             {
-                shortcuts = Directory
-                    .EnumerateFiles(
-                        root,
-                        "*.lnk",
-                        new EnumerationOptions
-                        {
-                            RecurseSubdirectories = true,
-                            IgnoreInaccessible = true,
-                            AttributesToSkip = FileAttributes.System
-                                | FileAttributes.Temporary
-                                | FileAttributes.Offline
-                                | FileAttributes.ReparsePoint,
-                        })
-                    .Take(MaxShortcutCandidates);
-            }
-            catch
-            {
-                continue;
-            }
-
-            try
-            {
-                foreach (var shortcut in shortcuts)
+                var options = new EnumerationOptions
                 {
-                    var score = ScoreCandidate(displayName, shortcut);
-                    if (score <= 0)
-                    {
-                        continue;
-                    }
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.System
+                        | FileAttributes.Temporary
+                        | FileAttributes.Offline
+                        | FileAttributes.ReparsePoint,
+                };
 
-                    candidates.Add((shortcut, score));
-                }
+                shortcuts = FileSystem
+                    .EnumerateFiles(root, "*.lnk", options)
+                    .Take(MaxShortcutCandidates)
+                    .ToList();
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Warning(ex, "Failed to enumerate shortcuts under {StartMenuRoot}.", root);
                 continue;
+            }
+
+            foreach (var shortcut in shortcuts)
+            {
+                var score = ScoreCandidate(displayName, shortcut);
+                if (score <= 0)
+                {
+                    continue;
+                }
+
+                candidates.Add((shortcut, score));
             }
         }
 
@@ -309,7 +336,7 @@ public static class InstalledAppsProvider
             .ThenBy(item => item.Path, StringComparer.OrdinalIgnoreCase))
         {
             var target = ResolveShortcutTarget(candidate.Path);
-            if (LooksLikeLauncher(target) && !string.IsNullOrWhiteSpace(target) && File.Exists(target))
+            if (LooksLikeLauncher(target) && !string.IsNullOrWhiteSpace(target) && FileSystem.FileExists(target))
             {
                 return target;
             }
@@ -320,7 +347,7 @@ public static class InstalledAppsProvider
 
     private static string? ResolveShortcutTarget(string shortcutPath)
     {
-        if (string.IsNullOrWhiteSpace(shortcutPath) || !File.Exists(shortcutPath))
+        if (string.IsNullOrWhiteSpace(shortcutPath) || !FileSystem.FileExists(shortcutPath))
         {
             return null;
         }
@@ -381,6 +408,50 @@ public static class InstalledAppsProvider
         {
             // Ignore cleanup failures.
         }
+    }
+
+    internal static void SetFileSystemForTesting(IFileSystemAccessor? fileSystem)
+    {
+        _fileSystem = fileSystem ?? RuntimeFileSystem;
+    }
+
+    internal static void SetRegistryLocationsForTesting(
+        IEnumerable<(RegistryKey Root, string Path, string Source)>? locations)
+    {
+        _registryLocationOverride = locations;
+    }
+
+    internal static void SetStartMenuRootsForTesting(IEnumerable<string>? roots)
+    {
+        _startMenuRootsOverride = roots;
+    }
+
+    internal static void ResetTestOverrides()
+    {
+        _fileSystem = RuntimeFileSystem;
+        _registryLocationOverride = null;
+        _startMenuRootsOverride = null;
+    }
+
+    internal interface IFileSystemAccessor
+    {
+        bool DirectoryExists(string? path);
+
+        IEnumerable<string> EnumerateFiles(string path, string searchPattern, EnumerationOptions options);
+
+        bool FileExists(string? path);
+    }
+
+    private sealed class RuntimeFileSystemAccessor : IFileSystemAccessor
+    {
+        public bool DirectoryExists(string? path)
+            => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path);
+
+        public IEnumerable<string> EnumerateFiles(string path, string searchPattern, EnumerationOptions options)
+            => Directory.EnumerateFiles(path, searchPattern, options);
+
+        public bool FileExists(string? path)
+            => !string.IsNullOrWhiteSpace(path) && File.Exists(path);
     }
 
     private static int ScoreCandidate(string displayName, string path)

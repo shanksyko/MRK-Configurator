@@ -2516,6 +2516,17 @@ public partial class AppEditorForm : Form
             return;
         }
 
+        if (rbExe?.Checked == true && string.IsNullOrWhiteSpace(txtExecutavel?.Text))
+        {
+            MessageBox.Show(
+                this,
+                "Informe o caminho do executável antes de iniciar o teste.",
+                "Teste de janela",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         var monitor = GetSelectedMonitor();
         if (monitor is null)
         {

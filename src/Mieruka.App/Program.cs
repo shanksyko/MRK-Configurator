@@ -89,9 +89,18 @@ internal static class Program
         minimumLevel = LogEventLevel.Debug;
 #endif
 
+        var traceOverride = Environment.GetEnvironmentVariable("MIERUKA_TRACE");
+        if (!string.IsNullOrWhiteSpace(traceOverride)
+            && (string.Equals(traceOverride, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(traceOverride, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(traceOverride, "verbose", StringComparison.OrdinalIgnoreCase)))
+        {
+            minimumLevel = LogEventLevel.Verbose;
+        }
+
         var now = DateTime.Now;
         var (logRootDirectory, logDirectory) = ResolveLogDirectories(now);
-        PruneOldLogFiles(logRootDirectory, now.AddDays(-14));
+        PruneOldLogFiles(logRootDirectory, TimeSpan.FromDays(14), now);
 
         var logFilePath = Path.Combine(logDirectory, $"{now:yyyy-MM-dd}.log");
 
@@ -112,6 +121,113 @@ internal static class Program
 #endif
 
         Log.Logger = configuration.CreateLogger();
+    }
+
+    private static (string RootDirectory, string CurrentMonthDirectory) ResolveLogDirectories(DateTime timestamp)
+    {
+        var monthSegment = timestamp.ToString("yyyy-MM");
+        var candidates = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppContext.BaseDirectory,
+            Path.GetTempPath()
+        };
+
+        foreach (var baseDirectory in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(baseDirectory))
+            {
+                continue;
+            }
+
+            try
+            {
+                var rootDirectory = Path.Combine(baseDirectory, "Mieruka", "Logs");
+                Directory.CreateDirectory(rootDirectory);
+
+                var monthDirectory = Path.Combine(rootDirectory, monthSegment);
+                Directory.CreateDirectory(monthDirectory);
+
+                return (rootDirectory, monthDirectory);
+            }
+            catch
+            {
+                // Ignore and try next location.
+            }
+        }
+
+        var fallbackRoot = Path.Combine(Path.GetTempPath(), "Mieruka", "Logs");
+        Directory.CreateDirectory(fallbackRoot);
+        var fallbackMonth = Path.Combine(fallbackRoot, monthSegment);
+        Directory.CreateDirectory(fallbackMonth);
+
+        return (fallbackRoot, fallbackMonth);
+    }
+
+    private static void PruneOldLogFiles(string rootDirectory, TimeSpan retention, DateTime referenceTime)
+    {
+        if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
+        {
+            return;
+        }
+
+        var cutoffUtc = referenceTime.ToUniversalTime().Subtract(retention);
+        var directoryOptions = new EnumerationOptions
+        {
+            RecurseSubdirectories = false,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.System | FileAttributes.ReparsePoint,
+        };
+
+        foreach (var directory in Directory.EnumerateDirectories(rootDirectory, "*", directoryOptions))
+        {
+            TryDeleteOldFiles(directory, cutoffUtc);
+            TryDeleteDirectoryIfEmpty(directory);
+        }
+
+        TryDeleteOldFiles(rootDirectory, cutoffUtc);
+    }
+
+    private static void TryDeleteOldFiles(string directory, DateTime cutoffUtc)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(directory, "*.log", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    var lastWrite = File.GetLastWriteTimeUtc(file);
+                    if (lastWrite < cutoffUtc)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch
+                {
+                    // Ignore retention failures and continue with other files.
+                }
+            }
+        }
+        catch
+        {
+            // Ignore enumeration failures for retention.
+        }
+    }
+
+    private static void TryDeleteDirectoryIfEmpty(string directory)
+    {
+        try
+        {
+            using var entries = Directory.EnumerateFileSystemEntries(directory).GetEnumerator();
+            if (!entries.MoveNext())
+            {
+                Directory.Delete(directory, false);
+            }
+        }
+        catch
+        {
+            // Ignore cleanup failures.
+        }
     }
 
     private static void WriteCrashDump()

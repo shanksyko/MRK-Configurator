@@ -17,7 +17,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
     private static readonly TimeSpan MinimumInterval = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
 
-    private readonly BindingService _bindingService;
+    private readonly BindingTrayService _bindingService;
     private readonly ITelemetry _telemetry;
     private readonly object _gate = new();
     private readonly Dictionary<string, AppConfig> _applications = new(StringComparer.OrdinalIgnoreCase);
@@ -48,7 +48,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
     /// <param name="bindingService">Service responsible for applying window placements.</param>
     /// <param name="hotkeyManager">Manager used to register global hotkeys.</param>
     /// <param name="telemetry">Optional telemetry sink used to record playback events.</param>
-    public CycleManager(BindingService bindingService, HotkeyManager? hotkeyManager = null, ITelemetry? telemetry = null)
+    public CycleManager(BindingTrayService bindingService, HotkeyManager? hotkeyManager = null, ITelemetry? telemetry = null)
     {
         _bindingService = bindingService ?? throw new ArgumentNullException(nameof(bindingService));
         _telemetry = telemetry ?? NullTelemetry.Instance;
