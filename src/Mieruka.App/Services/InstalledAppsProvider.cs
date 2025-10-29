@@ -266,7 +266,18 @@ public static class InstalledAppsProvider
             try
             {
                 shortcuts = Directory
-                    .EnumerateFiles(root, "*.lnk", SearchOption.AllDirectories)
+                    .EnumerateFiles(
+                        root,
+                        "*.lnk",
+                        new EnumerationOptions
+                        {
+                            RecurseSubdirectories = true,
+                            IgnoreInaccessible = true,
+                            AttributesToSkip = FileAttributes.System
+                                | FileAttributes.Temporary
+                                | FileAttributes.Offline
+                                | FileAttributes.ReparsePoint,
+                        })
                     .Take(MaxShortcutCandidates);
             }
             catch
@@ -274,15 +285,22 @@ public static class InstalledAppsProvider
                 continue;
             }
 
-            foreach (var shortcut in shortcuts)
+            try
             {
-                var score = ScoreCandidate(displayName, shortcut);
-                if (score <= 0)
+                foreach (var shortcut in shortcuts)
                 {
-                    continue;
-                }
+                    var score = ScoreCandidate(displayName, shortcut);
+                    if (score <= 0)
+                    {
+                        continue;
+                    }
 
-                candidates.Add((shortcut, score));
+                    candidates.Add((shortcut, score));
+                }
+            }
+            catch
+            {
+                continue;
             }
         }
 
