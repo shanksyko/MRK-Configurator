@@ -8,6 +8,7 @@ namespace Mieruka.Preview.Capture.Interop;
 internal static class GraphicsCaptureInterop
 {
     private const int E_INVALIDARG = unchecked((int)0x80070057);
+    private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private const string GraphicsCaptureItemClassId = "Windows.Graphics.Capture.GraphicsCaptureItem";
     private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private static readonly Guid GraphicsCaptureItemInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
@@ -32,23 +33,13 @@ internal static class GraphicsCaptureInterop
         var hrFactory = RoGetActivationFactory(GraphicsCaptureItemClassId, ref interopGuid, out var factoryPtr);
         if (hrFactory == E_INVALIDARG)
         {
-            if (factoryPtr != IntPtr.Zero)
-            {
-                Marshal.Release(factoryPtr);
-                factoryPtr = IntPtr.Zero;
-            }
-
-            throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao obter GraphicsCaptureItem factory. Provável WGC desabilitado por política.", nameof(monitorHandle));
+            ReleaseAndClear(ref factoryPtr);
+            throw new NotSupportedException("Windows Graphics Capture está indisponível neste host (E_INVALIDARG ao obter GraphicsCaptureItem factory).");
         }
 
         if (hrFactory == REGDB_E_CLASSNOTREG)
         {
-            if (factoryPtr != IntPtr.Zero)
-            {
-                Marshal.Release(factoryPtr);
-                factoryPtr = IntPtr.Zero;
-            }
-
+            ReleaseAndClear(ref factoryPtr);
             throw new NotSupportedException("Windows Graphics Capture não está registrado neste sistema.");
         }
 
@@ -85,6 +76,7 @@ internal static class GraphicsCaptureInterop
                 if (unk != IntPtr.Zero)
                 {
                     Marshal.Release(unk);
+                    unk = IntPtr.Zero;
                 }
 
                 Marshal.ReleaseComObject(factory);
@@ -92,10 +84,7 @@ internal static class GraphicsCaptureInterop
         }
         finally
         {
-            if (factoryPtr != IntPtr.Zero)
-            {
-                Marshal.Release(factoryPtr);
-            }
+            ReleaseAndClear(ref factoryPtr);
         }
     }
 
@@ -114,6 +103,17 @@ internal static class GraphicsCaptureInterop
         {
             Marshal.Release(devicePointer);
         }
+    }
+
+    private static void ReleaseAndClear(ref IntPtr pointer)
+    {
+        if (pointer == IntPtr.Zero)
+        {
+            return;
+        }
+
+        Marshal.Release(pointer);
+        pointer = IntPtr.Zero;
     }
 
     public static IntPtr GetInterfaceFromSurface(Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface surface, Guid interfaceId)
