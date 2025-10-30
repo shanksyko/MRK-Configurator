@@ -404,14 +404,19 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
     {
-        if (preferGpu)
+        var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
+
+        if (preferGpu && !gpuInBackoff)
         {
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
             yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+            yield break;
         }
-        else
+
+        yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+
+        if (!gpuInBackoff)
         {
-            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
         }
     }

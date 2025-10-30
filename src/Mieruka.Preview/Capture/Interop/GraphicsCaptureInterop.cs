@@ -38,7 +38,7 @@ internal static class GraphicsCaptureInterop
                 factoryPtr = IntPtr.Zero;
             }
 
-            throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao obter GraphicsCaptureItem factory. Provável WGC desabilitado por política.");
+            throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao obter GraphicsCaptureItem factory. Provável WGC desabilitado por política.", nameof(monitorHandle));
         }
 
         if (hrFactory == REGDB_E_CLASSNOTREG)
@@ -78,7 +78,7 @@ internal static class GraphicsCaptureInterop
             }
             catch (COMException ex) when (ex.HResult == E_INVALIDARG)
             {
-                throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao criar item para monitor. Provável handle inválido ou WGC desabilitado por política.", ex);
+                throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao criar item para monitor. Provável handle inválido ou WGC desabilitado por política.", nameof(monitorHandle), ex);
             }
             finally
             {

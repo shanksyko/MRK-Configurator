@@ -59,9 +59,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             throw new ArgumentException("Monitor device name is not defined.", nameof(monitor));
         }
 
-        if (!string.IsNullOrEmpty(monitor.Id) &&
-            _gpuBackoffUntil.TryGetValue(monitor.Id, out var until) &&
-            until > DateTime.UtcNow)
+        if (IsGpuInBackoff(monitor.Id))
         {
             throw new NotSupportedException("GPU capture em backoff para este display; use GDI.");
         }
@@ -143,6 +141,27 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 return true;
             }
         }
+    }
+
+    public static bool IsGpuInBackoff(string? monitorId)
+    {
+        if (string.IsNullOrWhiteSpace(monitorId))
+        {
+            return false;
+        }
+
+        if (!_gpuBackoffUntil.TryGetValue(monitorId, out var until))
+        {
+            return false;
+        }
+
+        if (until <= DateTime.UtcNow)
+        {
+            _gpuBackoffUntil.TryRemove(monitorId, out _);
+            return false;
+        }
+
+        return true;
     }
 
 #if WINDOWS10_0_19041_0_OR_GREATER
@@ -418,6 +437,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     public static bool MarkGpuBackoff(string monitorId) => false;
+
+    public static bool IsGpuInBackoff(string? monitorId) => false;
 #endif
 
     /// <summary>
