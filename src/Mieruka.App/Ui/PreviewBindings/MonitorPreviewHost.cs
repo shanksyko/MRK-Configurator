@@ -465,8 +465,21 @@ public sealed class MonitorPreviewHost : IDisposable
             {
                 if (preferGpu && string.Equals(mode, "GPU", StringComparison.OrdinalIgnoreCase))
                 {
-                    ForEvent("MonitorFallback")
-                        .Warning(ex, "Falha ao iniciar captura via GPU para {MonitorId}; tentando fallback.", MonitorId);
+                    if (ex is NotSupportedException)
+                    {
+                        ForEvent("MonitorFallback")
+                            .Warning(ex, "Captura via GPU não suportada para {MonitorId}; usando fallback GDI.", MonitorId);
+                    }
+                    else if (ex is ArgumentException)
+                    {
+                        ForEvent("MonitorFallback")
+                            .Warning(ex, "Falha ao iniciar captura via GPU para {MonitorId}; tentando fallback.", MonitorId);
+                    }
+                    else
+                    {
+                        ForEvent("MonitorFallback")
+                            .Warning(ex, "Falha inesperada ao iniciar captura via GPU para {MonitorId}; fallback será usado.", MonitorId);
+                    }
                 }
                 else
                 {
