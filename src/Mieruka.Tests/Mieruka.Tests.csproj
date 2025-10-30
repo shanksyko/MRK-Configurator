@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Referência necessária para acessar InstalledAppsProvider (na camada App) -->
+    <ProjectReference Include="../Mieruka.App/Mieruka.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="../../config/samples/appsettings.sample.json">
       <Link>config/appsettings.sample.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

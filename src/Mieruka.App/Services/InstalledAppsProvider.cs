@@ -9,7 +9,7 @@ using Serilog;
 
 namespace Mieruka.App.Services;
 
-public static class InstalledAppsProvider
+public class InstalledAppsProvider
 {
     private const int MaxExecutableCandidates = 200;
     private const int MaxShortcutCandidates = 40;
