@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Mieruka.Core.Models;
 using Serilog;
 
@@ -55,6 +56,22 @@ namespace Mieruka.Preview
                 {
                     _logger?.Warn(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI.", monitor.DeviceName);
                 }
+                throw;
+            }
+            catch (GraphicsCaptureUnavailableException ex)
+            {
+                var duration = ex.IsPermanent ? Timeout.InfiniteTimeSpan : (TimeSpan?)null;
+                var appliedBackoff = GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id, duration);
+                var disabledNow = ex.IsPermanent && GraphicsCaptureProvider.DisableGpuGlobally();
+
+                if (appliedBackoff || disabledNow)
+                {
+                    var template = ex.IsPermanent
+                        ? "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff indefinido e caindo para GDI."
+                        : "Windows Graphics Capture indisponível temporariamente para {Monitor}. Aplicando backoff e caindo para GDI.";
+                    _logger?.Warn(ex, template, monitor.DeviceName);
+                }
+
                 throw;
             }
             catch (NotSupportedException ex)

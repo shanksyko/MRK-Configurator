@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
@@ -16,6 +17,9 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// </summary>
 public sealed class MonitorPreviewHost : IDisposable
 {
+    private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
+
     private readonly PictureBox _target;
     private readonly ILogger _logger;
     private readonly object _gate = new();
@@ -23,7 +27,8 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly HashSet<Bitmap> _pendingFrames = new();
-    private TimeSpan _frameThrottle = TimeSpan.FromMilliseconds(300);
+    private TimeSpan _frameThrottle = DefaultFrameThrottle;
+    private bool _frameThrottleCustomized;
     private Bitmap? _currentFrame;
     private bool _disposed;
     private Rectangle _monitorBounds;
@@ -115,6 +120,11 @@ public sealed class MonitorPreviewHost : IDisposable
             var sanitized = value < TimeSpan.Zero ? TimeSpan.Zero : value;
             lock (_frameTimingGate)
             {
+                if (!_frameThrottleCustomized && sanitized != _frameThrottle)
+                {
+                    _frameThrottleCustomized = true;
+                }
+
                 _frameThrottle = sanitized;
                 if (_frameThrottle <= TimeSpan.Zero)
                 {
@@ -451,6 +461,8 @@ public sealed class MonitorPreviewHost : IDisposable
                 capture = factory();
                 capture.FrameArrived += OnFrameArrived;
 
+                UpdateFrameThrottleForCapture(capture);
+
                 lock (_gate)
                 {
                     Capture = capture;
@@ -739,6 +751,24 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
+    private void UpdateFrameThrottleForCapture(IMonitorCapture capture)
+    {
+        lock (_frameTimingGate)
+        {
+            if (_frameThrottleCustomized)
+            {
+                return;
+            }
+
+            var targetThrottle = capture is GraphicsCaptureProvider ? TimeSpan.Zero : GdiFrameThrottle;
+            _frameThrottle = targetThrottle;
+            if (_frameThrottle <= TimeSpan.Zero)
+            {
+                _nextFrameAt = DateTime.MinValue;
+            }
+        }
+    }
+
     private bool ShouldDisplayFrame()
     {
         if (Volatile.Read(ref _paused) == 1 || _isSuspended)
@@ -853,6 +883,22 @@ public sealed class MonitorPreviewHost : IDisposable
         if (_target.SizeMode != PictureBoxSizeMode.Zoom)
         {
             _target.SizeMode = PictureBoxSizeMode.Zoom;
+        }
+
+        EnableDoubleBuffering(_target);
+    }
+
+    private static void EnableDoubleBuffering(PictureBox target)
+    {
+        try
+        {
+            typeof(Control)
+                .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?
+                .SetValue(target, true);
+        }
+        catch
+        {
+            // Ignore failures when enabling double buffering; the preview will continue without it.
         }
     }
 

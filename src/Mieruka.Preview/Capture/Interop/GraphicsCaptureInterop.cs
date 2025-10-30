@@ -2,12 +2,14 @@
 using System;
 using System.Runtime.InteropServices;
 using Windows.Graphics.Capture;
+using Mieruka.Preview;
 
 namespace Mieruka.Preview.Capture.Interop;
 
 internal static class GraphicsCaptureInterop
 {
     private const int E_INVALIDARG = unchecked((int)0x80070057);
+    private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private const string GraphicsCaptureItemClassId = "Windows.Graphics.Capture.GraphicsCaptureItem";
     private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private static readonly Guid GraphicsCaptureItemInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
@@ -20,7 +22,7 @@ internal static class GraphicsCaptureInterop
     {
         if (!GraphicsCaptureSession.IsSupported())
         {
-            throw new NotSupportedException("Windows Graphics Capture não é suportado neste sistema.");
+            throw new GraphicsCaptureUnavailableException("Windows Graphics Capture não é suportado neste sistema.", isPermanent: true);
         }
 
         if (monitorHandle == 0)
@@ -33,13 +35,19 @@ internal static class GraphicsCaptureInterop
         if (hrFactory == E_INVALIDARG)
         {
             ReleaseAndClear(ref factoryPtr);
-            throw new NotSupportedException("Windows Graphics Capture está indisponível neste host (E_INVALIDARG ao obter GraphicsCaptureItem factory).");
+            throw new GraphicsCaptureUnavailableException(
+                "Windows Graphics Capture está indisponível neste host (E_INVALIDARG ao obter GraphicsCaptureItem factory).",
+                isPermanent: true,
+                new COMException("RoGetActivationFactory retornou E_INVALIDARG.", hrFactory));
         }
 
         if (hrFactory == REGDB_E_CLASSNOTREG)
         {
             ReleaseAndClear(ref factoryPtr);
-            throw new NotSupportedException("Windows Graphics Capture não está registrado neste sistema.");
+            throw new GraphicsCaptureUnavailableException(
+                "Windows Graphics Capture não está registrado neste sistema.",
+                isPermanent: true,
+                new COMException("RoGetActivationFactory retornou REGDB_E_CLASSNOTREG.", hrFactory));
         }
 
         Marshal.ThrowExceptionForHR(hrFactory);
