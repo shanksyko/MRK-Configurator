@@ -226,16 +226,95 @@ public sealed class MonitorPreviewDisplay : UserControl
     /// <param name="rectangles">Rectangles to display.</param>
     public void SetSimulationRects(IEnumerable<SimRect>? rectangles)
     {
-        _simRects.Clear();
+        var next = NormalizeRectangles(rectangles);
 
-        if (rectangles is not null)
+        if (AreEquivalent(_simRects, next))
         {
-            _simRects.AddRange(rectangles);
+            return;
         }
+
+        _simRects.Clear();
+        _simRects.AddRange(next);
 
         _glyphRegions.Clear();
         ClearGlyphTooltip();
         _pictureBox.Invalidate();
+    }
+
+    private static List<SimRect> NormalizeRectangles(IEnumerable<SimRect>? rectangles)
+    {
+        var result = new List<SimRect>();
+
+        if (rectangles is null)
+        {
+            return result;
+        }
+
+        foreach (var rectangle in rectangles)
+        {
+            if (rectangle is null)
+            {
+                continue;
+            }
+
+            result.Add(new SimRect
+            {
+                MonRel = rectangle.MonRel,
+                Color = rectangle.Color,
+                Order = rectangle.Order,
+                Title = rectangle.Title,
+                RequiresNetwork = rectangle.RequiresNetwork,
+                AskBefore = rectangle.AskBefore,
+            });
+        }
+
+        return result;
+    }
+
+    private static bool AreEquivalent(IReadOnlyList<SimRect> current, IReadOnlyList<SimRect> next)
+    {
+        if (current.Count != next.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < current.Count; i++)
+        {
+            var existing = current[i];
+            var candidate = next[i];
+
+            if (existing.MonRel != candidate.MonRel)
+            {
+                return false;
+            }
+
+            if (existing.Color.ToArgb() != candidate.Color.ToArgb())
+            {
+                return false;
+            }
+
+            if (existing.Order != candidate.Order)
+            {
+                return false;
+            }
+
+            if (!string.Equals(existing.Title, candidate.Title, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (existing.RequiresNetwork != candidate.RequiresNetwork)
+            {
+                return false;
+            }
+
+            if (existing.AskBefore != candidate.AskBefore)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void PictureBoxOnMouseMove(object? sender, MouseEventArgs e)

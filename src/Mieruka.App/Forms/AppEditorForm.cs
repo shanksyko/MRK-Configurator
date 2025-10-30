@@ -1792,16 +1792,16 @@ public partial class AppEditorForm : Form
 
         var source = new CancellationTokenSource();
         _hoverThrottleCts = source;
-        FlushHoverPointAsync(delay, source.Token);
+        _ = FlushHoverPointAsync(delay, source.Token);
     }
 
-    private async void FlushHoverPointAsync(TimeSpan delay, CancellationToken token)
+    private async Task FlushHoverPointAsync(TimeSpan delay, CancellationToken token)
     {
         try
         {
             if (delay > TimeSpan.Zero)
             {
-                await Task.Delay(delay, token).ConfigureAwait(true);
+                await Task.Delay(delay, token).ConfigureAwait(false);
             }
         }
         catch (TaskCanceledException)
@@ -1817,17 +1817,63 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        if (token.IsCancellationRequested || IsDisposed)
+        if (token.IsCancellationRequested)
         {
             return;
         }
 
-        CancelHoverThrottleTimer();
-        ApplyPendingHoverPoint(enforceInterval: true);
+        void ContinueOnUiThread()
+        {
+            if (token.IsCancellationRequested || IsDisposed)
+            {
+                return;
+            }
+
+            CancelHoverThrottleTimer();
+            ApplyPendingHoverPoint(enforceInterval: true);
+        }
+
+        if (InvokeRequired)
+        {
+            try
+            {
+                BeginInvoke(new Action(ContinueOnUiThread));
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore marshaling failures after disposal.
+            }
+            catch (InvalidOperationException)
+            {
+                // Ignore marshaling failures when the window handle is gone.
+            }
+
+            return;
+        }
+
+        ContinueOnUiThread();
     }
 
     private void ApplyPendingHoverPoint(bool enforceInterval)
     {
+        if (InvokeRequired)
+        {
+            try
+            {
+                BeginInvoke(new Action<bool>(ApplyPendingHoverPoint), enforceInterval);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore marshaling failures after disposal.
+            }
+            catch (InvalidOperationException)
+            {
+                // Ignore marshaling failures when the window handle is gone.
+            }
+
+            return;
+        }
+
         if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
         {
             return;
