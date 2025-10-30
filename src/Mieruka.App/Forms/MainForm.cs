@@ -39,6 +39,9 @@ public partial class MainForm : Form
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
+    private readonly AppConfig _appConfig = new();
+    private ToolStrip? _toolStrip;
+    private ToolStripButton? _btnOptions;
     private ProfileExecutor? _profileExecutor;
     private CancellationTokenSource? _profileExecutionCts;
     private Task? _profileExecutionTask;
@@ -55,6 +58,7 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+        EnsureToolbarWithOptionsButton();
         ToolTipTamer.Tame(this, components);
 
         _appRunner = new AppRunner();
@@ -88,6 +92,61 @@ public partial class MainForm : Form
         LoadInitialData();
         LoadProfileFromStore();
         UpdateButtonStates();
+    }
+
+    private void EnsureToolbarWithOptionsButton()
+    {
+        _toolStrip = Controls.OfType<ToolStrip>().FirstOrDefault();
+        if (_toolStrip == null)
+        {
+            _toolStrip = new ToolStrip
+            {
+                GripStyle = ToolStripGripStyle.Hidden,
+                RenderMode = ToolStripRenderMode.System,
+                Dock = DockStyle.Top
+            };
+            Controls.Add(_toolStrip);
+            _toolStrip.BringToFront();
+        }
+
+        var existing = _toolStrip.Items.OfType<ToolStripButton>()
+            .FirstOrDefault(b => string.Equals(b.Text, "Opções", StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            _btnOptions = existing;
+            _btnOptions.Click -= OnOptionsClick;
+            _btnOptions.Click += OnOptionsClick;
+            return;
+        }
+
+        _btnOptions = new ToolStripButton
+        {
+            Text = "Opções",
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            ToolTipText = "Abrir preferências de gráficos e prévia"
+        };
+        _btnOptions.Click += OnOptionsClick;
+        _toolStrip.Items.Add(_btnOptions);
+    }
+
+    private void OnOptionsClick(object? sender, EventArgs e)
+    {
+        ShowOptionsDialog();
+    }
+
+    private void ShowOptionsDialog()
+    {
+        using (var dlg = new OptionsForm(_appConfig))
+        {
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                ApplyGraphicsOptions();
+            }
+        }
+    }
+
+    private void ApplyGraphicsOptions()
+    {
     }
 
     private void LoadInitialData()
