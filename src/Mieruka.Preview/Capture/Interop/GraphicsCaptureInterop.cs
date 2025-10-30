@@ -8,7 +8,6 @@ namespace Mieruka.Preview.Capture.Interop;
 internal static class GraphicsCaptureInterop
 {
     private const int E_INVALIDARG = unchecked((int)0x80070057);
-    private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private const string GraphicsCaptureItemClassId = "Windows.Graphics.Capture.GraphicsCaptureItem";
     private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private static readonly Guid GraphicsCaptureItemInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
