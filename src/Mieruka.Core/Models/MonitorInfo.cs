@@ -76,4 +76,9 @@ public sealed record class MonitorInfo
     /// Stable identifier that should remain consistent across sessions.
     /// </summary>
     public string StableId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Identificador único usado para cache de captura.
+    /// </summary>
+    public string Id => string.IsNullOrEmpty(StableId) ? DeviceName : StableId;
 }

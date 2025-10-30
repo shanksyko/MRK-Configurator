@@ -1,12 +1,15 @@
 #if WINDOWS10_0_17763_0_OR_GREATER
 using System;
 using System.Runtime.InteropServices;
+using Windows.Graphics.Capture;
 
 namespace Mieruka.Preview.Capture.Interop;
 
 internal static class GraphicsCaptureInterop
 {
+    private const int E_INVALIDARG = unchecked((int)0x80070057);
     private const string GraphicsCaptureItemClassId = "Windows.Graphics.Capture.GraphicsCaptureItem";
+    private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private static readonly Guid GraphicsCaptureItemInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
     private static readonly Guid Direct3DDxgiInterfaceAccessGuid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
@@ -15,29 +18,73 @@ internal static class GraphicsCaptureInterop
 
     public static Windows.Graphics.Capture.GraphicsCaptureItem CreateItemForMonitor(nint monitorHandle)
     {
+        if (!GraphicsCaptureSession.IsSupported())
+        {
+            throw new NotSupportedException("Windows Graphics Capture não é suportado neste sistema.");
+        }
+
         if (monitorHandle == 0)
         {
-            throw new ArgumentNullException(nameof(monitorHandle));
+            throw new ArgumentException("HMONITOR inválido (IntPtr.Zero).", nameof(monitorHandle));
         }
 
         var interopGuid = GraphicsCaptureItemInteropGuid;
-        Marshal.ThrowExceptionForHR(RoGetActivationFactory(GraphicsCaptureItemClassId, ref interopGuid, out var factoryPtr));
+        var hrFactory = RoGetActivationFactory(GraphicsCaptureItemClassId, ref interopGuid, out var factoryPtr);
+        if (hrFactory == E_INVALIDARG)
+        {
+            if (factoryPtr != IntPtr.Zero)
+            {
+                Marshal.Release(factoryPtr);
+                factoryPtr = IntPtr.Zero;
+            }
+
+            throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao obter GraphicsCaptureItem factory. Provável WGC desabilitado por política.", nameof(monitorHandle));
+        }
+
+        if (hrFactory == REGDB_E_CLASSNOTREG)
+        {
+            if (factoryPtr != IntPtr.Zero)
+            {
+                Marshal.Release(factoryPtr);
+                factoryPtr = IntPtr.Zero;
+            }
+
+            throw new NotSupportedException("Windows Graphics Capture não está registrado neste sistema.");
+        }
+
+        Marshal.ThrowExceptionForHR(hrFactory);
         try
         {
             var factory = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
-            IntPtr itemPtr = IntPtr.Zero;
+            IntPtr unk = IntPtr.Zero;
 
             try
             {
                 var itemGuid = typeof(Windows.Graphics.Capture.GraphicsCaptureItem).GUID;
-                Marshal.ThrowExceptionForHR(factory.CreateForMonitor(monitorHandle, ref itemGuid, out itemPtr));
-                return (Windows.Graphics.Capture.GraphicsCaptureItem)Marshal.GetObjectForIUnknown(itemPtr);
+                var hr = factory.CreateForMonitor(monitorHandle, ref itemGuid, out unk);
+                if (hr == E_INVALIDARG)
+                {
+                    throw new COMException("CreateForMonitor retornou E_INVALIDARG.", hr);
+                }
+
+                Marshal.ThrowExceptionForHR(hr);
+
+                if (unk == IntPtr.Zero)
+                {
+                    throw new COMException("CreateForMonitor retornou ponteiro nulo.", E_INVALIDARG);
+                }
+
+                return (Windows.Graphics.Capture.GraphicsCaptureItem)Marshal.GetObjectForIUnknown(unk);
+            }
+            catch (COMException ex) when (ex.HResult == E_INVALIDARG)
+            {
+                throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao criar item para monitor. Provável handle inválido ou WGC desabilitado por política.", nameof(monitorHandle), ex);
             }
             finally
             {
-                if (itemPtr != IntPtr.Zero)
+                if (unk != IntPtr.Zero)
                 {
-                    Marshal.Release(itemPtr);
+                    Marshal.Release(unk);
                 }
 
                 Marshal.ReleaseComObject(factory);

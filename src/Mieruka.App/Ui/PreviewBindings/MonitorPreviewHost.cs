@@ -404,14 +404,19 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
     {
-        if (preferGpu)
+        var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
+
+        if (preferGpu && !gpuInBackoff)
         {
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
             yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+            yield break;
         }
-        else
+
+        yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+
+        if (!gpuInBackoff)
         {
-            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
         }
     }
@@ -465,8 +470,21 @@ public sealed class MonitorPreviewHost : IDisposable
             {
                 if (preferGpu && string.Equals(mode, "GPU", StringComparison.OrdinalIgnoreCase))
                 {
-                    ForEvent("MonitorFallback")
-                        .Warning(ex, "Falha ao iniciar captura via GPU para {MonitorId}; tentando fallback.", MonitorId);
+                    if (ex is NotSupportedException)
+                    {
+                        ForEvent("MonitorFallback")
+                            .Warning(ex, "Captura via GPU não suportada para {MonitorId}; usando fallback GDI.", MonitorId);
+                    }
+                    else if (ex is ArgumentException)
+                    {
+                        ForEvent("MonitorFallback")
+                            .Warning(ex, "Falha ao iniciar captura via GPU para {MonitorId}; tentando fallback.", MonitorId);
+                    }
+                    else
+                    {
+                        ForEvent("MonitorFallback")
+                            .Warning(ex, "Falha inesperada ao iniciar captura via GPU para {MonitorId}; fallback será usado.", MonitorId);
+                    }
                 }
                 else
                 {
