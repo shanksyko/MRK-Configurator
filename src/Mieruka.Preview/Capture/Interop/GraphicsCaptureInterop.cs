@@ -11,6 +11,7 @@ internal static class GraphicsCaptureInterop
     private const int E_INVALIDARG = unchecked((int)0x80070057);
     private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private const string GraphicsCaptureItemClassId = "Windows.Graphics.Capture.GraphicsCaptureItem";
+    private const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     private static readonly Guid GraphicsCaptureItemInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
     private static readonly Guid Direct3DDxgiInterfaceAccessGuid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
