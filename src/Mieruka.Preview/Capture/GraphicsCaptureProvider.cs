@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -19,6 +20,9 @@ namespace Mieruka.Preview;
 public sealed class GraphicsCaptureProvider : IMonitorCapture
 {
 #if WINDOWS10_0_17763_0_OR_GREATER
+    private static readonly ConcurrentDictionary<string, DateTime> _gpuBackoffUntil = new();
+    private static readonly TimeSpan Backoff = TimeSpan.FromSeconds(60);
+
     private const int FramePoolBufferCount = 4;
 
     private readonly object _gate = new();
@@ -53,6 +57,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         if (monitor.DeviceName is null)
         {
             throw new ArgumentException("Monitor device name is not defined.", nameof(monitor));
+        }
+
+        if (IsGpuInBackoff(monitor.Id))
+        {
+            throw new NotSupportedException("GPU capture em backoff para este display; use GDI.");
         }
 
         lock (_gate)
@@ -99,6 +108,60 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
 
         return Task.CompletedTask;
+    }
+
+    public static bool MarkGpuBackoff(string monitorId)
+    {
+        if (string.IsNullOrWhiteSpace(monitorId))
+        {
+            return false;
+        }
+
+        var expiration = DateTime.UtcNow + Backoff;
+
+        while (true)
+        {
+            if (_gpuBackoffUntil.TryGetValue(monitorId, out var current))
+            {
+                if (current > DateTime.UtcNow)
+                {
+                    return false;
+                }
+
+                if (_gpuBackoffUntil.TryUpdate(monitorId, expiration, current))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (_gpuBackoffUntil.TryAdd(monitorId, expiration))
+            {
+                return true;
+            }
+        }
+    }
+
+    public static bool IsGpuInBackoff(string? monitorId)
+    {
+        if (string.IsNullOrWhiteSpace(monitorId))
+        {
+            return false;
+        }
+
+        if (!_gpuBackoffUntil.TryGetValue(monitorId, out var until))
+        {
+            return false;
+        }
+
+        if (until <= DateTime.UtcNow)
+        {
+            _gpuBackoffUntil.TryRemove(monitorId, out _);
+            return false;
+        }
+
+        return true;
     }
 
 #if WINDOWS10_0_19041_0_OR_GREATER
@@ -372,6 +435,10 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     public ValueTask StopAsync() => ValueTask.CompletedTask;
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    public static bool MarkGpuBackoff(string monitorId) => false;
+
+    public static bool IsGpuInBackoff(string? monitorId) => false;
 #endif
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.Preview
 {
@@ -8,6 +9,8 @@ namespace Mieruka.Preview
     /// </summary>
     public static class WgcMonitorCapture
     {
+        private static readonly ILogger? _logger = Log.ForContext(typeof(WgcMonitorCapture));
+
         public static IMonitorCapture Create(string monitorId)
         {
             if (!OperatingSystem.IsWindows())
@@ -38,10 +41,29 @@ namespace Mieruka.Preview
 
         private static void StartCapture(IMonitorCapture capture, MonitorInfo monitor)
         {
-            var task = capture.StartAsync(monitor);
-            if (!task.IsCompleted)
+            try
             {
-                task.GetAwaiter().GetResult();
+                var task = capture.StartAsync(monitor);
+                if (!task.IsCompleted)
+                {
+                    task.GetAwaiter().GetResult();
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
+                {
+                    _logger?.Warn(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI.", monitor.DeviceName);
+                }
+                throw;
+            }
+            catch (NotSupportedException ex)
+            {
+                if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
+                {
+                    _logger?.Warn(ex, "Windows Graphics Capture não suportado neste host. Caindo para GDI.");
+                }
+                throw;
             }
         }
 
@@ -55,6 +77,14 @@ namespace Mieruka.Preview
             {
                 // Ignore cleanup exceptions when failing to create the capture.
             }
+        }
+    }
+
+    internal static class LoggerExtensions
+    {
+        public static void Warn(this ILogger logger, Exception exception, string messageTemplate, params object?[] propertyValues)
+        {
+            logger.Warning(exception, messageTemplate, propertyValues);
         }
     }
 }
