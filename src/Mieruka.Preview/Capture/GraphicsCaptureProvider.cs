@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -19,6 +20,10 @@ namespace Mieruka.Preview;
 public sealed class GraphicsCaptureProvider : IMonitorCapture
 {
 #if WINDOWS10_0_17763_0_OR_GREATER
+    private static readonly ConcurrentDictionary<string, DateTime> _gpuBackoffUntil = new();
+    private static readonly TimeSpan Backoff = TimeSpan.FromSeconds(60);
+    private static int _gpuGloballyDisabled;
+
     private const int FramePoolBufferCount = 4;
 
     private readonly object _gate = new();
@@ -45,14 +50,24 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (IsGpuGloballyDisabled)
+        {
+            throw new GraphicsCaptureUnavailableException("Windows Graphics Capture foi desativado para esta sessão.", isPermanent: true);
+        }
+
         if (!IsGraphicsCaptureAvailable)
         {
-            throw new PlatformNotSupportedException("Windows Graphics Capture is not supported on this system.");
+            throw new GraphicsCaptureUnavailableException("Windows Graphics Capture não é suportado neste sistema.", isPermanent: true);
         }
 
         if (monitor.DeviceName is null)
         {
             throw new ArgumentException("Monitor device name is not defined.", nameof(monitor));
+        }
+
+        if (IsGpuInBackoff(monitor.Id))
+        {
+            throw new NotSupportedException("GPU capture em backoff para este display; use GDI.");
         }
 
         lock (_gate)
@@ -70,36 +85,131 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             try
             {
                 InitializeDirect3D();
+
+                _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
+                _currentSize = _captureItem.Size;
+
+                _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.CreateFreeThreaded(
+                    _direct3DDevice!,
+                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                    FramePoolBufferCount,
+                    _captureItem.Size);
+
+                _framePool.FrameArrived += OnFrameArrived;
+
+                _session = _framePool.CreateCaptureSession(_captureItem);
+                if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+                {
+                    EnableCursorCapture(_session);
+                }
+                _session.StartCapture();
+
+                // ensure bounds stored so fallback can use if needed
+                _ = bounds;
             }
             catch
             {
+                if (_framePool is not null)
+                {
+                    _framePool.FrameArrived -= OnFrameArrived;
+                    _framePool.Dispose();
+                    _framePool = null;
+                }
+
+                if (_session is not null)
+                {
+                    _session.Dispose();
+                    _session = null;
+                }
+
+                _captureItem = null;
                 ReleaseDirect3D();
                 throw;
             }
-            _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
-            _currentSize = _captureItem.Size;
-
-            _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.CreateFreeThreaded(
-                _direct3DDevice!,
-                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                FramePoolBufferCount,
-                _captureItem.Size);
-
-            _framePool.FrameArrived += OnFrameArrived;
-
-            _session = _framePool.CreateCaptureSession(_captureItem);
-            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
-            {
-                EnableCursorCapture(_session);
-            }
-            _session.StartCapture();
-
-            // ensure bounds stored so fallback can use if needed
-            _ = bounds;
         }
 
         return Task.CompletedTask;
     }
+
+    public static bool MarkGpuBackoff(string monitorId, TimeSpan? durationOverride = null)
+    {
+        if (string.IsNullOrWhiteSpace(monitorId))
+        {
+            return false;
+        }
+
+        DateTime expiration;
+        if (durationOverride == Timeout.InfiniteTimeSpan)
+        {
+            expiration = DateTime.MaxValue;
+        }
+        else
+        {
+            var backoff = durationOverride ?? Backoff;
+            if (backoff <= TimeSpan.Zero)
+            {
+                expiration = DateTime.UtcNow;
+            }
+            else
+            {
+                expiration = DateTime.UtcNow + backoff;
+            }
+        }
+
+        while (true)
+        {
+            if (_gpuBackoffUntil.TryGetValue(monitorId, out var current))
+            {
+                if (current >= expiration)
+                {
+                    return false;
+                }
+
+                if (_gpuBackoffUntil.TryUpdate(monitorId, expiration, current))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (_gpuBackoffUntil.TryAdd(monitorId, expiration))
+            {
+                return true;
+            }
+        }
+    }
+
+    public static bool IsGpuInBackoff(string? monitorId)
+    {
+        if (IsGpuGloballyDisabled)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(monitorId))
+        {
+            return false;
+        }
+
+        if (!_gpuBackoffUntil.TryGetValue(monitorId, out var until))
+        {
+            return false;
+        }
+
+        if (until <= DateTime.UtcNow)
+        {
+            _gpuBackoffUntil.TryRemove(monitorId, out _);
+            return false;
+        }
+
+        return true;
+    }
+
+    public static bool IsGpuGloballyDisabled => Volatile.Read(ref _gpuGloballyDisabled) == 1;
+
+    public static bool DisableGpuGlobally()
+        => Interlocked.Exchange(ref _gpuGloballyDisabled, 1) == 0;
 
 #if WINDOWS10_0_19041_0_OR_GREATER
     [SupportedOSPlatform("windows10.0.19041")]
@@ -372,6 +482,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     public ValueTask StopAsync() => ValueTask.CompletedTask;
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    public static bool MarkGpuBackoff(string monitorId, TimeSpan? durationOverride = null) => false;
+
+    public static bool IsGpuInBackoff(string? monitorId) => false;
+
+    public static bool IsGpuGloballyDisabled => false;
+
+    public static bool DisableGpuGlobally() => false;
 #endif
 
     /// <summary>
