@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
@@ -622,10 +623,33 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        var previous = _currentFrame;
-        _currentFrame = frame;
-        _target.Image = frame;
-        previous?.Dispose();
+        Bitmap? previous = _currentFrame;
+
+        try
+        {
+            _target.Image = frame;
+            _currentFrame = frame;
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
+        {
+            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            frame.Dispose();
+            return;
+        }
+        finally
+        {
+            if (previous is not null && !ReferenceEquals(previous, _currentFrame))
+            {
+                try
+                {
+                    previous.Dispose();
+                }
+                catch
+                {
+                    // Ignorar falhas ao descartar o frame anterior.
+                }
+            }
+        }
     }
 
     private void ClearFrame()
