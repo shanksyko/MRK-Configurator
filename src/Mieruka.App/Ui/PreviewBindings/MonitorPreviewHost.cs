@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -20,6 +21,7 @@ public sealed class MonitorPreviewHost : IDisposable
 {
     private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
+    private static readonly ConcurrentDictionary<string, byte> GpuFallbackLogged = new();
 
     private readonly PictureBox _target;
     private readonly ILogger _logger;
@@ -28,6 +30,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly HashSet<Bitmap> _pendingFrames = new();
+    private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
     private Bitmap? _currentFrame;
@@ -53,6 +56,20 @@ public sealed class MonitorPreviewHost : IDisposable
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
         _logger = (logger ?? Log.ForContext<MonitorPreviewHost>()).ForContext("MonitorId", MonitorId);
+        _frameAnimationHandler = (_, _) =>
+        {
+            try
+            {
+                if (!_target.IsDisposed)
+                {
+                    _target.Invalidate();
+                }
+            }
+            catch
+            {
+                // Ignore animation callbacks during disposal.
+            }
+        };
         EnsurePictureBoxSizeMode();
     }
 
@@ -490,6 +507,11 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
 
+        if (gpuInBackoff)
+        {
+            LogGpuFallback();
+        }
+
         if (preferGpu && !gpuInBackoff)
         {
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
@@ -756,53 +778,136 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        int width;
-        int height;
-        try
+        if (!TryGetFrameSize(frame, out var width, out var height))
         {
-            width = frame.Width;
-            height = frame.Height;
-        }
-        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
-        {
-            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
             frame.Dispose();
             return;
         }
 
         if (width <= 0 || height <= 0)
         {
-            ForEvent("FrameDiscarded").Debug("Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.", width, height);
+            ForEvent("FrameDiscarded").Debug(
+                "Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.",
+                width,
+                height);
             frame.Dispose();
             return;
         }
 
-        Bitmap? previous = _currentFrame;
+        var previous = _currentFrame;
+        var animationWasStopped = false;
+
+        if (previous is not null)
+        {
+            animationWasStopped = StopAnimationSafe(previous);
+        }
 
         try
         {
             _target.Image = frame;
             _currentFrame = frame;
+            StartAnimationSafe(frame);
         }
         catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
         {
             ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            StopAnimationSafe(frame);
             frame.Dispose();
+
+            if (previous is not null)
+            {
+                if (animationWasStopped)
+                {
+                    StartAnimationSafe(previous);
+                }
+
+                _currentFrame = previous;
+            }
+
             return;
         }
         finally
         {
             if (previous is not null && !ReferenceEquals(previous, _currentFrame))
             {
-                try
-                {
-                    previous.Dispose();
-                }
-                catch
-                {
-                    // Ignorar falhas ao descartar o frame anterior.
-                }
+                DisposeFrame(previous);
             }
+        }
+    }
+
+    private bool TryGetFrameSize(Image frame, out int width, out int height)
+    {
+        try
+        {
+            width = frame.Width;
+            height = frame.Height;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
+        {
+            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            width = 0;
+            height = 0;
+            return false;
+        }
+    }
+
+    private bool StopAnimationSafe(Image image)
+    {
+        if (!CanAnimate(image))
+        {
+            return false;
+        }
+
+        try
+        {
+            ImageAnimator.StopAnimate(image, _frameAnimationHandler);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void StartAnimationSafe(Image image)
+    {
+        if (!CanAnimate(image))
+        {
+            return;
+        }
+
+        try
+        {
+            ImageAnimator.Animate(image, _frameAnimationHandler);
+        }
+        catch
+        {
+            // Ignore animation failures.
+        }
+    }
+
+    private static bool CanAnimate(Image image)
+    {
+        try
+        {
+            return ImageAnimator.CanAnimate(image);
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
+        {
+            return false;
+        }
+    }
+
+    private static void DisposeFrame(Image frame)
+    {
+        try
+        {
+            frame.Dispose();
+        }
+        catch
+        {
+            // Ignore dispose failures.
         }
     }
 
@@ -810,7 +915,11 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         if (_target.IsDisposed)
         {
-            _currentFrame?.Dispose();
+            if (_currentFrame is not null)
+            {
+                StopAnimationSafe(_currentFrame);
+                DisposeFrame(_currentFrame);
+            }
             _currentFrame = null;
             ResetFrameThrottle();
             return;
@@ -835,8 +944,12 @@ public sealed class MonitorPreviewHost : IDisposable
             _target.Image = null;
         }
 
-        _currentFrame?.Dispose();
-        _currentFrame = null;
+        if (_currentFrame is not null)
+        {
+            StopAnimationSafe(_currentFrame);
+            DisposeFrame(_currentFrame);
+            _currentFrame = null;
+        }
         ResetFrameThrottle();
     }
 
@@ -1139,6 +1252,21 @@ public sealed class MonitorPreviewHost : IDisposable
         }
 
         ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
+    }
+
+    private void LogGpuFallback()
+    {
+        if (!GpuFallbackLogged.TryAdd(MonitorId, 0))
+        {
+            return;
+        }
+
+        if (_suppressEvents)
+        {
+            return;
+        }
+
+        _logger.Information("GpuCaptureFallbackAtivado");
     }
 
     private void EnsurePictureBoxSizeMode()
