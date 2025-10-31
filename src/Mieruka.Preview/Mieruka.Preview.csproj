@@ -12,8 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="Vortice.Windows" />
-    <PackageReference Include="Microsoft.Windows.SDK.NET" />
+    <PackageReference Include="Vortice.Direct3D11" />
+    <PackageReference Include="Vortice.DXGI" />
+    <PackageReference Include="Microsoft.Windows.SDK.NET.Ref" />
+    <PackageReference Include="Microsoft.Windows.CsWinRT" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
 </Project>
