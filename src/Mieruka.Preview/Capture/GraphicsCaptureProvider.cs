@@ -377,11 +377,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.ID3D11Texture2D texture, int width, int height)
     {
         var description = texture.Description;
+        var safeWidth = Math.Max(1, width);
+        var safeHeight = Math.Max(1, height);
 
         var stagingDesc = new Vortice.Direct3D11.Texture2DDescription
         {
-            Width = width,
-            Height = height,
+            Width = safeWidth,
+            Height = safeHeight,
             MipLevels = 1,
             ArraySize = 1,
             Format = description.Format,
@@ -399,9 +401,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         try
         {
-            var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var bitmap = new Bitmap(safeWidth, safeHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             var bitmapData = bitmap.LockBits(
-                new Rectangle(0, 0, width, height),
+                new Rectangle(0, 0, safeWidth, safeHeight),
                 System.Drawing.Imaging.ImageLockMode.WriteOnly,
                 System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
@@ -411,9 +413,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 {
                     var sourcePtr = (byte*)dataBox.DataPointer;
                     var destinationPtr = (byte*)bitmapData.Scan0;
-                    var bytesPerRow = width * 4;
+                    var bytesPerRow = safeWidth * 4;
 
-                    for (var y = 0; y < height; y++)
+                    for (var y = 0; y < safeHeight; y++)
                     {
                         Buffer.MemoryCopy(sourcePtr, destinationPtr, bitmapData.Stride, bytesPerRow);
                         sourcePtr += dataBox.RowPitch;
