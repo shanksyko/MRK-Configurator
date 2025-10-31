@@ -600,8 +600,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         var stagingDesc = new Vortice.Direct3D11.Texture2DDescription
         {
-            Width = safeWidth,
-            Height = safeHeight,
+            Width = (uint)safeWidth,
+            Height = (uint)safeHeight,
             MipLevels = 1,
             ArraySize = 1,
             Format = description.Format,
