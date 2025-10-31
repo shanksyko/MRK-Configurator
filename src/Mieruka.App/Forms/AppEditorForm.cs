@@ -26,6 +26,7 @@ using Mieruka.Core.Contracts;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Serilog;
 using Serilog.Context;
+using MethodInvoker = System.Windows.Forms.MethodInvoker;
 
 namespace Mieruka.App.Forms;
 
@@ -92,6 +93,8 @@ public partial class AppEditorForm : Form
     private Point? _hoverPendingPoint;
     private Point? _hoverAppliedPoint;
     private CancellationTokenSource? _hoverThrottleCts;
+    private readonly SynchronizationContext? _uiContext;
+    private readonly int _uiThreadId;
     private readonly IInstalledAppsProvider _installedAppsProvider = new RegistryInstalledAppsProvider();
     private readonly List<InstalledAppInfo> _allApps = new();
     private readonly Label _installedAppsStatusLabel = new();
@@ -119,6 +122,8 @@ public partial class AppEditorForm : Form
         _editSessionId = Guid.NewGuid();
         _logScope = LogContext.PushProperty("EditSessionId", _editSessionId);
         InitializeComponent();
+        _uiThreadId = Environment.CurrentManagedThreadId;
+        _uiContext = SynchronizationContext.Current;
         ToolTipTamer.Tame(this, components);
 
         var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
@@ -1726,14 +1731,19 @@ public partial class AppEditorForm : Form
 
     private void UpdateMonitorCoordinateLabel(Point? coordinates)
     {
-        if (lblMonitorCoordinates is null)
+        if (lblMonitorCoordinates is not { IsDisposed: false } label)
         {
             return;
         }
 
-        lblMonitorCoordinates.Text = coordinates is null
+        var text = coordinates is null
             ? "X=–, Y=–"
-            : $"X={coordinates.Value.X}, Y={coordinates.Value.Y}";
+            : FormattableString.Invariant($"X={coordinates.Value.X}, Y={coordinates.Value.Y}");
+
+        if (!string.Equals(label.Text, text, StringComparison.Ordinal))
+        {
+            label.Text = text;
+        }
     }
 
     private void MonitorPreviewDisplay_MouseMovedInMonitorSpace(object? sender, Point point)
@@ -1792,16 +1802,16 @@ public partial class AppEditorForm : Form
 
         var source = new CancellationTokenSource();
         _hoverThrottleCts = source;
-        FlushHoverPointAsync(delay, source.Token);
+        _ = FlushHoverPointAsync(delay, source.Token);
     }
 
-    private async void FlushHoverPointAsync(TimeSpan delay, CancellationToken token)
+    private async Task FlushHoverPointAsync(TimeSpan delay, CancellationToken token)
     {
         try
         {
             if (delay > TimeSpan.Zero)
             {
-                await Task.Delay(delay, token).ConfigureAwait(true);
+                await Task.Delay(delay, token).ConfigureAwait(false);
             }
         }
         catch (TaskCanceledException)
@@ -1822,18 +1832,38 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        CancelHoverThrottleTimer();
-        ApplyPendingHoverPoint(enforceInterval: true);
+        MarshalToUi(() =>
+        {
+            if (token.IsCancellationRequested || IsDisposed)
+            {
+                return;
+            }
+
+            CancelHoverThrottleTimer();
+            ApplyPendingHoverPoint(enforceInterval: true);
+        });
     }
 
     private void ApplyPendingHoverPoint(bool enforceInterval)
     {
-        if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
+        if (!IsOnUiThread())
+        {
+            MarshalToUi(() => ApplyPendingHoverPoint(enforceInterval));
+            return;
+        }
+
+        var preview = monitorPreviewDisplay;
+        if (preview is null || preview.IsDisposed || preview.IsInteractionSuppressed)
         {
             return;
         }
 
         if (_hoverPendingPoint is not Point pending)
+        {
+            return;
+        }
+
+        if (!TryGetWindowInputs(out var xInput, out var yInput, out var widthInput, out var heightInput))
         {
             return;
         }
@@ -1858,7 +1888,92 @@ public partial class AppEditorForm : Form
 
         _hoverSw.Restart();
         _hoverAppliedPoint = pending;
-        _ = ClampWindowInputsToMonitor(pending);
+        _ = ClampWindowInputsToMonitor(pending, windowInputs: (xInput, yInput, widthInput, heightInput));
+    }
+
+    private void MarshalToUi(Action action)
+    {
+        if (action is null || IsDisposed)
+        {
+            return;
+        }
+
+        void InvokeSafely()
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                action();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore callbacks that race with disposal.
+            }
+            catch (InvalidOperationException ex) when (IsDisposed || !IsHandleCreated)
+            {
+                Logger.Debug(ex, "Callback ignorado devido ao controle estar indisponível.");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Falha ao processar callback de UI agendado.");
+            }
+        }
+
+        var callback = new MethodInvoker(InvokeSafely);
+
+        if (!IsOnUiThread())
+        {
+            var context = _uiContext;
+            if (context is not null)
+            {
+                try
+                {
+                    context.Post(static state =>
+                    {
+                        if (state is MethodInvoker invoker)
+                        {
+                            invoker();
+                        }
+                    }, callback);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Ignore context disposal during shutdown.
+                }
+                catch (InvalidOperationException)
+                {
+                    // Ignore marshaling failures when the context is no longer available.
+                }
+
+                return;
+            }
+
+            try
+            {
+                BeginInvoke(callback);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Ignore marshaling failures after disposal.
+            }
+            catch (InvalidOperationException)
+            {
+                // Ignore marshaling failures when the window handle is gone.
+            }
+
+            return;
+        }
+
+        InvokeSafely();
+    }
+
+    private bool IsOnUiThread()
+    {
+        return Environment.CurrentManagedThreadId == _uiThreadId;
     }
 
     private void CancelHoverThrottleTimer()
@@ -1887,20 +2002,32 @@ public partial class AppEditorForm : Form
         pending.Dispose();
     }
 
-    private bool ClampWindowInputsToMonitor(Point? pointer, bool allowFullScreen = false)
+    private bool ClampWindowInputsToMonitor(
+        Point? pointer,
+        bool allowFullScreen = false,
+        (NumericUpDown X, NumericUpDown Y, NumericUpDown Width, NumericUpDown Height)? windowInputs = null)
     {
-        if (!allowFullScreen && chkJanelaTelaCheia.Checked)
+        var fullScreenToggle = chkJanelaTelaCheia;
+        if (!allowFullScreen && fullScreenToggle is not null && !fullScreenToggle.IsDisposed && fullScreenToggle.Checked)
         {
             return false;
         }
 
-        if (nudJanelaX is null ||
-            nudJanelaY is null ||
-            nudJanelaLargura is null ||
-            nudJanelaAltura is null)
+        (NumericUpDown X, NumericUpDown Y, NumericUpDown Width, NumericUpDown Height) inputs;
+        if (windowInputs is { } provided)
+        {
+            inputs = provided;
+        }
+        else if (!TryGetWindowInputs(out var xInput, out var yInput, out var widthInput, out var heightInput))
         {
             return false;
         }
+        else
+        {
+            inputs = (xInput, yInput, widthInput, heightInput);
+        }
+
+        var (xControl, yControl, widthControl, heightControl) = inputs;
 
         var monitor = GetSelectedMonitor();
         if (monitor is null)
@@ -1911,22 +2038,22 @@ public partial class AppEditorForm : Form
         var changed = false;
 
         _suppressWindowInputHandlers = true;
-        using var redrawScope = RedrawScope.Begin(nudJanelaX!, nudJanelaY!, nudJanelaLargura!, nudJanelaAltura!);
+        using var redrawScope = RedrawScope.Begin(xControl, yControl, widthControl, heightControl);
         try
         {
-            var width = (int)nudJanelaLargura.Value;
+            var width = (int)widthControl.Value;
             if (monitor.Width > 0)
             {
                 var clampedWidth = Math.Clamp(width, 1, monitor.Width);
-                changed |= UpdateNumericControl(nudJanelaLargura, clampedWidth);
+                changed |= UpdateNumericControl(widthControl, clampedWidth);
                 width = clampedWidth;
             }
 
-            var height = (int)nudJanelaAltura.Value;
+            var height = (int)heightControl.Value;
             if (monitor.Height > 0)
             {
                 var clampedHeight = Math.Clamp(height, 1, monitor.Height);
-                changed |= UpdateNumericControl(nudJanelaAltura, clampedHeight);
+                changed |= UpdateNumericControl(heightControl, clampedHeight);
                 height = clampedHeight;
             }
 
@@ -1946,25 +2073,25 @@ public partial class AppEditorForm : Form
                     targetY = Math.Clamp(targetY, 0, maxY);
                 }
 
-                changed |= UpdateNumericControl(nudJanelaX, targetX);
-                changed |= UpdateNumericControl(nudJanelaY, targetY);
+                changed |= UpdateNumericControl(xControl, targetX);
+                changed |= UpdateNumericControl(yControl, targetY);
             }
             else
             {
                 if (monitor.Width > 0)
                 {
-                    var currentX = (int)nudJanelaX.Value;
+                    var currentX = (int)xControl.Value;
                     var maxX = Math.Max(0, monitor.Width - width);
                     var clampedX = Math.Clamp(currentX, 0, maxX);
-                    changed |= UpdateNumericControl(nudJanelaX, clampedX);
+                    changed |= UpdateNumericControl(xControl, clampedX);
                 }
 
                 if (monitor.Height > 0)
                 {
-                    var currentY = (int)nudJanelaY.Value;
+                    var currentY = (int)yControl.Value;
                     var maxY = Math.Max(0, monitor.Height - height);
                     var clampedY = Math.Clamp(currentY, 0, maxY);
-                    changed |= UpdateNumericControl(nudJanelaY, clampedY);
+                    changed |= UpdateNumericControl(yControl, clampedY);
                 }
             }
         }
@@ -1979,6 +2106,31 @@ public partial class AppEditorForm : Form
         }
 
         return changed;
+    }
+
+    private bool TryGetWindowInputs(
+        out NumericUpDown xInput,
+        out NumericUpDown yInput,
+        out NumericUpDown widthInput,
+        out NumericUpDown heightInput)
+    {
+        if (nudJanelaX is NumericUpDown x && !x.IsDisposed &&
+            nudJanelaY is NumericUpDown y && !y.IsDisposed &&
+            nudJanelaLargura is NumericUpDown width && !width.IsDisposed &&
+            nudJanelaAltura is NumericUpDown height && !height.IsDisposed)
+        {
+            xInput = x;
+            yInput = y;
+            widthInput = width;
+            heightInput = height;
+            return true;
+        }
+
+        xInput = null!;
+        yInput = null!;
+        widthInput = null!;
+        heightInput = null!;
+        return false;
     }
 
     private static bool UpdateNumericControl(NumericUpDown control, int value)
@@ -2036,7 +2188,8 @@ public partial class AppEditorForm : Form
 
     private void InvalidateWindowPreviewOverlay()
     {
-        if (monitorPreviewDisplay is null)
+        var preview = monitorPreviewDisplay;
+        if (preview is null || preview.IsDisposed)
         {
             return;
         }
@@ -2052,7 +2205,7 @@ public partial class AppEditorForm : Form
 
         if (snapshot.Equals(_windowPreviewSnapshot))
         {
-            monitorPreviewDisplay.Invalidate();
+            preview.Invalidate();
             return;
         }
 
@@ -2066,7 +2219,7 @@ public partial class AppEditorForm : Form
                 ScheduleWindowPreviewRebuild(delay);
             }
 
-            monitorPreviewDisplay.Invalidate();
+            preview.Invalidate();
             return;
         }
 
