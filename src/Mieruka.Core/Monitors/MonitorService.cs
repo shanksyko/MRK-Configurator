@@ -114,17 +114,29 @@ public sealed class MonitorService : IMonitorService
     {
         var descriptors = new List<MonitorDescriptor>();
 
-        var flags = QueryDisplayConfigFlags.QdcOnlyActivePaths | QueryDisplayConfigFlags.QdcVirtualModeAware;
-        if (GetDisplayConfigBufferSizes(flags, out var pathCount, out var modeCount) != ErrorSuccess || pathCount == 0)
+        var flags = QueryDisplayConfigFlags.QdcOnlyActivePaths;
+        var bufferResult = GetDisplayConfigBufferSizes(flags, out var pathCount, out var modeCount);
+        if (bufferResult != ErrorSuccess || pathCount == 0)
         {
+            ForEvent("MonitorFallback")
+                .Warning(
+                    "QueryDisplayConfig não pôde fornecer caminhos ativos (hr={Result}, paths={PathCount}, modes={ModeCount}).",
+                    bufferResult,
+                    pathCount,
+                    modeCount);
             return descriptors;
         }
 
         var paths = new DISPLAYCONFIG_PATH_INFO[pathCount];
         var modes = new DISPLAYCONFIG_MODE_INFO[modeCount];
 
-        if (QueryDisplayConfig(flags, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero) != ErrorSuccess)
+        var queryResult = QueryDisplayConfig(flags, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero);
+        if (queryResult != ErrorSuccess)
         {
+            ForEvent("MonitorFallback")
+                .Warning(
+                    "QueryDisplayConfig falhou com HRESULT {Result}; usando fallback GDI.",
+                    queryResult);
             return descriptors;
         }
 

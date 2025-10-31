@@ -481,27 +481,25 @@ public sealed class MonitorPreviewHost : IDisposable
             }
             catch (Exception ex)
             {
+                var reason = $"{ex.GetType().Name}: {ex.Message}";
                 if (preferGpu && string.Equals(mode, "GPU", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (ex is NotSupportedException)
-                    {
-                        ForEvent("MonitorFallback")
-                            .Warning(ex, "Captura via GPU não suportada para {MonitorId}; usando fallback GDI.", MonitorId);
-                    }
-                    else if (ex is ArgumentException)
-                    {
-                        ForEvent("MonitorFallback")
-                            .Warning(ex, "Falha ao iniciar captura via GPU para {MonitorId}; tentando fallback.", MonitorId);
-                    }
-                    else
-                    {
-                        ForEvent("MonitorFallback")
-                            .Warning(ex, "Falha inesperada ao iniciar captura via GPU para {MonitorId}; fallback será usado.", MonitorId);
-                    }
+                    ForEvent("MonitorFallback")
+                        .Warning(
+                            ex,
+                            "Fallback para GDI habilitado. Monitor={MonitorId}; Fábrica={Factory}; Motivo={Reason}",
+                            MonitorId,
+                            mode,
+                            reason);
                 }
                 else
                 {
-                    _logger.Warning(ex, "Falha ao iniciar captura ({Mode}) para {MonitorId}.", mode, MonitorId);
+                    _logger.Warning(
+                        ex,
+                        "Falha ao iniciar captura ({Mode}) para {MonitorId}. Motivo={Reason}",
+                        mode,
+                        MonitorId,
+                        reason);
                 }
                 if (capture is not null)
                 {

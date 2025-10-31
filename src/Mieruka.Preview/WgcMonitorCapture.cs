@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Mieruka.Core.Models;
 using Serilog;
@@ -18,6 +19,8 @@ namespace Mieruka.Preview
             {
                 throw new PlatformNotSupportedException("Monitor preview is only supported on Windows.");
             }
+
+            EnsureGpuEnvironmentCompatible(monitorId);
 
             var monitor = MonitorLocator.Find(monitorId)
                 ?? throw new InvalidOperationException($"Monitor '{monitorId}' não foi encontrado.");
@@ -84,6 +87,33 @@ namespace Mieruka.Preview
             }
         }
 
+        private static void EnsureGpuEnvironmentCompatible(string monitorId)
+        {
+            if (WgcEnvironment.IsRemoteSession())
+            {
+                _logger?.Information(
+                    "Sessão remota detectada; captura GPU será ignorada para {MonitorId}.",
+                    monitorId);
+                throw new NotSupportedException("Windows Graphics Capture indisponível em sessões remotas.");
+            }
+
+            if (!Environment.UserInteractive)
+            {
+                _logger?.Information(
+                    "Ambiente headless detectado; captura GPU será ignorada para {MonitorId}.",
+                    monitorId);
+                throw new NotSupportedException("Windows Graphics Capture indisponível em ambiente headless.");
+            }
+
+            if (!GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
+            {
+                _logger?.Information(
+                    "Windows Graphics Capture não está disponível nesta instalação; usando fallback para {MonitorId}.",
+                    monitorId);
+                throw new NotSupportedException("Windows Graphics Capture não está disponível neste host.");
+            }
+        }
+
         private static void SafeDispose(IMonitorCapture capture)
         {
             try
@@ -103,6 +133,31 @@ namespace Mieruka.Preview
         {
             logger.Warning(exception, messageTemplate, propertyValues);
         }
+    }
+
+    internal static class WgcEnvironment
+    {
+        private const int SmRemoteSession = 0x1000;
+
+        public static bool IsRemoteSession()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return false;
+            }
+
+            try
+            {
+                return GetSystemMetrics(SmRemoteSession) != 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
     }
 }
 
