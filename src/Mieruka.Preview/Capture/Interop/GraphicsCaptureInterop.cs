@@ -1,8 +1,9 @@
 #if WINDOWS10_0_17763_0_OR_GREATER
 using System;
 using System.Runtime.InteropServices;
-using Windows.Graphics.Capture;
 using Mieruka.Preview;
+using Windows.Graphics.Capture;
+using WinRT;
 
 namespace Mieruka.Preview.Capture.Interop;
 
@@ -52,13 +53,13 @@ internal static class GraphicsCaptureInterop
         Marshal.ThrowExceptionForHR(hrFactory);
         try
         {
-            var factory = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
-            IntPtr unk = IntPtr.Zero;
+            var factory = MarshalInterface<IGraphicsCaptureItemInterop>.FromAbi(factoryPtr);
+            var itemGuid = typeof(Windows.Graphics.Capture.GraphicsCaptureItem).GUID;
+            IntPtr itemPtr = IntPtr.Zero;
 
             try
             {
-                var itemGuid = typeof(Windows.Graphics.Capture.GraphicsCaptureItem).GUID;
-                var hr = factory.CreateForMonitor(monitorHandle, ref itemGuid, out unk);
+                var hr = factory.CreateForMonitor(monitorHandle, ref itemGuid, out itemPtr);
                 if (hr == E_INVALIDARG)
                 {
                     throw new COMException("CreateForMonitor retornou E_INVALIDARG.", hr);
@@ -66,12 +67,14 @@ internal static class GraphicsCaptureInterop
 
                 Marshal.ThrowExceptionForHR(hr);
 
-                if (unk == IntPtr.Zero)
+                if (itemPtr == IntPtr.Zero)
                 {
                     throw new COMException("CreateForMonitor retornou ponteiro nulo.", E_INVALIDARG);
                 }
 
-                return (Windows.Graphics.Capture.GraphicsCaptureItem)Marshal.GetObjectForIUnknown(unk);
+                var item = MarshalInterface<Windows.Graphics.Capture.GraphicsCaptureItem>.FromAbi(itemPtr);
+                itemPtr = IntPtr.Zero;
+                return item;
             }
             catch (COMException ex) when (ex.HResult == E_INVALIDARG)
             {
@@ -79,35 +82,12 @@ internal static class GraphicsCaptureInterop
             }
             finally
             {
-                if (unk != IntPtr.Zero)
-                {
-                    Marshal.Release(unk);
-                    unk = IntPtr.Zero;
-                }
-
-                Marshal.ReleaseComObject(factory);
+                ReleaseAndClear(ref itemPtr);
             }
         }
         finally
         {
             ReleaseAndClear(ref factoryPtr);
-        }
-    }
-
-    public static Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice CreateDirect3DDevice(IntPtr devicePointer)
-    {
-        if (devicePointer == IntPtr.Zero)
-        {
-            throw new ArgumentNullException(nameof(devicePointer));
-        }
-
-        try
-        {
-            return (Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice)Marshal.GetObjectForIUnknown(devicePointer);
-        }
-        finally
-        {
-            Marshal.Release(devicePointer);
         }
     }
 
@@ -131,24 +111,15 @@ internal static class GraphicsCaptureInterop
         {
             var accessGuid = Direct3DDxgiInterfaceAccessGuid;
             Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, ref accessGuid, out var accessPtr));
-            IDirect3DDxgiInterfaceAccess access = null!;
             try
             {
-                access = (IDirect3DDxgiInterfaceAccess)Marshal.GetObjectForIUnknown(accessPtr);
-            }
-            finally
-            {
-                Marshal.Release(accessPtr);
-            }
-
-            try
-            {
+                var access = MarshalInterface<IDirect3DDxgiInterfaceAccess>.FromAbi(accessPtr);
                 Marshal.ThrowExceptionForHR(access.GetInterface(ref interfaceId, out var nativeResource));
                 return nativeResource;
             }
             finally
             {
-                Marshal.ReleaseComObject(access);
+                Marshal.Release(accessPtr);
             }
         }
         finally
