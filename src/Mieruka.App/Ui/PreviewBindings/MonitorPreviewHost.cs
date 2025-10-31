@@ -405,12 +405,17 @@ public sealed class MonitorPreviewHost : IDisposable
 
     public void Dispose()
     {
+        DisposeInternal(allowRetry: true);
+    }
+
+    private void DisposeInternal(bool allowRetry)
+    {
         if (_disposed)
         {
             return;
         }
 
-        if (!TryEnterStartStop(nameof(Dispose), PostDispose, out var scope))
+        if (!TryEnterStartStop(nameof(Dispose), allowRetry ? PostDispose : null, out var scope))
         {
             return;
         }
@@ -429,37 +434,6 @@ public sealed class MonitorPreviewHost : IDisposable
             StopCoreUnsafe(clearFrame: true, resetPaused: true);
 
             GC.SuppressFinalize(this);
-        }
-    }
-
-    private void PostDispose()
-    {
-        if (_suppressEvents || _target.IsDisposed)
-        {
-            return;
-        }
-
-        try
-        {
-            _target.BeginInvoke(new Action(() =>
-            {
-                try
-                {
-                    Dispose();
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-                catch (InvalidOperationException)
-                {
-                }
-            }));
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        catch (InvalidOperationException)
-        {
         }
     }
 
@@ -496,6 +470,37 @@ public sealed class MonitorPreviewHost : IDisposable
 
         scope = new StartStopScope(this);
         return true;
+    }
+
+    private void PostDispose()
+    {
+        if (_suppressEvents || _target.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _target.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    DisposeInternal(allowRetry: false);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private void ExitStartStop()
