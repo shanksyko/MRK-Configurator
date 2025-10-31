@@ -1826,7 +1826,7 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        if (token.IsCancellationRequested || IsDisposed)
+        if (token.IsCancellationRequested)
         {
             return;
         }
