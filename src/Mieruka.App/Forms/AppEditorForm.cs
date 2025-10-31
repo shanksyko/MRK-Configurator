@@ -26,6 +26,7 @@ using Mieruka.Core.Contracts;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Serilog;
 using Serilog.Context;
+using MethodInvoker = System.Windows.Forms.MethodInvoker;
 
 namespace Mieruka.App.Forms;
 
