@@ -45,6 +45,8 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _paused;
     private int _busy;
     private int _frameCallbackGate;
+    private int _inStartStop;
+    private bool _suppressEvents;
 
     public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
     {
@@ -391,9 +393,26 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        _disposed = true;
-        Stop();
-        GC.SuppressFinalize(this);
+        if (!TryEnterStartStop(nameof(Dispose), retryAction: null, out var scope))
+        {
+            return;
+        }
+
+        using (scope)
+        {
+            _suppressEvents = true;
+            _disposed = true;
+
+            lock (_stateGate)
+            {
+                _hasActiveSession = false;
+                _isSuspended = false;
+            }
+
+            StopCaptureCoreUnsafe(clearFrame: true, resetPaused: true);
+
+            GC.SuppressFinalize(this);
+        }
     }
 
     private bool TryEnterBusy(out BusyScope scope)
@@ -411,6 +430,29 @@ public sealed class MonitorPreviewHost : IDisposable
     private void ExitBusy()
     {
         Interlocked.Exchange(ref _busy, 0);
+    }
+
+    private bool TryEnterStartStop(string operation, Action? retryAction, out StartStopScope scope)
+    {
+        if (Interlocked.CompareExchange(ref _inStartStop, 1, 0) != 0)
+        {
+            scope = default;
+            if (!_suppressEvents)
+            {
+                LogReentrancyBlocked(operation);
+                retryAction?.Invoke();
+            }
+
+            return false;
+        }
+
+        scope = new StartStopScope(this);
+        return true;
+    }
+
+    private void ExitStartStop()
+    {
+        Volatile.Write(ref _inStartStop, 0);
     }
 
     private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
@@ -439,9 +481,38 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        if (Capture is not null)
+        if (!TryEnterStartStop(nameof(Start), () => PostStart(preferGpu), out var scope))
         {
+            if (_suppressEvents)
+            {
+                lock (_gate)
+                {
+                    return Capture is not null;
+                }
+            }
+
             return true;
+        }
+
+        using (scope)
+        {
+            return StartCoreUnsafe(preferGpu);
+        }
+    }
+
+    private bool StartCoreUnsafe(bool preferGpu)
+    {
+        if (_disposed)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            if (Capture is not null)
+            {
+                return true;
+            }
         }
 
         if (!OperatingSystem.IsWindows())
@@ -494,12 +565,15 @@ public sealed class MonitorPreviewHost : IDisposable
                 }
                 else
                 {
-                    _logger.Warning(
-                        ex,
-                        "Falha ao iniciar captura ({Mode}) para {MonitorId}. Motivo={Reason}",
-                        mode,
-                        MonitorId,
-                        reason);
+                    if (!_suppressEvents)
+                    {
+                        _logger.Warning(
+                            ex,
+                            "Falha ao iniciar captura ({Mode}) para {MonitorId}. Motivo={Reason}",
+                            mode,
+                            MonitorId,
+                            reason);
+                    }
                 }
                 if (capture is not null)
                 {
@@ -522,9 +596,18 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
+        if (_suppressEvents)
+        {
+            e.Dispose();
+            return;
+        }
+
         if (Interlocked.Exchange(ref _frameCallbackGate, 1) != 0)
         {
-            _logger.Information("ReentrancyBlocked");
+            if (!_suppressEvents)
+            {
+                _logger.Information("ReentrancyBlocked");
+            }
             e.Dispose();
             return;
         }
@@ -584,6 +667,13 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void UpdateTarget(Bitmap frame)
     {
+        if (_suppressEvents)
+        {
+            UnregisterPendingFrame(frame);
+            frame.Dispose();
+            return;
+        }
+
         if (_target.IsDisposed)
         {
             UnregisterPendingFrame(frame);
@@ -707,6 +797,19 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void StopCaptureCore(bool clearFrame, bool resetPaused = true)
     {
+        if (!TryEnterStartStop(nameof(Stop), () => PostStop(clearFrame, resetPaused), out var scope))
+        {
+            return;
+        }
+
+        using (scope)
+        {
+            StopCaptureCoreUnsafe(clearFrame, resetPaused);
+        }
+    }
+
+    private void StopCaptureCoreUnsafe(bool clearFrame, bool resetPaused = true)
+    {
         IMonitorCapture? capture;
         lock (_gate)
         {
@@ -718,7 +821,10 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             capture.FrameArrived -= OnFrameArrived;
             SafeDispose(capture);
-            _logger.Information("CaptureDisposed");
+            if (!_suppressEvents)
+            {
+                _logger.Information("CaptureDisposed");
+            }
         }
 
         DisposePendingFrames();
@@ -758,6 +864,68 @@ public sealed class MonitorPreviewHost : IDisposable
 
         StopCaptureCore(clearFrame: false, resetPaused: resetPaused);
         return true;
+    }
+
+    private void PostStart(bool preferGpu)
+    {
+        if (_suppressEvents || _disposed || _target.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _target.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    StartCore(preferGpu);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private void PostStop(bool clearFrame, bool resetPaused)
+    {
+        if (_suppressEvents || _target.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _target.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    StopCaptureCore(clearFrame, resetPaused);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private bool ShouldProcessFrame()
@@ -919,7 +1087,14 @@ public sealed class MonitorPreviewHost : IDisposable
         => _logger.ForContext("EventId", eventId);
 
     private void LogReentrancyBlocked(string operation)
-        => ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
+    {
+        if (_suppressEvents)
+        {
+            return;
+        }
+
+        ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
+    }
 
     private void EnsurePictureBoxSizeMode()
     {
@@ -1093,6 +1268,21 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 #endif
+
+    private readonly struct StartStopScope : IDisposable
+    {
+        private readonly MonitorPreviewHost? _owner;
+
+        public StartStopScope(MonitorPreviewHost owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            _owner?.ExitStartStop();
+        }
+    }
 
     private readonly struct BusyScope : IDisposable
     {

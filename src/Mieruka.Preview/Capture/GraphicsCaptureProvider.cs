@@ -30,6 +30,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private static readonly ConcurrentDictionary<string, DateTime> _gpuBackoffUntil = new();
     private static readonly TimeSpan Backoff = TimeSpan.FromSeconds(60);
     private static readonly ILogger Logger = Log.ForContext<GraphicsCaptureProvider>();
+#if DEBUG
+    private static readonly AsyncLocal<int> _dispatchDepth = new();
+#endif
     private static int _gpuGloballyDisabled;
 
     private const int MinFramePoolBufferCount = 2;
@@ -514,23 +517,41 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         var width = size.Width;
         var height = size.Height;
 
-        if (width < 1 || height < 1)
+        var sanitizedWidth = ClampDimension(width);
+        var sanitizedHeight = ClampDimension(height);
+
+        if (sanitizedWidth != width || sanitizedHeight != height)
         {
             Logger.Debug(
-                "Normalizando dimensões de captura {Width}x{Height} para {Monitor}.",
+                "Normalizando dimensões de captura {Width}x{Height} para {Monitor} => {SanitizedWidth}x{SanitizedHeight}.",
                 width,
                 height,
-                monitorName ?? "desconhecido");
+                monitorName ?? "desconhecido",
+                sanitizedWidth,
+                sanitizedHeight);
         }
-
-        width = Math.Max(1, width);
-        height = Math.Max(1, height);
 
         return new Windows.Graphics.SizeInt32
         {
-            Width = width,
-            Height = height,
+            Width = sanitizedWidth,
+            Height = sanitizedHeight,
         };
+    }
+
+    private static int ClampDimension(int value)
+    {
+        if (value < 1)
+        {
+            return 1;
+        }
+
+        const int MaxDimension = ushort.MaxValue;
+        if (value > MaxDimension)
+        {
+            return MaxDimension;
+        }
+
+        return value;
     }
 
     private static int ClampFramePoolBufferCount(int requested)
@@ -632,8 +653,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.ID3D11Texture2D texture, int width, int height)
     {
         var description = texture.Description;
-        var safeWidth = Math.Max(1, width);
-        var safeHeight = Math.Max(1, height);
+        var safeWidth = ClampDimension(width);
+        var safeHeight = ClampDimension(height);
 
         var stagingDesc = new Vortice.Direct3D11.Texture2DDescription
         {
@@ -701,7 +722,27 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             return;
         }
 
-        handler(this, new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow));
+        var args = new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow);
+
+#if DEBUG
+        var nextDepth = _dispatchDepth.Value + 1;
+        _dispatchDepth.Value = nextDepth;
+        try
+        {
+            if (nextDepth > 1)
+            {
+                Logger.Debug("DispatchDepth {Depth}", nextDepth);
+            }
+
+            handler(this, args);
+        }
+        finally
+        {
+            _dispatchDepth.Value = nextDepth - 1;
+        }
+#else
+        handler(this, args);
+#endif
     }
 
 #else
