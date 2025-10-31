@@ -14,6 +14,7 @@ using Vortice.DXGI;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
+using Windows.Foundation;
 #endif
 using Serilog;
 
@@ -411,8 +412,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         if (_direct3DDevice is not null)
         {
             Logger.Debug("Liberando wrapper Direct3D11 (tipo {Type}).", _direct3DDevice.GetType().FullName);
-            _direct3DDevice.Dispose();
-            _direct3DDevice = null;
+            DisposeComObject(ref _direct3DDevice);
         }
 
         if (_d3dContext is not null)
@@ -428,6 +428,40 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             Logger.Debug("Liberando device D3D11 (tipo {Type}).", _d3dDevice.GetType().FullName);
             _d3dDevice.Dispose();
             _d3dDevice = null;
+        }
+    }
+
+    private static void DisposeComObject<T>(ref T? comObject)
+        where T : class
+    {
+        var instance = comObject;
+        comObject = null;
+
+        if (instance is null)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (instance)
+            {
+                case IDisposable disposable:
+                    disposable.Dispose();
+                    return;
+                case IClosable closable:
+                    closable.Close();
+                    return;
+            }
+
+            if (Marshal.IsComObject(instance))
+            {
+                Marshal.FinalReleaseComObject(instance);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug(ex, "Falha ao liberar recurso COM {Type}.", instance.GetType().FullName);
         }
     }
 
