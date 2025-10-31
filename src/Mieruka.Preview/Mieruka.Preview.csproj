@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.18362.0</TargetPlatformMinVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -14,7 +15,6 @@
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="Vortice.Direct3D11" />
     <PackageReference Include="Vortice.DXGI" />
-    <PackageReference Include="Microsoft.Windows.SDK.NET.Ref" />
     <PackageReference Include="Microsoft.Windows.CsWinRT" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
