@@ -3,7 +3,6 @@ using System;
 using System.Runtime.InteropServices;
 using Mieruka.Preview;
 using Windows.Graphics.Capture;
-using WinRT;
 
 namespace Mieruka.Preview.Capture.Interop;
 
@@ -53,7 +52,7 @@ internal static class GraphicsCaptureInterop
         Marshal.ThrowExceptionForHR(hrFactory);
         try
         {
-            var factory = MarshalInterface<IGraphicsCaptureItemInterop>.FromAbi(factoryPtr);
+            var factory = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
             var itemGuid = typeof(Windows.Graphics.Capture.GraphicsCaptureItem).GUID;
             IntPtr itemPtr = IntPtr.Zero;
 
@@ -72,7 +71,7 @@ internal static class GraphicsCaptureInterop
                     throw new COMException("CreateForMonitor retornou ponteiro nulo.", E_INVALIDARG);
                 }
 
-                var item = MarshalInterface<Windows.Graphics.Capture.GraphicsCaptureItem>.FromAbi(itemPtr);
+                var item = (Windows.Graphics.Capture.GraphicsCaptureItem)Marshal.GetObjectForIUnknown(itemPtr);
                 itemPtr = IntPtr.Zero;
                 return item;
             }
@@ -83,6 +82,7 @@ internal static class GraphicsCaptureInterop
             finally
             {
                 ReleaseAndClear(ref itemPtr);
+                Marshal.ReleaseComObject(factory);
             }
         }
         finally
@@ -111,14 +111,20 @@ internal static class GraphicsCaptureInterop
         {
             var accessGuid = Direct3DDxgiInterfaceAccessGuid;
             Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, ref accessGuid, out var accessPtr));
+            IDirect3DDxgiInterfaceAccess? access = null;
             try
             {
-                var access = MarshalInterface<IDirect3DDxgiInterfaceAccess>.FromAbi(accessPtr);
+                access = (IDirect3DDxgiInterfaceAccess)Marshal.GetObjectForIUnknown(accessPtr);
                 Marshal.ThrowExceptionForHR(access.GetInterface(ref interfaceId, out var nativeResource));
                 return nativeResource;
             }
             finally
             {
+                if (access is not null)
+                {
+                    Marshal.ReleaseComObject(access);
+                }
+
                 Marshal.Release(accessPtr);
             }
         }
