@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Concurrent;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
 #if WINDOWS10_0_17763_0_OR_GREATER
 using Mieruka.Preview.Capture.Interop;
-using SharpGen.Runtime;
+using Vortice.Direct3D;
+using Vortice.Direct3D11;
+using Vortice.DXGI;
+using Windows.Graphics.Capture;
+using Windows.Graphics.DirectX;
+using Windows.Graphics.DirectX.Direct3D11;
 #endif
 
 namespace Mieruka.Preview;
@@ -27,12 +31,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private const int FramePoolBufferCount = 4;
 
     private readonly object _gate = new();
-    private Windows.Graphics.Capture.Direct3D11CaptureFramePool? _framePool;
-    private Windows.Graphics.Capture.GraphicsCaptureSession? _session;
-    private Windows.Graphics.Capture.GraphicsCaptureItem? _captureItem;
-    private Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice? _direct3DDevice;
-    private Vortice.Direct3D11.ID3D11Device? _d3dDevice;
-    private Vortice.Direct3D11.ID3D11DeviceContext? _d3dContext;
+    private Direct3D11CaptureFramePool? _framePool;
+    private GraphicsCaptureSession? _session;
+    private GraphicsCaptureItem? _captureItem;
+    private IDirect3DDevice? _direct3DDevice;
+    private ID3D11Device? _d3dDevice;
+    private ID3D11DeviceContext? _d3dContext;
     private Windows.Graphics.SizeInt32 _currentSize;
 
     /// <inheritdoc />
@@ -89,9 +93,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
                 _currentSize = _captureItem.Size;
 
-                _framePool = Windows.Graphics.Capture.Direct3D11CaptureFramePool.CreateFreeThreaded(
+                _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
                     _direct3DDevice!,
-                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                    DirectXPixelFormat.B8G8R8A8UIntNormalized,
                     FramePoolBufferCount,
                     _captureItem.Size);
 
@@ -213,13 +217,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
 #if WINDOWS10_0_19041_0_OR_GREATER
     [SupportedOSPlatform("windows10.0.19041")]
-    private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
+    private static void EnableCursorCapture(GraphicsCaptureSession session)
     {
         session.IsCursorCaptureEnabled = true;
     }
 #else
     [SupportedOSPlatform("windows10.0.19041")]
-    private static void EnableCursorCapture(Windows.Graphics.Capture.GraphicsCaptureSession session)
+    private static void EnableCursorCapture(GraphicsCaptureSession session)
     {
         // Cursor capture is not available on this target contract.
     }
@@ -259,9 +263,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     }
 
     [SupportedOSPlatform("windows10.0.17763")]
-    private void OnFrameArrived(Windows.Graphics.Capture.Direct3D11CaptureFramePool sender, object args)
+    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
-        Windows.Graphics.Capture.Direct3D11CaptureFrame? frame = null;
+        Direct3D11CaptureFrame? frame = null;
 
         try
         {
@@ -281,7 +285,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 _currentSize = frame.ContentSize;
                 sender.Recreate(
                     _direct3DDevice!,
-                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                    DirectXPixelFormat.B8G8R8A8UIntNormalized,
                     FramePoolBufferCount,
                     _currentSize);
             }
@@ -308,65 +312,42 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             return;
         }
 
-        var creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.VideoSupport;
+        const DeviceCreationFlags creationFlags = DeviceCreationFlags.BgraSupport;
         var featureLevels = new[]
         {
-            Vortice.Direct3D.FeatureLevel.Level_12_1,
-            Vortice.Direct3D.FeatureLevel.Level_12_0,
-            Vortice.Direct3D.FeatureLevel.Level_11_1,
-            Vortice.Direct3D.FeatureLevel.Level_11_0,
-            Vortice.Direct3D.FeatureLevel.Level_10_1,
-            Vortice.Direct3D.FeatureLevel.Level_10_0,
+            FeatureLevel.Level_11_1,
+            FeatureLevel.Level_11_0,
         };
 
-        var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-            IntPtr.Zero,
-            Vortice.Direct3D.DriverType.Hardware,
+        var result = D3D11.D3D11CreateDevice(
+            null,
+            DriverType.Hardware,
             creationFlags,
             featureLevels,
             out var device,
-            out var featureLevel,
+            out _,
             out var context);
 
         if (result.Failure)
         {
-            result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-                IntPtr.Zero,
-                Vortice.Direct3D.DriverType.Warp,
+            result = D3D11.D3D11CreateDevice(
+                null,
+                DriverType.Warp,
                 creationFlags,
                 featureLevels,
                 out device,
-                out featureLevel,
+                out _,
                 out context);
         }
 
         result.CheckError();
 
-        if (device is null || context is null)
-        {
-            throw new InvalidOperationException("Failed to create a Direct3D device context for capture.");
-        }
+        _d3dDevice = device ?? throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
+        _d3dContext = context ?? throw new InvalidOperationException("Failed to create a Direct3D context for capture.");
 
-        _ = featureLevel;
-
-        _d3dDevice = device;
-        _d3dContext = context;
-
-        using var dxgiDevice = _d3dDevice.QueryInterface<Vortice.DXGI.IDXGIDevice>();
-        var hr = CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice.NativePointer, out var graphicsDevice);
-        Marshal.ThrowExceptionForHR(hr);
-        if (graphicsDevice == IntPtr.Zero)
-        {
-            throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
-        }
-        try
-        {
-            _direct3DDevice = GraphicsCaptureInterop.CreateDirect3DDevice(graphicsDevice);
-        }
-        finally
-        {
-            Marshal.Release(graphicsDevice);
-        }
+        using var dxgiDevice = _d3dDevice.QueryInterface<IDXGIDevice>();
+        _direct3DDevice = Direct3D11Helper.CreateDevice(dxgiDevice)
+            ?? throw new InvalidOperationException("Failed to create a Windows Graphics Capture device wrapper.");
     }
 
     [SupportedOSPlatform("windows10.0.17763")]
@@ -465,8 +446,6 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         handler(this, new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow));
     }
 
-    [DllImport("d3d11.dll", ExactSpelling = true)]
-    private static extern int CreateDirect3D11DeviceFromDXGIDevice(IntPtr dxgiDevice, out IntPtr graphicsDevice);
 #else
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived
     {
