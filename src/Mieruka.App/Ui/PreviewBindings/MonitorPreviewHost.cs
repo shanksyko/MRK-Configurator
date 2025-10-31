@@ -704,14 +704,27 @@ public sealed class MonitorPreviewHost : IDisposable
             try
             {
                 var bitmap = e.Frame;
-                clone = bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), bitmap.PixelFormat);
+                if (!TryGetFrameSize(bitmap, out var width, out var height))
+                {
+                    return;
+                }
+
+                if (width <= 0 || height <= 0)
+                {
+                    ForEvent("FrameDiscarded").Debug(
+                        "Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.",
+                        width,
+                        height);
+                    return;
+                }
+
+                clone = TryCloneFrame(bitmap, width, height);
 #if DEBUG
-                DrawDebugOverlay(clone);
+                if (clone is not null)
+                {
+                    DrawDebugOverlay(clone);
+                }
 #endif
-            }
-            catch
-            {
-                // Ignore frame cloning issues.
             }
             finally
             {
@@ -729,6 +742,32 @@ public sealed class MonitorPreviewHost : IDisposable
         finally
         {
             Interlocked.Exchange(ref _frameCallbackGate, 0);
+        }
+    }
+
+    private Bitmap? TryCloneFrame(Image frame, int width, int height)
+    {
+        try
+        {
+            return new Bitmap(frame);
+        }
+        catch (Exception ex) when (ex is ArgumentException or ExternalException or InvalidOperationException)
+        {
+            ForEvent("FrameDiscarded").Debug(
+                ex,
+                "Quadro de pré-visualização descartado por falha ao clonar frame {Width}x{Height}.",
+                width,
+                height);
+            return null;
+        }
+        catch (Exception ex) when (ex is OutOfMemoryException)
+        {
+            ForEvent("FrameDiscarded").Warning(
+                ex,
+                "Quadro de pré-visualização descartado por falta de memória ao clonar frame {Width}x{Height}.",
+                width,
+                height);
+            return null;
         }
     }
 

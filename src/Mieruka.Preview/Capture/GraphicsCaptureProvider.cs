@@ -464,7 +464,6 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             if (closeMethod is not null)
             {
                 closeMethod.Invoke(instance, null);
-                return;
             }
         }
         catch (Exception ex)
@@ -477,17 +476,15 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             if (instance is IDisposable disposable)
             {
                 disposable.Dispose();
-                return;
             }
         }
-        catch (Exception ex) when (ex is InvalidCastException or COMException)
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidCastException or COMException)
         {
             Logger.Debug(ex, "Dispose falhou para recurso COM {Type}; tentando liberação final.", type.FullName);
         }
         catch (Exception ex)
         {
             Logger.Debug(ex, "Falha inesperada ao liberar recurso COM {Type} via IDisposable.", type.FullName);
-            return;
         }
 
         try
