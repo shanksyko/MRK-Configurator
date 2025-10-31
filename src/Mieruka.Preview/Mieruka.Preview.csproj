@@ -15,7 +15,6 @@
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="Vortice.Direct3D11" />
     <PackageReference Include="Vortice.DXGI" />
-    <PackageReference Include="Microsoft.Windows.SDK.NET" Version="10.0.26100.81" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
 </Project>
