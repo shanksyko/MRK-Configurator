@@ -621,6 +621,27 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
+        int width;
+        int height;
+        try
+        {
+            width = frame.Width;
+            height = frame.Height;
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
+        {
+            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            frame.Dispose();
+            return;
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            ForEvent("FrameDiscarded").Debug("Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.", width, height);
+            frame.Dispose();
+            return;
+        }
+
         Bitmap? previous = _currentFrame;
 
         try
