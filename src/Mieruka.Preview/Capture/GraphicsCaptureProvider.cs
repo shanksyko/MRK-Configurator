@@ -444,14 +444,17 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         try
         {
-            switch (instance)
+            if (instance is IDisposable disposable)
             {
-                case IDisposable disposable:
-                    disposable.Dispose();
-                    return;
-                case IClosable closable:
-                    closable.Close();
-                    return;
+                disposable.Dispose();
+                return;
+            }
+
+            var closeMethod = instance.GetType().GetMethod("Close", Type.EmptyTypes);
+            if (closeMethod is not null)
+            {
+                closeMethod.Invoke(instance, null);
+                return;
             }
 
             if (Marshal.IsComObject(instance))
