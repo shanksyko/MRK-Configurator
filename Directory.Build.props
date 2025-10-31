@@ -1,11 +1,7 @@
 <Project>
   <PropertyGroup>
-    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <WarningsAsMessages>$(WarningsAsMessages);NETSDK1137</WarningsAsMessages>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" PrivateAssets="all" />
-  </ItemGroup>
 </Project>

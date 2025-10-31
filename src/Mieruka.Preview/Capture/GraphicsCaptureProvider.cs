@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,7 @@ using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 #endif
+using Serilog;
 
 namespace Mieruka.Preview;
 
@@ -26,9 +28,15 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 #if WINDOWS10_0_17763_0_OR_GREATER
     private static readonly ConcurrentDictionary<string, DateTime> _gpuBackoffUntil = new();
     private static readonly TimeSpan Backoff = TimeSpan.FromSeconds(60);
+    private static readonly ILogger Logger = Log.ForContext<GraphicsCaptureProvider>();
     private static int _gpuGloballyDisabled;
 
-    private const int FramePoolBufferCount = 4;
+    private const int MinFramePoolBufferCount = 2;
+    private const int MaxFramePoolBufferCount = 3;
+    private const int DxgiErrorDeviceRemoved = unchecked((int)0x887A0005);
+    private const int DxgiErrorDeviceReset = unchecked((int)0x887A0007);
+    private const int DxgiErrorUnsupported = unchecked((int)0x887A0004);
+    private const DirectXPixelFormat CapturePixelFormat = DirectXPixelFormat.B8G8R8A8UIntNormalized;
 
     private readonly object _gate = new();
     private Direct3D11CaptureFramePool? _framePool;
@@ -38,6 +46,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private ID3D11Device? _d3dDevice;
     private ID3D11DeviceContext? _d3dContext;
     private Windows.Graphics.SizeInt32 _currentSize;
+    private string? _monitorId;
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
@@ -88,16 +97,29 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             try
             {
+                _monitorId = monitor.Id;
                 InitializeDirect3D();
 
                 _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
-                _currentSize = _captureItem.Size;
+                var rawSize = _captureItem.Size;
+                _currentSize = SanitizeContentSize(rawSize, monitor.DeviceName);
 
-                _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
-                    _direct3DDevice!,
-                    DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                    FramePoolBufferCount,
-                    _captureItem.Size);
+                if (rawSize.Width <= 0 || rawSize.Height <= 0)
+                {
+                    throw new GraphicsCaptureUnavailableException(
+                        "Windows Graphics Capture retornou um item sem área visível (provável monitor minimizado).",
+                        isPermanent: false);
+                }
+
+                var bufferCount = ClampFramePoolBufferCount(MaxFramePoolBufferCount);
+                Logger.Debug(
+                    "Criando frame pool WGC para {Monitor} com {Width}x{Height} e {Buffers} buffers.",
+                    monitor.DeviceName,
+                    _currentSize.Width,
+                    _currentSize.Height,
+                    bufferCount);
+
+                _framePool = CreateFramePool(bufferCount, _currentSize);
 
                 _framePool.FrameArrived += OnFrameArrived;
 
@@ -111,24 +133,25 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 // ensure bounds stored so fallback can use if needed
                 _ = bounds;
             }
-            catch
+            catch (GraphicsCaptureUnavailableException)
             {
-                if (_framePool is not null)
-                {
-                    _framePool.FrameArrived -= OnFrameArrived;
-                    _framePool.Dispose();
-                    _framePool = null;
-                }
-
-                if (_session is not null)
-                {
-                    _session.Dispose();
-                    _session = null;
-                }
-
-                _captureItem = null;
-                ReleaseDirect3D();
+                CleanupAfterFailure();
                 throw;
+            }
+            catch (COMException ex)
+            {
+                var failure = TranslateAndWrap("StartCapture", ex);
+                CleanupAfterFailure();
+                throw failure;
+            }
+            catch (Exception ex)
+            {
+                CleanupAfterFailure();
+                Logger.Error(ex, "Falha inesperada ao inicializar captura WGC para {Monitor}.", monitor.DeviceName);
+                throw new GraphicsCaptureUnavailableException(
+                    "Falha inesperada ao inicializar Windows Graphics Capture.",
+                    isPermanent: false,
+                    ex);
             }
         }
 
@@ -235,21 +258,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     {
         lock (_gate)
         {
-            if (_framePool is not null)
-            {
-                _framePool.FrameArrived -= OnFrameArrived;
-                _framePool.Dispose();
-                _framePool = null;
-            }
-
-            if (_session is not null)
-            {
-                _session.Dispose();
-                _session = null;
-            }
-
-            _captureItem = null;
-            ReleaseDirect3D();
+            CleanupAfterFailure();
         }
 
         return ValueTask.CompletedTask;
@@ -277,26 +286,52 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             if (frame.ContentSize.Width <= 0 || frame.ContentSize.Height <= 0)
             {
+                Logger.Debug("Frame WGC com dimensões inválidas {Width}x{Height}; descartando.", frame.ContentSize.Width, frame.ContentSize.Height);
                 return;
             }
 
             if (!frame.ContentSize.Equals(_currentSize) && _framePool is not null && _captureItem is not null)
             {
-                _currentSize = frame.ContentSize;
-                sender.Recreate(
-                    _direct3DDevice!,
-                    DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                    FramePoolBufferCount,
-                    _currentSize);
+                var rawSize = frame.ContentSize;
+                _currentSize = SanitizeContentSize(rawSize, _captureItem.DisplayName);
+                if (rawSize.Width <= 0 || rawSize.Height <= 0)
+                {
+                    Logger.Debug("Frame pool reportou dimensões zero após resize; aguardando próximos frames.");
+                    return;
+                }
+
+                try
+                {
+                    sender.Recreate(
+                        _direct3DDevice!,
+                        CapturePixelFormat,
+                        ClampFramePoolBufferCount(MaxFramePoolBufferCount),
+                        _currentSize);
+                }
+                catch (COMException ex)
+                {
+                    HandleFrameFailure("RecreateFramePool", ex);
+                    return;
+                }
+            }
+
+            if (_d3dDevice is null || _d3dContext is null)
+            {
+                Logger.Debug("Contexto D3D ausente durante processamento de frame; ignorando frame atual.");
+                return;
             }
 
             using var texture = CreateTextureFromSurface(frame.Surface);
             var bitmap = CopyTextureToBitmap(texture, frame.ContentSize.Width, frame.ContentSize.Height);
             DispatchFrame(bitmap);
         }
-        catch
+        catch (COMException ex)
         {
-            // Ignore transient frame failures.
+            HandleFrameFailure("FrameProcessing", ex);
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug(ex, "Falha transitória ao processar frame WGC.");
         }
         finally
         {
@@ -325,44 +360,227 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             creationFlags,
             featureLevels,
             out var device,
-            out _,
+            out var selectedLevel,
             out var context);
 
         if (result.Failure)
         {
+            Logger.Debug(
+                "Falha ao criar device D3D11 com driver Hardware (0x{HResult:X8}); tentando WARP.",
+                result.Code);
             result = D3D11.D3D11CreateDevice(
                 null,
                 DriverType.Warp,
                 creationFlags,
                 featureLevels,
                 out device,
-                out _,
+                out selectedLevel,
                 out context);
         }
 
-        result.CheckError();
+        if (result.Failure)
+        {
+            ThrowDeviceCreationFailure(result.Code, "D3D11CreateDevice");
+        }
 
         _d3dDevice = device ?? throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
         _d3dContext = context ?? throw new InvalidOperationException("Failed to create a Direct3D context for capture.");
 
-        // Obtain the DXGI device interface from the Direct3D device and bridge it to WinRT.
+        var featureLevel = selectedLevel;
+        if (featureLevel < FeatureLevel.Level_11_0)
+        {
+            ReleaseDirect3D();
+            throw new GraphicsCaptureUnavailableException(
+                $"Windows Graphics Capture requer Direct3D 11; nível atual {featureLevel}.",
+                isPermanent: true);
+        }
+
         using var dxgiDevice = _d3dDevice.QueryInterface<IDXGIDevice>();
         _direct3DDevice = Direct3D11Helper.CreateDeviceFromDxgiDevice(dxgiDevice)
             ?? throw new InvalidOperationException("Failed to create a Windows Graphics Capture device wrapper.");
+
+        Logger.Debug(
+            "Device D3D11 criado ({FeatureLevel}) com contexto {ContextType}.",
+            featureLevel,
+            _d3dContext.GetType().FullName);
     }
 
     [SupportedOSPlatform("windows10.0.17763")]
     private void ReleaseDirect3D()
     {
-        _direct3DDevice?.Dispose();
-        _direct3DDevice = null;
+        if (_direct3DDevice is not null)
+        {
+            Logger.Debug("Liberando wrapper Direct3D11 (tipo {Type}).", _direct3DDevice.GetType().FullName);
+            _direct3DDevice.Dispose();
+            _direct3DDevice = null;
+        }
 
-        _d3dContext?.ClearState();
-        _d3dContext?.Dispose();
-        _d3dContext = null;
+        if (_d3dContext is not null)
+        {
+            Logger.Debug("Liberando contexto D3D11 (tipo {Type}).", _d3dContext.GetType().FullName);
+            _d3dContext.ClearState();
+            _d3dContext.Dispose();
+            _d3dContext = null;
+        }
 
-        _d3dDevice?.Dispose();
-        _d3dDevice = null;
+        if (_d3dDevice is not null)
+        {
+            Logger.Debug("Liberando device D3D11 (tipo {Type}).", _d3dDevice.GetType().FullName);
+            _d3dDevice.Dispose();
+            _d3dDevice = null;
+        }
+    }
+
+    private void CleanupAfterFailure()
+    {
+        if (_framePool is not null)
+        {
+            _framePool.FrameArrived -= OnFrameArrived;
+            _framePool.Dispose();
+            _framePool = null;
+        }
+
+        if (_session is not null)
+        {
+            _session.Dispose();
+            _session = null;
+        }
+
+        _captureItem = null;
+        _monitorId = null;
+        ReleaseDirect3D();
+    }
+
+    private Direct3D11CaptureFramePool CreateFramePool(int bufferCount, Windows.Graphics.SizeInt32 size)
+    {
+        if (_direct3DDevice is null)
+        {
+            throw new InvalidOperationException("Direct3D device was not initialized.");
+        }
+
+        try
+        {
+            return Direct3D11CaptureFramePool.CreateFreeThreaded(
+                _direct3DDevice,
+                CapturePixelFormat,
+                ClampFramePoolBufferCount(bufferCount),
+                size);
+        }
+        catch (COMException ex)
+        {
+            throw TranslateAndWrap("CreateFramePool", ex);
+        }
+    }
+
+    private static Windows.Graphics.SizeInt32 SanitizeContentSize(Windows.Graphics.SizeInt32 size, string? monitorName)
+    {
+        var width = size.Width;
+        var height = size.Height;
+
+        if (width < 1 || height < 1)
+        {
+            Logger.Debug(
+                "Normalizando dimensões de captura {Width}x{Height} para {Monitor}.",
+                width,
+                height,
+                monitorName ?? "desconhecido");
+        }
+
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+
+        return new Windows.Graphics.SizeInt32
+        {
+            Width = width,
+            Height = height,
+        };
+    }
+
+    private static int ClampFramePoolBufferCount(int requested)
+    {
+        if (requested < MinFramePoolBufferCount)
+        {
+            return MinFramePoolBufferCount;
+        }
+
+        if (requested > MaxFramePoolBufferCount)
+        {
+            return MaxFramePoolBufferCount;
+        }
+
+        return requested;
+    }
+
+    private GraphicsCaptureUnavailableException TranslateAndWrap(string stage, COMException exception)
+    {
+        var hresult = exception.HResult;
+        var permanent = hresult switch
+        {
+            DxgiErrorUnsupported => true,
+            _ => false,
+        };
+
+        Logger.Warning(
+            exception,
+            "Windows Graphics Capture falhou em {Stage} (HRESULT 0x{HResult:X8}).",
+            stage,
+            hresult);
+
+        if (!permanent && _monitorId is not null)
+        {
+            MarkGpuBackoff(_monitorId);
+        }
+
+        return new GraphicsCaptureUnavailableException(
+            $"Windows Graphics Capture falhou em {stage} (HRESULT 0x{hresult:X8}).",
+            permanent,
+            exception);
+    }
+
+    private void HandleFrameFailure(string stage, COMException exception)
+    {
+        Logger.Debug(
+            exception,
+            "Falha COM durante {Stage} (HRESULT 0x{HResult:X8}).",
+            stage,
+            exception.HResult);
+
+        if (exception.HResult is DxgiErrorDeviceRemoved or DxgiErrorDeviceReset)
+        {
+            Logger.Warning(
+                exception,
+                "Device D3D11 foi perdido durante {Stage}; interrompendo captura e ativando fallback.",
+                stage);
+
+            if (_monitorId is not null)
+            {
+                MarkGpuBackoff(_monitorId);
+            }
+
+            lock (_gate)
+            {
+                CleanupAfterFailure();
+            }
+        }
+    }
+
+    private void ThrowDeviceCreationFailure(int hresult, string stage)
+    {
+        Logger.Error(
+            "Falha ao criar recursos D3D11 ({Stage}) com HRESULT 0x{HResult:X8}.",
+            stage,
+            hresult);
+
+        var permanent = hresult switch
+        {
+            DxgiErrorUnsupported => true,
+            _ => false,
+        };
+
+        throw new GraphicsCaptureUnavailableException(
+            $"Falha ao inicializar Direct3D (HRESULT 0x{hresult:X8} em {stage}).",
+            permanent,
+            new COMException($"D3D falhou com HRESULT 0x{hresult:X8}.", hresult));
     }
 
     [SupportedOSPlatform("windows10.0.17763")]
