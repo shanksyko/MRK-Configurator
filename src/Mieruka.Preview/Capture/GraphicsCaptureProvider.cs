@@ -345,8 +345,9 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _d3dDevice = device ?? throw new InvalidOperationException("Failed to create a Direct3D device for capture.");
         _d3dContext = context ?? throw new InvalidOperationException("Failed to create a Direct3D context for capture.");
 
+        // Obtain the DXGI device interface from the Direct3D device and bridge it to WinRT.
         using var dxgiDevice = _d3dDevice.QueryInterface<IDXGIDevice>();
-        _direct3DDevice = Direct3D11Helper.CreateDevice(dxgiDevice)
+        _direct3DDevice = Direct3D11Helper.CreateDeviceFromDxgiDevice(dxgiDevice)
             ?? throw new InvalidOperationException("Failed to create a Windows Graphics Capture device wrapper.");
     }
 
