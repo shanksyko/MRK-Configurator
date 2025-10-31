@@ -108,7 +108,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 var rawSize = _captureItem.Size;
                 _currentSize = SanitizeContentSize(rawSize, monitor.DeviceName);
 
-                if (rawSize.Width <= 0 || rawSize.Height <= 0)
+                if (rawSize.Width <= 0 || rawSize.Height <= 0 || _currentSize.Width <= 0 || _currentSize.Height <= 0)
                 {
                     throw new GraphicsCaptureUnavailableException(
                         "Windows Graphics Capture retornou um item sem área visível (provável monitor minimizado).",
@@ -122,6 +122,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                     _currentSize.Width,
                     _currentSize.Height,
                     bufferCount);
+
+                if (_currentSize.Width <= 0 || _currentSize.Height <= 0)
+                {
+                    throw new GraphicsCaptureUnavailableException(
+                        "Dimensões do frame pool inválidas após sanitização.",
+                        isPermanent: false);
+                }
 
                 _framePool = CreateFramePool(bufferCount, _currentSize);
 
@@ -304,6 +311,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                     return;
                 }
 
+                if (_currentSize.Width <= 0 || _currentSize.Height <= 0)
+                {
+                    Logger.Debug("Dimensões sanitizadas inválidas após resize: {Width}x{Height}.", _currentSize.Width, _currentSize.Height);
+                    return;
+                }
+
                 try
                 {
                     sender.Recreate(
@@ -437,12 +450,26 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private static void DisposeComObject<T>(ref T? comObject)
         where T : class
     {
-        var instance = comObject;
-        comObject = null;
-
+        var instance = Interlocked.Exchange(ref comObject, null);
         if (instance is null)
         {
             return;
+        }
+
+        var type = instance.GetType();
+
+        try
+        {
+            var closeMethod = type.GetMethod("Close", Type.EmptyTypes);
+            if (closeMethod is not null)
+            {
+                closeMethod.Invoke(instance, null);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug(ex, "Falha ao invocar Close() em recurso COM {Type}.", type.FullName);
         }
 
         try
@@ -452,14 +479,19 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 disposable.Dispose();
                 return;
             }
+        }
+        catch (Exception ex) when (ex is InvalidCastException or COMException)
+        {
+            Logger.Debug(ex, "Dispose falhou para recurso COM {Type}; tentando liberação final.", type.FullName);
+        }
+        catch (Exception ex)
+        {
+            Logger.Debug(ex, "Falha inesperada ao liberar recurso COM {Type} via IDisposable.", type.FullName);
+            return;
+        }
 
-            var closeMethod = instance.GetType().GetMethod("Close", Type.EmptyTypes);
-            if (closeMethod is not null)
-            {
-                closeMethod.Invoke(instance, null);
-                return;
-            }
-
+        try
+        {
             if (Marshal.IsComObject(instance))
             {
                 Marshal.FinalReleaseComObject(instance);
@@ -467,7 +499,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
         catch (Exception ex)
         {
-            Logger.Debug(ex, "Falha ao liberar recurso COM {Type}.", instance.GetType().FullName);
+            Logger.Debug(ex, "Falha ao liberar recurso COM {Type} via FinalReleaseComObject.", type.FullName);
         }
     }
 
@@ -496,6 +528,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         if (_direct3DDevice is null)
         {
             throw new InvalidOperationException("Direct3D device was not initialized.");
+        }
+
+        if (size.Width <= 0 || size.Height <= 0)
+        {
+            throw new GraphicsCaptureUnavailableException(
+                "Dimensões inválidas ao criar frame pool WGC.",
+                isPermanent: false);
         }
 
         try

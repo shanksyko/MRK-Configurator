@@ -15,6 +15,8 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// </summary>
 public sealed class MonitorPreviewDisplay : UserControl
 {
+    private static readonly ILogger Logger = Log.ForContext<MonitorPreviewDisplay>();
+
     private readonly PictureBox _pictureBox;
     private readonly List<SimRect> _simRects;
     private readonly List<(RectangleF Bounds, string Text)> _glyphRegions;
@@ -581,23 +583,28 @@ public sealed class MonitorPreviewDisplay : UserControl
             return RectangleF.Empty;
         }
 
+        if (!TryGetImageSize(image, out var imageWidth, out var imageHeight))
+        {
+            return RectangleF.Empty;
+        }
+
         return pictureBox.SizeMode switch
         {
-            PictureBoxSizeMode.Normal or PictureBoxSizeMode.AutoSize => new RectangleF(0, 0, image.Width, image.Height),
+            PictureBoxSizeMode.Normal or PictureBoxSizeMode.AutoSize => new RectangleF(0, 0, imageWidth, imageHeight),
             PictureBoxSizeMode.StretchImage => new RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
             PictureBoxSizeMode.CenterImage => new RectangleF(
-                (pictureBox.ClientSize.Width - image.Width) / 2f,
-                (pictureBox.ClientSize.Height - image.Height) / 2f,
-                image.Width,
-                image.Height),
-            PictureBoxSizeMode.Zoom => CalculateZoomRectangle(pictureBox, image),
+                (pictureBox.ClientSize.Width - imageWidth) / 2f,
+                (pictureBox.ClientSize.Height - imageHeight) / 2f,
+                imageWidth,
+                imageHeight),
+            PictureBoxSizeMode.Zoom => CalculateZoomRectangle(pictureBox, image, imageWidth, imageHeight),
             _ => new RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
         };
     }
 
-    private static RectangleF CalculateZoomRectangle(PictureBox pictureBox, Image image)
+    private static RectangleF CalculateZoomRectangle(PictureBox pictureBox, Image image, int imageWidth, int imageHeight)
     {
-        if (image.Width <= 0 || image.Height <= 0)
+        if (imageWidth <= 0 || imageHeight <= 0)
         {
             return RectangleF.Empty;
         }
@@ -608,12 +615,29 @@ public sealed class MonitorPreviewDisplay : UserControl
             return RectangleF.Empty;
         }
 
-        var ratio = Math.Min((float)clientSize.Width / image.Width, (float)clientSize.Height / image.Height);
-        var width = image.Width * ratio;
-        var height = image.Height * ratio;
+        var ratio = Math.Min((float)clientSize.Width / imageWidth, (float)clientSize.Height / imageHeight);
+        var width = imageWidth * ratio;
+        var height = imageHeight * ratio;
         var x = (clientSize.Width - width) / 2f;
         var y = (clientSize.Height - height) / 2f;
         return new RectangleF(x, y, width, height);
+    }
+
+    private static bool TryGetImageSize(Image image, out int width, out int height)
+    {
+        try
+        {
+            width = image.Width;
+            height = image.Height;
+            return width > 0 && height > 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException)
+        {
+            Logger.Debug(ex, "Dimensões inválidas ao calcular retângulo de imagem.");
+            width = 0;
+            height = 0;
+            return false;
+        }
     }
 
     private void UpdateGlyphTooltip(Point location)

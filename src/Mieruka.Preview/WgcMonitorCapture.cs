@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Mieruka.Core.Models;
@@ -12,6 +13,7 @@ namespace Mieruka.Preview
     public static class WgcMonitorCapture
     {
         private static readonly ILogger? _logger = Log.ForContext(typeof(WgcMonitorCapture));
+        private static readonly ConcurrentDictionary<string, byte> _gpuBackoffLogged = new();
 
         public static IMonitorCapture Create(string monitorId)
         {
@@ -24,6 +26,12 @@ namespace Mieruka.Preview
 
             var monitor = MonitorLocator.Find(monitorId)
                 ?? throw new InvalidOperationException($"Monitor '{monitorId}' não foi encontrado.");
+
+            if (GraphicsCaptureProvider.IsGpuInBackoff(monitor.Id))
+            {
+                LogGpuBackoff(monitor.Id, monitor.DeviceName);
+                throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
+            }
 
             var capture = new GraphicsCaptureProvider();
             try
@@ -57,6 +65,7 @@ namespace Mieruka.Preview
             {
                 if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
                 {
+                    LogGpuBackoff(monitor.Id, monitor.DeviceName);
                     _logger?.Warn(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI.", monitor.DeviceName);
                 }
                 throw;
@@ -69,6 +78,7 @@ namespace Mieruka.Preview
 
                 if (appliedBackoff || disabledNow)
                 {
+                    LogGpuBackoff(monitor.Id, monitor.DeviceName);
                     var template = ex.IsPermanent
                         ? "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff indefinido e caindo para GDI."
                         : "Windows Graphics Capture indisponível temporariamente para {Monitor}. Aplicando backoff e caindo para GDI.";
@@ -81,6 +91,7 @@ namespace Mieruka.Preview
             {
                 if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
                 {
+                    LogGpuBackoff(monitor.Id, monitor.DeviceName);
                     _logger?.Warn(ex, "Windows Graphics Capture não suportado neste host. Caindo para GDI.");
                 }
                 throw;
@@ -89,6 +100,12 @@ namespace Mieruka.Preview
 
         private static void EnsureGpuEnvironmentCompatible(string monitorId)
         {
+            if (GraphicsCaptureProvider.IsGpuInBackoff(monitorId))
+            {
+                LogGpuBackoff(monitorId, monitorId);
+                throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
+            }
+
             if (WgcEnvironment.IsRemoteSession())
             {
                 _logger?.Information(
@@ -112,6 +129,25 @@ namespace Mieruka.Preview
                     monitorId);
                 throw new NotSupportedException("Windows Graphics Capture não está disponível neste host.");
             }
+        }
+
+        private static void LogGpuBackoff(string monitorId, string? monitorName)
+        {
+            if (_logger is null)
+            {
+                return;
+            }
+
+            var key = monitorId ?? string.Empty;
+            if (!_gpuBackoffLogged.TryAdd(key, 0))
+            {
+                return;
+            }
+
+            var descriptor = string.IsNullOrWhiteSpace(monitorName) ? key : monitorName;
+            _logger.Information(
+                "Windows Graphics Capture indisponível para {Monitor}. Mantendo fallback GDI nesta sessão.",
+                descriptor);
         }
 
         private static void SafeDispose(IMonitorCapture capture)
