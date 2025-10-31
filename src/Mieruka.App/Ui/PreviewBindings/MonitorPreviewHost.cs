@@ -178,7 +178,7 @@ public sealed class MonitorPreviewHost : IDisposable
             }
 
             Interlocked.Exchange(ref _paused, 0);
-            StopCaptureCore(clearFrame: true);
+            StopCore(clearFrame: true);
         }
         finally
         {
@@ -220,7 +220,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            StopCaptureCore(clearFrame: false);
+            StopCore(clearFrame: false);
         }
         finally
         {
@@ -393,7 +393,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (!TryEnterStartStop(nameof(Dispose), retryAction: null, out var scope))
+        if (!TryEnterStartStop(nameof(Dispose), PostDispose, out var scope))
         {
             return;
         }
@@ -409,9 +409,40 @@ public sealed class MonitorPreviewHost : IDisposable
                 _isSuspended = false;
             }
 
-            StopCaptureCoreUnsafe(clearFrame: true, resetPaused: true);
+            StopCoreUnsafe(clearFrame: true, resetPaused: true);
 
             GC.SuppressFinalize(this);
+        }
+    }
+
+    private void PostDispose()
+    {
+        if (_suppressEvents || _target.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _target.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
         }
     }
 
@@ -478,6 +509,20 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         if (_disposed)
         {
+            return false;
+        }
+
+        if (!HasUsableTargetArea())
+        {
+            Interlocked.Exchange(ref _paused, 1);
+
+            lock (_stateGate)
+            {
+                _hasActiveSession = false;
+                _isSuspended = false;
+            }
+
+            StopCore(clearFrame: false, resetPaused: false);
             return false;
         }
 
@@ -795,7 +840,7 @@ public sealed class MonitorPreviewHost : IDisposable
         ResetFrameThrottle();
     }
 
-    private void StopCaptureCore(bool clearFrame, bool resetPaused = true)
+    private void StopCore(bool clearFrame, bool resetPaused = true)
     {
         if (!TryEnterStartStop(nameof(Stop), () => PostStop(clearFrame, resetPaused), out var scope))
         {
@@ -804,11 +849,11 @@ public sealed class MonitorPreviewHost : IDisposable
 
         using (scope)
         {
-            StopCaptureCoreUnsafe(clearFrame, resetPaused);
+            StopCoreUnsafe(clearFrame, resetPaused);
         }
     }
 
-    private void StopCaptureCoreUnsafe(bool clearFrame, bool resetPaused = true)
+    private void StopCoreUnsafe(bool clearFrame, bool resetPaused = true)
     {
         IMonitorCapture? capture;
         lock (_gate)
@@ -862,7 +907,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        StopCaptureCore(clearFrame: false, resetPaused: resetPaused);
+        StopCore(clearFrame: false, resetPaused: resetPaused);
         return true;
     }
 
@@ -910,7 +955,7 @@ public sealed class MonitorPreviewHost : IDisposable
             {
                 try
                 {
-                    StopCaptureCore(clearFrame, resetPaused);
+                    StopCore(clearFrame, resetPaused);
                 }
                 catch (ObjectDisposedException)
                 {
@@ -1104,6 +1149,25 @@ public sealed class MonitorPreviewHost : IDisposable
         }
 
         EnableDoubleBuffering(_target);
+    }
+
+    private bool HasUsableTargetArea()
+    {
+        if (_target.IsDisposed)
+        {
+            return false;
+        }
+
+        try
+        {
+            var width = _target.Width;
+            var height = _target.Height;
+            return width > 0 && height > 0;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            return false;
+        }
     }
 
     private static void EnableDoubleBuffering(PictureBox target)

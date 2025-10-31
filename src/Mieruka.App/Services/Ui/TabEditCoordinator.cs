@@ -1,8 +1,11 @@
 using System;
+using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using Mieruka.Core.Contracts;
 using Serilog;
+
+using UITimer = System.Windows.Forms.Timer;
 
 namespace Mieruka.App.Services.Ui;
 
@@ -11,20 +14,26 @@ namespace Mieruka.App.Services.Ui;
 /// </summary>
 internal sealed class TabEditCoordinator
 {
-    private const int DebounceIntervalMilliseconds = 150;
+    private const int ResumeDebounceIntervalMilliseconds = 150;
+    private const int UiEventDebounceIntervalMilliseconds = 120;
 
     private readonly Control _root;
     private readonly IBindingService? _bindingService;
     private readonly Action? _pausePreview;
     private readonly Action? _resumePreview;
     private readonly ILogger _logger;
-    private readonly Timer _resumeDebounceTimer;
+    private readonly UITimer _resumeDebounceTimer;
     private readonly object _debounceGate = new();
+    private readonly UITimer _uiEventDebounceTimer;
+    private readonly object _uiEventDebounceGate = new();
+    private readonly MethodInfo? _applyAppTypeUiMethod;
 
     private int _applying;
     private IDisposable? _bindingScope;
     private string? _pendingResumeContext;
     private bool _debounceTimerDisposed;
+    private bool _uiEventDebounceTimerDisposed;
+    private bool _uiEventHandlersAttached;
 
     public TabEditCoordinator(
         Control root,
@@ -40,19 +49,34 @@ internal sealed class TabEditCoordinator
         _logger = (logger ?? Log.ForContext<TabEditCoordinator>())
             .ForContext("RootControl", root.Name);
 
-        _resumeDebounceTimer = new Timer
+        _resumeDebounceTimer = new UITimer
         {
-            Interval = DebounceIntervalMilliseconds,
+            Interval = ResumeDebounceIntervalMilliseconds,
         };
         _resumeDebounceTimer.Tick += ResumeDebounceTimerOnTick;
 
+        _uiEventDebounceTimer = new UITimer
+        {
+            Interval = UiEventDebounceIntervalMilliseconds,
+        };
+        _uiEventDebounceTimer.Tick += OnUiEventDebounceTimerTick;
+
+        _applyAppTypeUiMethod = root.GetType().GetMethod(
+            "ApplyAppTypeUI",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+
+        AttachUiEventHandlers();
+
         if (_root.IsDisposed)
         {
-            DisposeResumeTimer();
+            DisposeTimers();
         }
         else
         {
-            _root.Disposed += (_, _) => DisposeResumeTimer();
+            _root.Disposed += (_, _) => DisposeTimers();
         }
     }
 
@@ -189,18 +213,145 @@ internal sealed class TabEditCoordinator
         _logger.Information("LeaveEditTab {Context}", context);
     }
 
-    private void DisposeResumeTimer()
+    private void AttachUiEventHandlers()
+    {
+        if (_uiEventHandlersAttached)
+        {
+            return;
+        }
+
+        _root.Enter += OnRootEnter;
+        _root.Leave += OnRootLeave;
+        _root.SizeChanged += OnRootSizeChanged;
+        _uiEventHandlersAttached = true;
+    }
+
+    private void DetachUiEventHandlers()
+    {
+        if (!_uiEventHandlersAttached)
+        {
+            return;
+        }
+
+        _root.Enter -= OnRootEnter;
+        _root.Leave -= OnRootLeave;
+        _root.SizeChanged -= OnRootSizeChanged;
+        _uiEventHandlersAttached = false;
+    }
+
+    private void DisposeTimers()
     {
         lock (_debounceGate)
         {
-            if (_debounceTimerDisposed)
+            if (!_debounceTimerDisposed)
+            {
+                _debounceTimerDisposed = true;
+                _resumeDebounceTimer.Stop();
+                _resumeDebounceTimer.Dispose();
+            }
+        }
+
+        lock (_uiEventDebounceGate)
+        {
+            if (!_uiEventDebounceTimerDisposed)
+            {
+                _uiEventDebounceTimerDisposed = true;
+                _uiEventDebounceTimer.Stop();
+                _uiEventDebounceTimer.Dispose();
+            }
+        }
+
+        DetachUiEventHandlers();
+    }
+
+    private void OnRootEnter(object? sender, EventArgs e)
+    {
+        ScheduleApplyAppTypeUi();
+    }
+
+    private void OnRootLeave(object? sender, EventArgs e)
+    {
+        ScheduleApplyAppTypeUi();
+    }
+
+    private void OnRootSizeChanged(object? sender, EventArgs e)
+    {
+        ScheduleApplyAppTypeUi();
+    }
+
+    private void ScheduleApplyAppTypeUi()
+    {
+        if (_applyAppTypeUiMethod is null)
+        {
+            return;
+        }
+
+        lock (_uiEventDebounceGate)
+        {
+            if (_uiEventDebounceTimerDisposed)
             {
                 return;
             }
 
-            _debounceTimerDisposed = true;
-            _resumeDebounceTimer.Stop();
-            _resumeDebounceTimer.Dispose();
+            _uiEventDebounceTimer.Stop();
+            _uiEventDebounceTimer.Start();
+        }
+    }
+
+    private void OnUiEventDebounceTimerTick(object? sender, EventArgs e)
+    {
+        MethodInfo? applyMethod;
+
+        lock (_uiEventDebounceGate)
+        {
+            if (_uiEventDebounceTimerDisposed)
+            {
+                return;
+            }
+
+            _uiEventDebounceTimer.Stop();
+            applyMethod = _applyAppTypeUiMethod;
+        }
+
+        if (applyMethod is null)
+        {
+            return;
+        }
+
+        if (_root.IsDisposed || !_root.IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            _root.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    applyMethod.Invoke(_root, null);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (TargetInvocationException ex)
+                {
+                    _logger.Warning(ex.InnerException ?? ex, "ApplyAppTypeUIInvokeFailed");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "ApplyAppTypeUIInvokeFailed");
+                }
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
         }
     }
 
