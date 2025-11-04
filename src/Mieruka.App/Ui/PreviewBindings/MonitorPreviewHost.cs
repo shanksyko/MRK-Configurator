@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
@@ -50,6 +51,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _frameCallbackGate;
     private int _inStartStop;
     private bool _suppressEvents;
+    private int _disposeRetryScheduled;
 
     public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
     {
@@ -405,24 +407,28 @@ public sealed class MonitorPreviewHost : IDisposable
 
     public void Dispose()
     {
-        DisposeInternal(allowRetry: true);
+        _suppressEvents = true;
+
+        if (!DisposeInternal())
+        {
+            ScheduleDeferredDispose();
+        }
     }
 
-    private void DisposeInternal(bool allowRetry)
+    private bool DisposeInternal()
     {
         if (_disposed)
         {
-            return;
+            return true;
         }
 
-        if (!TryEnterStartStop(nameof(Dispose), allowRetry ? PostDispose : null, out var scope))
+        if (!TryEnterStartStop(nameof(Dispose), retryAction: null, out var scope))
         {
-            return;
+            return false;
         }
 
         using (scope)
         {
-            _suppressEvents = true;
             _disposed = true;
 
             lock (_stateGate)
@@ -435,6 +441,42 @@ public sealed class MonitorPreviewHost : IDisposable
 
             GC.SuppressFinalize(this);
         }
+
+        return true;
+    }
+
+    private void ScheduleDeferredDispose()
+    {
+        if (Interlocked.Exchange(ref _disposeRetryScheduled, 1) != 0)
+        {
+            return;
+        }
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                while (!DisposeInternal())
+                {
+                    await Task.Delay(15).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    ForEvent("DisposeRetryFailed").Error(ex, "Falha ao concluir Dispose após reagendamento.");
+                }
+                catch
+                {
+                    // Swallow logging failures during shutdown.
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _disposeRetryScheduled, 0);
+            }
+        });
     }
 
     private bool TryEnterBusy(out BusyScope scope)
