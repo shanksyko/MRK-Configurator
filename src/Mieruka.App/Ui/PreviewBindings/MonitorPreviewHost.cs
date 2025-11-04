@@ -415,7 +415,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private bool DisposeInternal()
+    private bool DisposeInternal(bool allowRetry = false)
     {
         if (_disposed)
         {
