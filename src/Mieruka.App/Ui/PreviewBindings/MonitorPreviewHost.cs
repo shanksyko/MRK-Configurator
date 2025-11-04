@@ -514,6 +514,37 @@ public sealed class MonitorPreviewHost : IDisposable
         return true;
     }
 
+    private void PostDispose()
+    {
+        if (_suppressEvents || _target.IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _target.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    DisposeInternal(allowRetry: false);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
     private void ExitStartStop()
     {
         Volatile.Write(ref _inStartStop, 0);
