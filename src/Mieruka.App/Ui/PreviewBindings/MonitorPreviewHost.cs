@@ -47,7 +47,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
     private Bitmap? _currentFrame;
-    private volatile PreviewState _state = PreviewState.Stopped;
+    private int _stateRaw = (int)PreviewState.Stopped;
     private bool _disposed;
     private Rectangle _monitorBounds;
     private Rectangle _monitorWorkArea;
@@ -67,9 +67,15 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _disposeRetryScheduled;
     private bool _safeModeEnabled;
 
+    private PreviewState State
+    {
+        get => (PreviewState)Volatile.Read(ref _stateRaw);
+        set => Volatile.Write(ref _stateRaw, (int)value);
+    }
+
     private bool TryTransition(PreviewState from, PreviewState to)
     {
-        return Interlocked.CompareExchange(ref Unsafe.As<PreviewState, int>(ref _state), (int)to, (int)from) == (int)from;
+        return Interlocked.CompareExchange(ref _stateRaw, (int)to, (int)from) == (int)from;
     }
 
     private bool TryTransition(ReadOnlySpan<PreviewState> fromStates, PreviewState to, out PreviewState previous)
@@ -89,12 +95,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void SetState(PreviewState state)
     {
-        Volatile.Write(ref Unsafe.As<PreviewState, int>(ref _state), (int)state);
+        State = state;
     }
 
     private PreviewState ReadState()
     {
-        return (PreviewState)Volatile.Read(ref Unsafe.As<PreviewState, int>(ref _state));
+        return State;
     }
 
     public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
