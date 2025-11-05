@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Drawing;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -97,6 +98,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             if (!MonitorUtilities.TryGetMonitorHandle(monitor.DeviceName, out var monitorHandle, out var bounds))
             {
                 throw new InvalidOperationException($"Unable to locate monitor '{monitor.DeviceName}'.");
+            }
+
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                throw new GraphicsCaptureUnavailableException(
+                    "Monitor sem área visível para captura (minimizado ou desconectado).",
+                    isPermanent: false);
             }
 
             try
@@ -466,9 +474,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 closeMethod.Invoke(instance, null);
             }
         }
+        catch (TargetInvocationException ex)
+        {
+            Logger.Debug(ex.InnerException ?? ex, "Close() falhou para recurso COM {Type}.", type.FullName);
+        }
         catch (Exception ex)
         {
-            Logger.Debug(ex, "Falha ao invocar Close() em recurso COM {Type}.", type.FullName);
+            Logger.Debug(ex, "Close() falhou para recurso COM {Type}.", type.FullName);
         }
 
         try
@@ -480,7 +492,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
         catch (Exception ex) when (ex is ObjectDisposedException or InvalidCastException or COMException)
         {
-            Logger.Debug(ex, "Dispose falhou para recurso COM {Type}; tentando liberação final.", type.FullName);
+            Logger.Debug(ex, "Dispose falhou para recurso COM {Type}; tentativa de liberação final continuará.", type.FullName);
+        }
+        catch (TargetInvocationException ex)
+        {
+            Logger.Debug(ex.InnerException ?? ex, "Dispose falhou para recurso COM {Type}.", type.FullName);
         }
         catch (Exception ex)
         {
@@ -493,6 +509,10 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             {
                 Marshal.FinalReleaseComObject(instance);
             }
+        }
+        catch (InvalidCastException ex)
+        {
+            Logger.Debug(ex, "FinalReleaseComObject falhou para recurso COM {Type}.", type.FullName);
         }
         catch (Exception ex)
         {
