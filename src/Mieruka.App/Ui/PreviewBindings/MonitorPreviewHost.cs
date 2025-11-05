@@ -56,7 +56,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _refreshRate;
     private DateTime _nextFrameAt;
     private bool _hasActiveSession;
-    private bool _lastPreferGpu;
+    private bool _isGpuActive;
     private volatile bool _isSuspended;
     private int _resumeTicket;
     private int _paused;
@@ -277,6 +277,7 @@ public sealed class MonitorPreviewHost : IDisposable
             lock (_stateGate)
             {
                 _hasActiveSession = false;
+                _isGpuActive = false;
                 _isSuspended = false;
             }
 
@@ -348,7 +349,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         int ticket;
         bool shouldResume;
-        bool preferGpu;
+        bool useGpu;
 
         try
         {
@@ -357,7 +358,7 @@ public sealed class MonitorPreviewHost : IDisposable
             lock (_stateGate)
             {
                 shouldResume = _hasActiveSession && _isSuspended;
-                preferGpu = _lastPreferGpu;
+                useGpu = _isGpuActive;
             }
 
             if (!shouldResume)
@@ -400,7 +401,7 @@ public sealed class MonitorPreviewHost : IDisposable
                     return;
                 }
 
-                StartCore(preferGpu);
+                StartCore(useGpu);
             }
             finally
             {
@@ -472,13 +473,13 @@ public sealed class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            bool preferGpu;
+            bool useGpu;
             lock (_stateGate)
             {
-                preferGpu = _lastPreferGpu;
+                useGpu = _isGpuActive;
             }
 
-            if (StartCore(preferGpu))
+            if (StartCore(useGpu))
             {
                 _logger.Information("PreviewResumed");
             }
@@ -541,6 +542,7 @@ public sealed class MonitorPreviewHost : IDisposable
             lock (_stateGate)
             {
                 _hasActiveSession = false;
+                _isGpuActive = false;
                 _isSuspended = false;
             }
 
@@ -711,6 +713,7 @@ public sealed class MonitorPreviewHost : IDisposable
             lock (_stateGate)
             {
                 _hasActiveSession = false;
+                _isGpuActive = false;
                 _isSuspended = false;
             }
 
@@ -830,6 +833,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         foreach (var (mode, factory) in EnumerateFactories(preferGpu))
         {
+            var isGpu = string.Equals(mode, "GPU", StringComparison.OrdinalIgnoreCase);
             IMonitorCapture? capture = null;
             try
             {
@@ -847,7 +851,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 lock (_stateGate)
                 {
                     _hasActiveSession = true;
-                    _lastPreferGpu = preferGpu;
+                    _isGpuActive = isGpu;
                     _isSuspended = false;
                 }
 
@@ -856,7 +860,7 @@ public sealed class MonitorPreviewHost : IDisposable
             catch (Exception ex)
             {
                 var reason = $"{ex.GetType().Name}: {ex.Message}";
-                if (preferGpu && string.Equals(mode, "GPU", StringComparison.OrdinalIgnoreCase))
+                if (preferGpu && isGpu)
                 {
                     ForEvent("MonitorFallback")
                         .Warning(
@@ -891,6 +895,7 @@ public sealed class MonitorPreviewHost : IDisposable
             if (!_isSuspended)
             {
                 _hasActiveSession = false;
+                _isGpuActive = false;
             }
         }
 
