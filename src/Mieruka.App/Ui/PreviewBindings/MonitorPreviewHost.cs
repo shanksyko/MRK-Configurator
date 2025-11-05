@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +23,18 @@ public sealed class MonitorPreviewHost : IDisposable
 {
     private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
+    private static readonly TimeSpan SafeModeFrameThrottle = TimeSpan.FromMilliseconds(100);
     private static readonly ConcurrentDictionary<string, byte> GpuFallbackLogged = new();
+
+    private enum PreviewState
+    {
+        Stopped,
+        Starting,
+        Running,
+        Pausing,
+        Paused,
+        Disposing,
+    }
 
     private readonly PictureBox _target;
     private readonly ILogger _logger;
@@ -35,6 +47,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
     private Bitmap? _currentFrame;
+    private volatile PreviewState _state = PreviewState.Stopped;
     private bool _disposed;
     private Rectangle _monitorBounds;
     private Rectangle _monitorWorkArea;
@@ -52,6 +65,37 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _inStartStop;
     private bool _suppressEvents;
     private int _disposeRetryScheduled;
+    private bool _safeModeEnabled;
+
+    private bool TryTransition(PreviewState from, PreviewState to)
+    {
+        return Interlocked.CompareExchange(ref Unsafe.As<PreviewState, int>(ref _state), (int)to, (int)from) == (int)from;
+    }
+
+    private bool TryTransition(ReadOnlySpan<PreviewState> fromStates, PreviewState to, out PreviewState previous)
+    {
+        foreach (var candidate in fromStates)
+        {
+            if (TryTransition(candidate, to))
+            {
+                previous = candidate;
+                return true;
+            }
+        }
+
+        previous = ReadState();
+        return false;
+    }
+
+    private void SetState(PreviewState state)
+    {
+        Volatile.Write(ref Unsafe.As<PreviewState, int>(ref _state), (int)state);
+    }
+
+    private PreviewState ReadState()
+    {
+        return (PreviewState)Volatile.Read(ref Unsafe.As<PreviewState, int>(ref _state));
+    }
 
     public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
     {
@@ -142,6 +186,11 @@ public sealed class MonitorPreviewHost : IDisposable
             var sanitized = value < TimeSpan.Zero ? TimeSpan.Zero : value;
             lock (_frameTimingGate)
             {
+                if (_safeModeEnabled && sanitized < SafeModeFrameThrottle)
+                {
+                    sanitized = SafeModeFrameThrottle;
+                }
+
                 if (!_frameThrottleCustomized && sanitized != _frameThrottle)
                 {
                     _frameThrottleCustomized = true;
@@ -156,11 +205,40 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
+    public bool PreviewSafeModeEnabled
+    {
+        get => Volatile.Read(ref _safeModeEnabled);
+        set
+        {
+            var previous = Volatile.Read(ref _safeModeEnabled);
+            if (previous == value)
+            {
+                return;
+            }
+
+            Volatile.Write(ref _safeModeEnabled, value);
+
+            if (value)
+            {
+                lock (_frameTimingGate)
+                {
+                    if (_frameThrottle < SafeModeFrameThrottle)
+                    {
+                        _frameThrottle = SafeModeFrameThrottle;
+                        _nextFrameAt = DateTime.MinValue;
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Starts the preview using GPU capture when available.
     /// </summary>
     public bool Start(bool preferGpu)
     {
+        var preferGpuAdjusted = preferGpu && !PreviewSafeModeEnabled;
+
         if (!TryEnterBusy(out var scope))
         {
             LogReentrancyBlocked(nameof(Start));
@@ -169,7 +247,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            return StartCore(preferGpu);
+            return StartCore(preferGpuAdjusted);
         }
         finally
         {
@@ -422,8 +500,31 @@ public sealed class MonitorPreviewHost : IDisposable
             return true;
         }
 
+        PreviewState previousState;
+        if (!TryTransition(new[]
+            {
+                PreviewState.Running,
+                PreviewState.Starting,
+                PreviewState.Pausing,
+                PreviewState.Paused,
+                PreviewState.Stopped,
+            }, PreviewState.Disposing, out previousState))
+        {
+            if (ReadState() != PreviewState.Disposing)
+            {
+                return false;
+            }
+
+            previousState = PreviewState.Disposing;
+        }
+
         if (!TryEnterStartStop(nameof(Dispose), retryAction: null, out var scope))
         {
+            if (previousState != PreviewState.Disposing)
+            {
+                SetState(previousState);
+            }
+
             return false;
         }
 
@@ -559,6 +660,12 @@ public sealed class MonitorPreviewHost : IDisposable
             LogGpuFallback();
         }
 
+        if (PreviewSafeModeEnabled)
+        {
+            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+            yield break;
+        }
+
         if (preferGpu && !gpuInBackoff)
         {
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
@@ -581,6 +688,16 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
+        if (PreviewSafeModeEnabled)
+        {
+            preferGpu = false;
+        }
+
+        if (ReadState() == PreviewState.Disposing)
+        {
+            return false;
+        }
+
         if (!HasUsableTargetArea())
         {
             Interlocked.Exchange(ref _paused, 1);
@@ -595,8 +712,52 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
+        PreviewState previousState = PreviewState.Stopped;
+        var transitionRequested = false;
+
+        while (true)
+        {
+            var current = ReadState();
+            if (current is PreviewState.Running or PreviewState.Starting)
+            {
+                return true;
+            }
+
+            if (current == PreviewState.Disposing)
+            {
+                return false;
+            }
+
+            if (current == PreviewState.Pausing)
+            {
+                PostStart(preferGpu);
+                return false;
+            }
+
+            if (current is PreviewState.Stopped or PreviewState.Paused)
+            {
+                if (TryTransition(current, PreviewState.Starting))
+                {
+                    previousState = current;
+                    transitionRequested = true;
+                    break;
+                }
+
+                continue;
+            }
+
+            break;
+        }
+
+        if (!transitionRequested)
+        {
+            return false;
+        }
+
         if (!TryEnterStartStop(nameof(Start), () => PostStart(preferGpu), out var scope))
         {
+            SetState(previousState);
+
             if (_suppressEvents)
             {
                 lock (_gate)
@@ -610,7 +771,17 @@ public sealed class MonitorPreviewHost : IDisposable
 
         using (scope)
         {
-            return StartCoreUnsafe(preferGpu);
+            var started = StartCoreUnsafe(preferGpu);
+            if (started)
+            {
+                SetState(PreviewState.Running);
+            }
+            else
+            {
+                SetState(previousState);
+            }
+
+            return started;
         }
     }
 
@@ -619,6 +790,18 @@ public sealed class MonitorPreviewHost : IDisposable
         if (_disposed)
         {
             return false;
+        }
+
+        if (PreviewSafeModeEnabled)
+        {
+            preferGpu = false;
+            try
+            {
+                Thread.Sleep(250);
+            }
+            catch (ThreadInterruptedException)
+            {
+            }
         }
 
         lock (_gate)
@@ -711,6 +894,12 @@ public sealed class MonitorPreviewHost : IDisposable
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
         if (_suppressEvents)
+        {
+            e.Dispose();
+            return;
+        }
+
+        if (ReadState() == PreviewState.Disposing)
         {
             e.Dispose();
             return;
@@ -880,7 +1069,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        var previous = _currentFrame;
+        var previous = Interlocked.Exchange(ref _currentFrame, frame);
         var animationWasStopped = false;
 
         if (previous is not null)
@@ -891,7 +1080,6 @@ public sealed class MonitorPreviewHost : IDisposable
         try
         {
             _target.Image = frame;
-            _currentFrame = frame;
             StartAnimationSafe(frame);
         }
         catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
@@ -907,7 +1095,13 @@ public sealed class MonitorPreviewHost : IDisposable
                     StartAnimationSafe(previous);
                 }
 
-                _currentFrame = previous;
+                Interlocked.Exchange(ref _currentFrame, previous);
+                _target.Image = previous;
+            }
+            else
+            {
+                Interlocked.Exchange(ref _currentFrame, null);
+                _target.Image = null;
             }
 
             return;
@@ -1041,14 +1235,48 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void StopCore(bool clearFrame, bool resetPaused = true)
     {
+        if (ReadState() == PreviewState.Disposing)
+        {
+            return;
+        }
+
+        var targetState = clearFrame ? PreviewState.Stopped : PreviewState.Paused;
+        PreviewState previousState;
+
+        ReadOnlySpan<PreviewState> candidates = clearFrame
+            ? new[] { PreviewState.Running, PreviewState.Starting, PreviewState.Paused }
+            : new[] { PreviewState.Running, PreviewState.Starting };
+
+        if (!TryTransition(candidates, PreviewState.Pausing, out previousState))
+        {
+            if (ReadState() == targetState)
+            {
+                if (clearFrame)
+                {
+                    ClearFrame();
+                }
+
+                return;
+            }
+
+            if (!clearFrame && ReadState() == PreviewState.Pausing)
+            {
+                PostStop(clearFrame, resetPaused);
+            }
+
+            return;
+        }
+
         if (!TryEnterStartStop(nameof(Stop), () => PostStop(clearFrame, resetPaused), out var scope))
         {
+            SetState(previousState);
             return;
         }
 
         using (scope)
         {
             StopCoreUnsafe(clearFrame, resetPaused);
+            SetState(targetState);
         }
     }
 
@@ -1212,6 +1440,13 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             if (_frameThrottleCustomized)
             {
+                return;
+            }
+
+            if (_safeModeEnabled)
+            {
+                _frameThrottle = SafeModeFrameThrottle;
+                _nextFrameAt = DateTime.MinValue;
                 return;
             }
 

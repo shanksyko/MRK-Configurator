@@ -577,7 +577,17 @@ public sealed class MonitorPreviewDisplay : UserControl
 
     private static RectangleF GetImageDisplayRectangle(PictureBox pictureBox)
     {
-        var image = pictureBox.Image;
+        Image? image;
+        try
+        {
+            image = pictureBox.Image;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            Logger.Debug(ex, "Falha ao obter imagem atual do preview.");
+            return RectangleF.Empty;
+        }
+
         if (image is null)
         {
             return RectangleF.Empty;
@@ -631,7 +641,7 @@ public sealed class MonitorPreviewDisplay : UserControl
             height = image.Height;
             return width > 0 && height > 0;
         }
-        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException)
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
         {
             Logger.Debug(ex, "Dimensões inválidas ao calcular retângulo de imagem.");
             width = 0;

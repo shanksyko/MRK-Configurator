@@ -14,6 +14,7 @@ namespace Mieruka.Preview
     {
         private static readonly ILogger? _logger = Log.ForContext(typeof(WgcMonitorCapture));
         private static readonly ConcurrentDictionary<string, byte> _gpuBackoffLogged = new();
+        private static readonly ConcurrentDictionary<string, byte> _gpuUnavailableMonitors = new();
 
         public static IMonitorCapture Create(string monitorId)
         {
@@ -26,6 +27,12 @@ namespace Mieruka.Preview
 
             var monitor = MonitorLocator.Find(monitorId)
                 ?? throw new InvalidOperationException($"Monitor '{monitorId}' não foi encontrado.");
+
+            if (_gpuUnavailableMonitors.ContainsKey(monitor.Id))
+            {
+                LogGpuBackoff(monitor.Id, monitor.DeviceName);
+                throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
+            }
 
             if (GraphicsCaptureProvider.IsGpuInBackoff(monitor.Id))
             {
@@ -76,6 +83,8 @@ namespace Mieruka.Preview
                 var appliedBackoff = GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id, duration);
                 var disabledNow = ex.IsPermanent && GraphicsCaptureProvider.DisableGpuGlobally();
 
+                MarkMonitorUnavailable(monitor.Id);
+
                 if (appliedBackoff || disabledNow)
                 {
                     LogGpuBackoff(monitor.Id, monitor.DeviceName);
@@ -101,6 +110,12 @@ namespace Mieruka.Preview
         private static void EnsureGpuEnvironmentCompatible(string monitorId)
         {
             if (GraphicsCaptureProvider.IsGpuInBackoff(monitorId))
+            {
+                LogGpuBackoff(monitorId, monitorId);
+                throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
+            }
+
+            if (_gpuUnavailableMonitors.ContainsKey(monitorId))
             {
                 LogGpuBackoff(monitorId, monitorId);
                 throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
@@ -160,6 +175,16 @@ namespace Mieruka.Preview
             {
                 // Ignore cleanup exceptions when failing to create the capture.
             }
+        }
+
+        private static void MarkMonitorUnavailable(string monitorId)
+        {
+            if (string.IsNullOrWhiteSpace(monitorId))
+            {
+                return;
+            }
+
+            _gpuUnavailableMonitors.TryAdd(monitorId, 0);
         }
     }
 
