@@ -480,8 +480,9 @@ internal static class WindowPlacementHelper
             return ZoneRect.Full;
         }
 
-        var monitorWidth = Math.Max(1, monitor.Width);
-        var monitorHeight = Math.Max(1, monitor.Height);
+        var monitorBounds = GetMonitorBounds(monitor);
+        var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+        var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
 
         var width = Math.Clamp(window.Width ?? monitorWidth, 1, monitorWidth);
         var height = Math.Clamp(window.Height ?? monitorHeight, 1, monitorHeight);
@@ -615,8 +616,6 @@ internal static class WindowPlacementHelper
 
     private static Rectangle CalculateBounds(WindowConfig window, MonitorInfo monitor, Rectangle monitorBounds)
     {
-        var scale = monitor.Scale > 0 ? monitor.Scale : 1.0;
-
         if (window.FullScreen)
         {
             return NormalizeBounds(monitorBounds, monitor);
@@ -627,20 +626,20 @@ internal static class WindowPlacementHelper
 
         if (window.X.HasValue)
         {
-            left = monitorBounds.Left + ScaleValue(window.X.Value, scale);
+            left = monitorBounds.Left + window.X.Value;
         }
 
         if (window.Y.HasValue)
         {
-            top = monitorBounds.Top + ScaleValue(window.Y.Value, scale);
+            top = monitorBounds.Top + window.Y.Value;
         }
 
         var width = window.Width.HasValue
-            ? ScaleValue(window.Width.Value, scale)
+            ? window.Width.Value
             : monitorBounds.Width;
 
         var height = window.Height.HasValue
-            ? ScaleValue(window.Height.Value, scale)
+            ? window.Height.Value
             : monitorBounds.Height;
 
         if (width <= 0)
@@ -874,8 +873,16 @@ internal static class WindowPlacementHelper
 
     private static Rectangle NormalizeBounds(Rectangle bounds, MonitorInfo monitor)
     {
-        var width = bounds.Width <= 0 ? monitor.Width : bounds.Width;
-        var height = bounds.Height <= 0 ? monitor.Height : bounds.Height;
+        var monitorBounds = GetMonitorBounds(monitor);
+        var fallbackWidth = monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width;
+        var fallbackHeight = monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height;
+
+        var width = bounds.Width <= 0 ? fallbackWidth : bounds.Width;
+        var height = bounds.Height <= 0 ? fallbackHeight : bounds.Height;
+
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+
         return new Rectangle(bounds.Left, bounds.Top, width, height);
     }
 
@@ -900,9 +907,6 @@ internal static class WindowPlacementHelper
     {
         return unchecked((ushort)value);
     }
-
-    private static int ScaleValue(int value, double scale)
-        => (int)Math.Round(value * scale, MidpointRounding.AwayFromZero);
 
     private static string? NormalizeStableId(string? stableId)
         => string.IsNullOrWhiteSpace(stableId) ? null : stableId.Trim();

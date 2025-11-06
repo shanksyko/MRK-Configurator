@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using Mieruka.App.Services;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 
@@ -156,7 +157,9 @@ internal sealed class ConfiguratorWorkspace
     /// <returns>Rectangle representing the configured area.</returns>
     public Rectangle GetSelectionRectangle(WindowConfig window, MonitorInfo monitor)
     {
-        var monitorBounds = new Rectangle(0, 0, monitor.Width, monitor.Height);
+        var monitorBounds = CreateMonitorRelativeBounds(monitor);
+        var monitorWidth = monitorBounds.Width;
+        var monitorHeight = monitorBounds.Height;
 
         if (window.FullScreen)
         {
@@ -165,8 +168,8 @@ internal sealed class ConfiguratorWorkspace
 
         var x = window.X ?? 0;
         var y = window.Y ?? 0;
-        var width = window.Width ?? monitor.Width;
-        var height = window.Height ?? monitor.Height;
+        var width = window.Width ?? monitorWidth;
+        var height = window.Height ?? monitorHeight;
         var candidate = new Rectangle(x, y, width, height);
         var intersection = Rectangle.Intersect(monitorBounds, candidate);
         return intersection.Width > 0 && intersection.Height > 0 ? intersection : monitorBounds;
@@ -254,7 +257,7 @@ internal sealed class ConfiguratorWorkspace
 
     private static WindowConfig ApplyWindow(WindowConfig source, MonitorInfo monitor, Rectangle? bounds)
     {
-        var monitorBounds = new Rectangle(0, 0, monitor.Width, monitor.Height);
+        var monitorBounds = CreateMonitorRelativeBounds(monitor);
 
         if (bounds is null || bounds.Value == monitorBounds)
         {
@@ -284,9 +287,17 @@ internal sealed class ConfiguratorWorkspace
 
     private static Rectangle NormalizeSelection(Rectangle selection, MonitorInfo monitor)
     {
-        var monitorBounds = new Rectangle(0, 0, monitor.Width, monitor.Height);
+        var monitorBounds = CreateMonitorRelativeBounds(monitor);
         var intersection = Rectangle.Intersect(monitorBounds, selection);
         return intersection.Width <= 0 || intersection.Height <= 0 ? monitorBounds : intersection;
+    }
+
+    private static Rectangle CreateMonitorRelativeBounds(MonitorInfo monitor)
+    {
+        var bounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var width = Math.Max(1, bounds.Width > 0 ? bounds.Width : monitor.Width);
+        var height = Math.Max(1, bounds.Height > 0 ? bounds.Height : monitor.Height);
+        return new Rectangle(0, 0, width, height);
     }
 
     private static bool MonitorKeysEqual(MonitorKey left, MonitorKey right)

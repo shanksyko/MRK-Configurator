@@ -482,8 +482,9 @@ internal sealed class AppEditorDialog : Form
 
     private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
     {
-        var monitorWidth = Math.Max(1, monitor.Width);
-        var monitorHeight = Math.Max(1, monitor.Height);
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+        var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
 
         var width = Math.Max(1, (int)Math.Round(monitorWidth * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
         var height = Math.Max(1, (int)Math.Round(monitorHeight * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));

@@ -1220,13 +1220,23 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        Rectangle? selection = window.FullScreen
-            ? null
-            : new Rectangle(
+        Rectangle? selection;
+        if (window.FullScreen)
+        {
+            selection = null;
+        }
+        else
+        {
+            var previewBounds = WindowPlacementHelper.GetMonitorBounds(preview.Monitor);
+            var monitorWidth = Math.Max(1, previewBounds.Width > 0 ? previewBounds.Width : preview.Monitor.Width);
+            var monitorHeight = Math.Max(1, previewBounds.Height > 0 ? previewBounds.Height : preview.Monitor.Height);
+
+            selection = new Rectangle(
                 window.X ?? 0,
                 window.Y ?? 0,
-                window.Width ?? preview.Monitor.Width,
-                window.Height ?? preview.Monitor.Height);
+                window.Width ?? monitorWidth,
+                window.Height ?? monitorHeight);
+        }
 
         if (!_workspace.TryAssignEntryToMonitor(_selectedEntry, preview.Monitor, selection))
         {
@@ -1553,10 +1563,14 @@ internal sealed class ConfigForm : Form
 
     private static Rectangle CalculateZoneRectangle(ZonePreset.Zone zone, MonitorInfo monitor)
     {
-        var width = Math.Max(1, (int)Math.Round(monitor.Width * (zone.WidthPercentage / 100d)));
-        var height = Math.Max(1, (int)Math.Round(monitor.Height * (zone.HeightPercentage / 100d)));
-        var x = (int)Math.Round(monitor.Width * (zone.LeftPercentage / 100d));
-        var y = (int)Math.Round(monitor.Height * (zone.TopPercentage / 100d));
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+        var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
+
+        var width = Math.Max(1, (int)Math.Round(monitorWidth * (zone.WidthPercentage / 100d)));
+        var height = Math.Max(1, (int)Math.Round(monitorHeight * (zone.HeightPercentage / 100d)));
+        var x = (int)Math.Round(monitorWidth * (zone.LeftPercentage / 100d));
+        var y = (int)Math.Round(monitorHeight * (zone.TopPercentage / 100d));
 
         switch (zone.Anchor)
         {
@@ -1593,8 +1607,8 @@ internal sealed class ConfigForm : Form
                 break;
         }
 
-        x = Math.Clamp(x, 0, Math.Max(0, monitor.Width - width));
-        y = Math.Clamp(y, 0, Math.Max(0, monitor.Height - height));
+        x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
+        y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
 
         return new Rectangle(x, y, width, height);
     }
@@ -1635,8 +1649,11 @@ internal sealed class ConfigForm : Form
         }
         else
         {
-            var width = window.Width ?? monitor.Width;
-            var height = window.Height ?? monitor.Height;
+            var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+            var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+            var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
+            var width = window.Width ?? monitorWidth;
+            var height = window.Height ?? monitorHeight;
             var x = window.X ?? 0;
             var y = window.Y ?? 0;
             zone = $"{width}x{height} @ ({x},{y})";
@@ -1680,10 +1697,14 @@ internal sealed class ConfigForm : Form
             };
         }
 
-        var width = Math.Clamp(window.Width ?? monitor.Width, 1, monitor.Width);
-        var height = Math.Clamp(window.Height ?? monitor.Height, 1, monitor.Height);
-        var x = Math.Clamp(window.X ?? 0, 0, Math.Max(0, monitor.Width - width));
-        var y = Math.Clamp(window.Y ?? 0, 0, Math.Max(0, monitor.Height - height));
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+        var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
+
+        var width = Math.Clamp(window.Width ?? monitorWidth, 1, monitorWidth);
+        var height = Math.Clamp(window.Height ?? monitorHeight, 1, monitorHeight);
+        var x = Math.Clamp(window.X ?? 0, 0, Math.Max(0, monitorWidth - width));
+        var y = Math.Clamp(window.Y ?? 0, 0, Math.Max(0, monitorHeight - height));
 
         return window with
         {
