@@ -503,18 +503,17 @@ public sealed class ProfileExecutor : IDisposable
             return monitorBounds;
         }
 
-        var scale = monitor.Scale > 0 ? monitor.Scale : 1.0;
         var left = window.X.HasValue
-            ? monitorBounds.Left + ScaleValue(window.X.Value, scale)
+            ? monitorBounds.Left + window.X.Value
             : monitorBounds.Left;
         var top = window.Y.HasValue
-            ? monitorBounds.Top + ScaleValue(window.Y.Value, scale)
+            ? monitorBounds.Top + window.Y.Value
             : monitorBounds.Top;
         var width = window.Width.HasValue
-            ? ScaleValue(window.Width.Value, scale)
+            ? window.Width.Value
             : monitorBounds.Width;
         var height = window.Height.HasValue
-            ? ScaleValue(window.Height.Value, scale)
+            ? window.Height.Value
             : monitorBounds.Height;
 
         if (width <= 0)
@@ -690,9 +689,6 @@ public sealed class ProfileExecutor : IDisposable
             && left.AdapterLuidLow == right.AdapterLuidLow
             && left.TargetId == right.TargetId;
     }
-
-    private static int ScaleValue(int value, double scale)
-        => (int)Math.Round(value * scale, MidpointRounding.AwayFromZero);
 
     private static int ClampToInt(uint value)
         => value > int.MaxValue ? int.MaxValue : (int)value;

@@ -2035,6 +2035,10 @@ public partial class AppEditorForm : Form
             return false;
         }
 
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+        var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
+
         var changed = false;
 
         _suppressWindowInputHandlers = true;
@@ -2042,17 +2046,17 @@ public partial class AppEditorForm : Form
         try
         {
             var width = (int)widthControl.Value;
-            if (monitor.Width > 0)
+            if (monitorWidth > 0)
             {
-                var clampedWidth = Math.Clamp(width, 1, monitor.Width);
+                var clampedWidth = Math.Clamp(width, 1, monitorWidth);
                 changed |= UpdateNumericControl(widthControl, clampedWidth);
                 width = clampedWidth;
             }
 
             var height = (int)heightControl.Value;
-            if (monitor.Height > 0)
+            if (monitorHeight > 0)
             {
-                var clampedHeight = Math.Clamp(height, 1, monitor.Height);
+                var clampedHeight = Math.Clamp(height, 1, monitorHeight);
                 changed |= UpdateNumericControl(heightControl, clampedHeight);
                 height = clampedHeight;
             }
@@ -2060,16 +2064,16 @@ public partial class AppEditorForm : Form
             if (pointer is Point target)
             {
                 var targetX = target.X;
-                if (monitor.Width > 0)
+                if (monitorWidth > 0)
                 {
-                    var maxX = Math.Max(0, monitor.Width - width);
+                    var maxX = Math.Max(0, monitorWidth - width);
                     targetX = Math.Clamp(targetX, 0, maxX);
                 }
 
                 var targetY = target.Y;
-                if (monitor.Height > 0)
+                if (monitorHeight > 0)
                 {
-                    var maxY = Math.Max(0, monitor.Height - height);
+                    var maxY = Math.Max(0, monitorHeight - height);
                     targetY = Math.Clamp(targetY, 0, maxY);
                 }
 
@@ -2078,18 +2082,18 @@ public partial class AppEditorForm : Form
             }
             else
             {
-                if (monitor.Width > 0)
+                if (monitorWidth > 0)
                 {
                     var currentX = (int)xControl.Value;
-                    var maxX = Math.Max(0, monitor.Width - width);
+                    var maxX = Math.Max(0, monitorWidth - width);
                     var clampedX = Math.Clamp(currentX, 0, maxX);
                     changed |= UpdateNumericControl(xControl, clampedX);
                 }
 
-                if (monitor.Height > 0)
+                if (monitorHeight > 0)
                 {
                     var currentY = (int)yControl.Value;
-                    var maxY = Math.Max(0, monitor.Height - height);
+                    var maxY = Math.Max(0, monitorHeight - height);
                     var clampedY = Math.Clamp(currentY, 0, maxY);
                     changed |= UpdateNumericControl(yControl, clampedY);
                 }
@@ -2425,13 +2429,12 @@ public partial class AppEditorForm : Form
 
     private static Rectangle CalculateMonitorRelativeBounds(WindowConfig window, MonitorInfo monitor)
     {
-        var monitorWidth = monitor.Width > 0 ? monitor.Width : monitor.Bounds.Width;
-        var monitorHeight = monitor.Height > 0 ? monitor.Height : monitor.Bounds.Height;
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width;
+        var monitorHeight = monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height;
 
-        if (monitorWidth <= 0 || monitorHeight <= 0)
-        {
-            return Rectangle.Empty;
-        }
+        monitorWidth = Math.Max(1, monitorWidth);
+        monitorHeight = Math.Max(1, monitorHeight);
 
         if (window.FullScreen)
         {
@@ -2531,30 +2534,37 @@ public partial class AppEditorForm : Form
 
     private static WindowConfig ClampWindowBounds(WindowConfig window, MonitorInfo monitor)
     {
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width;
+        var monitorHeight = monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height;
+
+        monitorWidth = Math.Max(1, monitorWidth);
+        monitorHeight = Math.Max(1, monitorHeight);
+
         var width = window.Width;
         var height = window.Height;
         var x = window.X;
         var y = window.Y;
 
-        if (width is int w && monitor.Width > 0)
+        if (width is int w)
         {
-            width = Math.Clamp(w, 1, monitor.Width);
+            width = Math.Clamp(w, 1, monitorWidth);
         }
 
-        if (height is int h && monitor.Height > 0)
+        if (height is int h)
         {
-            height = Math.Clamp(h, 1, monitor.Height);
+            height = Math.Clamp(h, 1, monitorHeight);
         }
 
-        if (x is int posX && width is int wValue && monitor.Width > 0)
+        if (x is int posX && width is int wValue)
         {
-            var maxX = Math.Max(0, monitor.Width - wValue);
+            var maxX = Math.Max(0, monitorWidth - wValue);
             x = Math.Clamp(posX, 0, maxX);
         }
 
-        if (y is int posY && height is int hValue && monitor.Height > 0)
+        if (y is int posY && height is int hValue)
         {
-            var maxY = Math.Max(0, monitor.Height - hValue);
+            var maxY = Math.Max(0, monitorHeight - hValue);
             y = Math.Clamp(posY, 0, maxY);
         }
 
@@ -2581,8 +2591,9 @@ public partial class AppEditorForm : Form
 
     private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
     {
-        var monitorWidth = Math.Max(1, monitor.Width);
-        var monitorHeight = Math.Max(1, monitor.Height);
+        var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+        var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+        var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
 
         var width = Math.Max(1, (int)Math.Round(monitorWidth * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
         var height = Math.Max(1, (int)Math.Round(monitorHeight * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));
