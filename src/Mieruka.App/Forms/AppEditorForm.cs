@@ -109,6 +109,8 @@ public partial class AppEditorForm : Form
     private bool _hasWindowPreviewSnapshot;
     private TimeSpan _lastWindowPreviewRebuild = TimeSpan.Zero;
     private bool _windowPreviewRebuildScheduled;
+    private readonly Timer _windowBoundsDebounce;
+    private bool _windowBoundsDebouncePending;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
 
@@ -125,6 +127,12 @@ public partial class AppEditorForm : Form
         _uiThreadId = Environment.CurrentManagedThreadId;
         _uiContext = SynchronizationContext.Current;
         ToolTipTamer.Tame(this, components);
+
+        _windowBoundsDebounce = new Timer(components)
+        {
+            Interval = 150
+        };
+        _windowBoundsDebounce.Tick += WindowBoundsDebounceOnTick;
 
         var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
         var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos não foi configurada.");
@@ -235,54 +243,22 @@ public partial class AppEditorForm : Form
 
         if (nudJanelaX is not null)
         {
-            nudJanelaX.ValueChanged += (_, _) =>
-            {
-                if (_suppressWindowInputHandlers)
-                {
-                    return;
-                }
-
-                InvalidateWindowPreviewOverlay();
-            };
+            nudJanelaX.ValueChanged += (_, _) => QueueWindowOverlayUpdate();
         }
 
         if (nudJanelaY is not null)
         {
-            nudJanelaY.ValueChanged += (_, _) =>
-            {
-                if (_suppressWindowInputHandlers)
-                {
-                    return;
-                }
-
-                InvalidateWindowPreviewOverlay();
-            };
+            nudJanelaY.ValueChanged += (_, _) => QueueWindowOverlayUpdate();
         }
 
         if (nudJanelaLargura is not null)
         {
-            nudJanelaLargura.ValueChanged += (_, _) =>
-            {
-                if (_suppressWindowInputHandlers)
-                {
-                    return;
-                }
-
-                InvalidateWindowPreviewOverlay();
-            };
+            nudJanelaLargura.ValueChanged += (_, _) => QueueWindowOverlayUpdate();
         }
 
         if (nudJanelaAltura is not null)
         {
-            nudJanelaAltura.ValueChanged += (_, _) =>
-            {
-                if (_suppressWindowInputHandlers)
-                {
-                    return;
-                }
-
-                InvalidateWindowPreviewOverlay();
-            };
+            nudJanelaAltura.ValueChanged += (_, _) => QueueWindowOverlayUpdate();
         }
 
         AdjustMonitorPreviewWidth();
@@ -1701,7 +1677,7 @@ public partial class AppEditorForm : Form
         UpdateWindowInputsState();
 
         _ = ClampWindowInputsToMonitor(null, allowFullScreen: true);
-        InvalidateWindowPreviewOverlay();
+        QueueWindowOverlayUpdate();
     }
 
     private void UpdateWindowInputsState()
@@ -2198,6 +2174,9 @@ public partial class AppEditorForm : Form
             return;
         }
 
+        _windowBoundsDebounce.Stop();
+        _windowBoundsDebouncePending = false;
+
         var snapshot = CaptureWindowPreviewSnapshot();
         var now = _windowPreviewStopwatch.Elapsed;
 
@@ -2228,6 +2207,32 @@ public partial class AppEditorForm : Form
         }
 
         ApplyWindowPreviewSnapshot(snapshot, now);
+    }
+
+    private void QueueWindowOverlayUpdate()
+    {
+        if (_suppressWindowInputHandlers)
+        {
+            return;
+        }
+
+        _ = ClampWindowInputsToMonitor(null, allowFullScreen: true);
+        _windowBoundsDebouncePending = true;
+        _windowBoundsDebounce.Stop();
+        _windowBoundsDebounce.Start();
+    }
+
+    private void WindowBoundsDebounceOnTick(object? sender, EventArgs e)
+    {
+        _windowBoundsDebounce.Stop();
+
+        if (!_windowBoundsDebouncePending)
+        {
+            return;
+        }
+
+        _windowBoundsDebouncePending = false;
+        InvalidateWindowPreviewOverlay();
     }
 
     private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
