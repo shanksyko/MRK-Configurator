@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -24,7 +23,30 @@ public sealed class MonitorPreviewHost : IDisposable
     private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
     private static readonly TimeSpan SafeModeFrameThrottle = TimeSpan.FromMilliseconds(100);
-    private static readonly ConcurrentDictionary<string, byte> GpuFallbackLogged = new();
+    private static readonly TimeSpan GpuFallbackLogInterval = TimeSpan.FromSeconds(10);
+    private static long _lastGpuFallbackLogTicks;
+
+    private sealed class ReentrancyGate
+    {
+        private int _depth;
+
+        public bool TryEnter(int limit = 1)
+        {
+            var depth = Interlocked.Increment(ref _depth);
+            if (depth <= limit)
+            {
+                return true;
+            }
+
+            Interlocked.Decrement(ref _depth);
+            return false;
+        }
+
+        public void Exit()
+        {
+            Interlocked.Decrement(ref _depth);
+        }
+    }
 
     private enum PreviewState
     {
@@ -66,6 +88,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private bool _suppressEvents;
     private int _disposeRetryScheduled;
     private bool _safeModeEnabled;
+    private readonly ReentrancyGate _lifecycleGate = new();
 
     private PreviewState State
     {
@@ -243,9 +266,7 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public bool Start(bool preferGpu)
     {
-        var preferGpuAdjusted = preferGpu && !PreviewSafeModeEnabled;
-
-        if (!TryEnterBusy(out var scope))
+        if (!_lifecycleGate.TryEnter())
         {
             LogReentrancyBlocked(nameof(Start));
             return Capture is not null;
@@ -253,11 +274,26 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            return StartCore(preferGpuAdjusted);
+            var preferGpuAdjusted = preferGpu && !PreviewSafeModeEnabled;
+
+            if (!TryEnterBusy(out var scope))
+            {
+                LogReentrancyBlocked(nameof(Start));
+                return Capture is not null;
+            }
+
+            try
+            {
+                return StartCore(preferGpuAdjusted);
+            }
+            finally
+            {
+                scope.Dispose();
+            }
         }
         finally
         {
-            scope.Dispose();
+            _lifecycleGate.Exit();
         }
     }
 
@@ -266,7 +302,7 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public void Stop()
     {
-        if (!TryEnterBusy(out var scope))
+        if (!_lifecycleGate.TryEnter())
         {
             LogReentrancyBlocked(nameof(Stop));
             return;
@@ -274,19 +310,32 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            lock (_stateGate)
+            if (!TryEnterBusy(out var scope))
             {
-                _hasActiveSession = false;
-                _isGpuActive = false;
-                _isSuspended = false;
+                LogReentrancyBlocked(nameof(Stop));
+                return;
             }
 
-            Interlocked.Exchange(ref _paused, 0);
-            StopCore(clearFrame: true);
+            try
+            {
+                lock (_stateGate)
+                {
+                    _hasActiveSession = false;
+                    _isGpuActive = false;
+                    _isSuspended = false;
+                }
+
+                Interlocked.Exchange(ref _paused, 0);
+                StopCore(clearFrame: true);
+            }
+            finally
+            {
+                scope.Dispose();
+            }
         }
         finally
         {
-            scope.Dispose();
+            _lifecycleGate.Exit();
         }
     }
 
@@ -492,11 +541,24 @@ public sealed class MonitorPreviewHost : IDisposable
 
     public void Dispose()
     {
-        _suppressEvents = true;
-
-        if (!DisposeInternal())
+        if (!_lifecycleGate.TryEnter())
         {
             ScheduleDeferredDispose();
+            return;
+        }
+
+        try
+        {
+            _suppressEvents = true;
+
+            if (!DisposeInternal())
+            {
+                ScheduleDeferredDispose();
+            }
+        }
+        finally
+        {
+            _lifecycleGate.Exit();
         }
     }
 
@@ -1611,16 +1673,23 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void LogGpuFallback()
     {
-        if (!GpuFallbackLogged.TryAdd(MonitorId, 0))
-        {
-            return;
-        }
-
         if (_suppressEvents)
         {
             return;
         }
 
+        var nowTicks = DateTime.UtcNow.Ticks;
+        var previous = Volatile.Read(ref _lastGpuFallbackLogTicks);
+        if (previous != 0)
+        {
+            var elapsed = nowTicks - previous;
+            if (elapsed >= 0 && elapsed < GpuFallbackLogInterval.Ticks)
+            {
+                return;
+            }
+        }
+
+        Interlocked.Exchange(ref _lastGpuFallbackLogTicks, nowTicks);
         _logger.Information("GpuCaptureFallbackAtivado");
     }
 

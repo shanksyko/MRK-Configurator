@@ -6,6 +6,8 @@ using System.Threading;
 using System.Windows.Forms;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
+using Mieruka.App.Config;
+using Mieruka.Preview.Capture;
 using Serilog;
 using Serilog.Enrichers;
 using Serilog.Events;
@@ -28,6 +30,8 @@ internal static class Program
         try
         {
             Log.Information("Iniciando Mieruka Configurator.");
+
+            EnsurePreviewRunsOnGdi();
 
             var mainForm = new MainForm();
             TabLayoutGuard.Attach(mainForm);
@@ -121,6 +125,60 @@ internal static class Program
 #endif
 
         Log.Logger = configuration.CreateLogger();
+    }
+
+    private static void EnsurePreviewRunsOnGdi()
+    {
+        try
+        {
+            if (GraphicsCaptureProvider.DisableGpuGlobally())
+            {
+                Log.Information("GPU capture globally disabled; forcing GDI preview.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha ao desabilitar captura GPU globalmente.");
+        }
+
+        try
+        {
+            var options = LoadPreviewGraphicsOptions();
+            if (options.Mode != PreviewGraphicsMode.Gdi)
+            {
+                var sanitized = options with { Mode = PreviewGraphicsMode.Gdi };
+                SavePreviewGraphicsOptions(sanitized);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Falha ao forçar modo GDI nas preferências de preview.");
+        }
+    }
+
+    private static PreviewGraphicsOptions LoadPreviewGraphicsOptions()
+    {
+        var store = new JsonStore<PreviewGraphicsOptions>(ResolvePreviewOptionsPath());
+        return store.LoadAsync().GetAwaiter().GetResult() ?? new PreviewGraphicsOptions();
+    }
+
+    private static void SavePreviewGraphicsOptions(PreviewGraphicsOptions options)
+    {
+        var store = new JsonStore<PreviewGraphicsOptions>(ResolvePreviewOptionsPath());
+        store.SaveAsync(options.Normalize()).GetAwaiter().GetResult();
+    }
+
+    private static string ResolvePreviewOptionsPath()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+        {
+            localAppData = AppContext.BaseDirectory;
+        }
+
+        var directory = Path.Combine(localAppData, "Mieruka", "Configurator");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, "preview-options.json");
     }
 
     private static (string RootDirectory, string CurrentMonthDirectory) ResolveLogDirectories(DateTime timestamp)

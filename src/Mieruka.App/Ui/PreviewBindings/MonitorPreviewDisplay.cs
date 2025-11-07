@@ -325,9 +325,7 @@ public sealed class MonitorPreviewDisplay : UserControl
         UpdateGlyphTooltip(e.Location);
 
         var monitor = _monitor;
-        var image = _pictureBox.Image;
-
-        if (monitor is null || image is null)
+        if (monitor is null)
         {
             return;
         }
@@ -578,18 +576,8 @@ public sealed class MonitorPreviewDisplay : UserControl
 
     private static RectangleF GetImageDisplayRectangle(PictureBox pictureBox)
     {
-        Image? image;
-        try
-        {
-            image = pictureBox.Image;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            Logger.Debug(ex, "Falha ao obter imagem atual do preview.");
-            return RectangleF.Empty;
-        }
-
-        if (image is null)
+        var image = TryGetCurrentImage(pictureBox);
+        if (!IsValidImage(image))
         {
             return RectangleF.Empty;
         }
@@ -677,6 +665,37 @@ public sealed class MonitorPreviewDisplay : UserControl
         {
             _tooltip.SetToolTip(_pictureBox, null);
             _currentGlyphTooltip = null;
+        }
+    }
+
+    private static Image? TryGetCurrentImage(PictureBox pictureBox)
+    {
+        try
+        {
+            return pictureBox.Image;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            Logger.Debug(ex, "Falha ao obter imagem atual do preview.");
+            return null;
+        }
+    }
+
+    private static bool IsValidImage(Image? image)
+    {
+        if (image is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return image.Width > 0 && image.Height > 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
+        {
+            Logger.Debug(ex, "Imagem inválida ao inspecionar preview.");
+            return false;
         }
     }
 
