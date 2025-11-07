@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
+using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Preview;
@@ -90,6 +91,8 @@ public sealed class MonitorPreviewHost : IDisposable
     private int _disposeRetryScheduled;
     private bool _safeModeEnabled;
     private readonly ReentrancyGate _lifecycleGate = new();
+    private long _reentrancyBlockedCount;
+    private DateTime _lastGateReportUtc = DateTime.UtcNow;
 
     private PreviewState State
     {
@@ -131,7 +134,7 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
-        _logger = (logger ?? Log.ForContext<MonitorPreviewHost>()).ForContext("MonitorId", MonitorId);
+        _logger = (logger ?? Log.ForContext<MonitorPreviewHost>()).ForMonitor(MonitorId);
         _frameAnimationHandler = (_, _) =>
         {
             try
@@ -1004,10 +1007,8 @@ public sealed class MonitorPreviewHost : IDisposable
 
         if (Interlocked.Exchange(ref _frameCallbackGate, 1) != 0)
         {
-            if (!_suppressEvents)
-            {
-                _logger.Information("ReentrancyBlocked");
-            }
+            Interlocked.Increment(ref _reentrancyBlockedCount);
+            MaybeReportGateBlocks();
             e.Dispose();
             return;
         }
@@ -1016,7 +1017,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             if (Volatile.Read(ref _paused) == 1)
             {
-                _logger.Information("FrameDroppedPaused");
+                _logger.Debug("FrameDroppedPaused");
                 e.Dispose();
                 return;
             }
@@ -1076,6 +1077,23 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             Interlocked.Exchange(ref _frameCallbackGate, 0);
         }
+    }
+
+    private void MaybeReportGateBlocks()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastGateReportUtc).TotalSeconds < 5)
+        {
+            return;
+        }
+
+        var blocked = Interlocked.Exchange(ref _reentrancyBlockedCount, 0);
+        if (blocked > 0)
+        {
+            _logger.Warning("Reentrancy blocked events={Count}", blocked);
+        }
+
+        _lastGateReportUtc = now;
     }
 
     private Drawing.Bitmap? TryCloneFrame(Drawing.Image frame, int width, int height)
@@ -1668,6 +1686,9 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             return;
         }
+
+        Interlocked.Increment(ref _reentrancyBlockedCount);
+        MaybeReportGateBlocks();
 
         ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
     }

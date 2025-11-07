@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Drawing = System.Drawing;
 using Drawing2D = System.Drawing.Drawing2D;
 using Forms = System.Windows.Forms;
@@ -26,6 +27,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
     private MonitorInfo? _monitor;
     private string? _currentGlyphTooltip;
     private string? _placeholderMessage;
+    private int _paintExceptionCount;
 
     private const string AskGlyph = "❓";
     private const string AskTooltipText = "Solicitar confirmação antes de iniciar.";
@@ -366,80 +368,91 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
 
     private void PictureBoxOnPaint(object? sender, Forms.PaintEventArgs e)
     {
-        if (!string.IsNullOrEmpty(_placeholderMessage))
+        try
         {
-            DrawPlaceholder(e.Graphics, _placeholderMessage);
+            if (!string.IsNullOrEmpty(_placeholderMessage))
+            {
+                DrawPlaceholder(e.Graphics, _placeholderMessage);
+                _glyphRegions.Clear();
+                return;
+            }
+
+            if (_monitor is null || _simRects.Count == 0)
+            {
+                _glyphRegions.Clear();
+                return;
+            }
+
+            var monitorWidth = _monitor.Width > 0 ? _monitor.Width : _monitor.Bounds.Width;
+            var monitorHeight = _monitor.Height > 0 ? _monitor.Height : _monitor.Bounds.Height;
+            if (monitorWidth <= 0 || monitorHeight <= 0)
+            {
+                _glyphRegions.Clear();
+                return;
+            }
+
+            var displayRect = GetImageDisplayRectangle(_pictureBox);
+            if (displayRect.Width <= 0 || displayRect.Height <= 0)
+            {
+                _glyphRegions.Clear();
+                return;
+            }
+
+            var scaleX = displayRect.Width / monitorWidth;
+            var scaleY = displayRect.Height / monitorHeight;
+
+            var graphics = e.Graphics;
+            graphics.SmoothingMode = Drawing2D.SmoothingMode.AntiAlias;
+            graphics.PixelOffsetMode = Drawing2D.PixelOffsetMode.HighQuality;
+
             _glyphRegions.Clear();
-            return;
+
+            foreach (var rect in _simRects)
+            {
+                if (rect.MonRel.Width <= 0 || rect.MonRel.Height <= 0)
+                {
+                    continue;
+                }
+
+                var canvasRect = new Drawing.RectangleF(
+                    displayRect.X + (rect.MonRel.X * scaleX),
+                    displayRect.Y + (rect.MonRel.Y * scaleY),
+                    rect.MonRel.Width * scaleX,
+                    rect.MonRel.Height * scaleY);
+
+                if (canvasRect.Width <= 0f || canvasRect.Height <= 0f)
+                {
+                    continue;
+                }
+
+                var baseColor = rect.Color;
+                if (baseColor.A == 0)
+                {
+                    baseColor = Drawing.Color.DodgerBlue;
+                }
+
+                using (var fill = new Drawing.SolidBrush(Drawing.Color.FromArgb(96, baseColor)))
+                {
+                    graphics.FillRectangle(fill, canvasRect);
+                }
+
+                var borderColor = Drawing.Color.FromArgb(220, baseColor);
+                using (var border = new Drawing.Pen(borderColor, 2f))
+                {
+                    graphics.DrawRectangle(border, canvasRect.X, canvasRect.Y, canvasRect.Width, canvasRect.Height);
+                }
+
+                DrawLabel(graphics, rect, canvasRect);
+                DrawIndicatorGlyphs(graphics, rect, canvasRect, borderColor);
+            }
         }
-
-        if (_monitor is null || _simRects.Count == 0)
+        catch (Exception ex)
         {
-            _glyphRegions.Clear();
-            return;
-        }
-
-        var monitorWidth = _monitor.Width > 0 ? _monitor.Width : _monitor.Bounds.Width;
-        var monitorHeight = _monitor.Height > 0 ? _monitor.Height : _monitor.Bounds.Height;
-        if (monitorWidth <= 0 || monitorHeight <= 0)
-        {
-            _glyphRegions.Clear();
-            return;
-        }
-
-        var displayRect = GetImageDisplayRectangle(_pictureBox);
-        if (displayRect.Width <= 0 || displayRect.Height <= 0)
-        {
-            _glyphRegions.Clear();
-            return;
-        }
-
-        var scaleX = displayRect.Width / monitorWidth;
-        var scaleY = displayRect.Height / monitorHeight;
-
-        var graphics = e.Graphics;
-        graphics.SmoothingMode = Drawing2D.SmoothingMode.AntiAlias;
-        graphics.PixelOffsetMode = Drawing2D.PixelOffsetMode.HighQuality;
-
-        _glyphRegions.Clear();
-
-        foreach (var rect in _simRects)
-        {
-            if (rect.MonRel.Width <= 0 || rect.MonRel.Height <= 0)
+            var count = Interlocked.Increment(ref _paintExceptionCount);
+            if (count <= 3 || count % 50 == 0)
             {
-                continue;
+                Logger.Error(ex, "Paint exception (count={Count})", count);
             }
-
-            var canvasRect = new Drawing.RectangleF(
-                displayRect.X + (rect.MonRel.X * scaleX),
-                displayRect.Y + (rect.MonRel.Y * scaleY),
-                rect.MonRel.Width * scaleX,
-                rect.MonRel.Height * scaleY);
-
-            if (canvasRect.Width <= 0f || canvasRect.Height <= 0f)
-            {
-                continue;
-            }
-
-            var baseColor = rect.Color;
-            if (baseColor.A == 0)
-            {
-                baseColor = Drawing.Color.DodgerBlue;
-            }
-
-            using (var fill = new Drawing.SolidBrush(Drawing.Color.FromArgb(96, baseColor)))
-            {
-                graphics.FillRectangle(fill, canvasRect);
-            }
-
-            var borderColor = Drawing.Color.FromArgb(220, baseColor);
-            using (var border = new Drawing.Pen(borderColor, 2f))
-            {
-                graphics.DrawRectangle(border, canvasRect.X, canvasRect.Y, canvasRect.Width, canvasRect.Height);
-            }
-
-            DrawLabel(graphics, rect, canvasRect);
-            DrawIndicatorGlyphs(graphics, rect, canvasRect, borderColor);
         }
     }
 

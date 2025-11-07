@@ -1,5 +1,7 @@
 using System;
+using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.Preview
 {
@@ -8,6 +10,8 @@ namespace Mieruka.Preview
     /// </summary>
     public static class CreateForMonitor
     {
+        private static readonly ILogger Logger = Log.ForContext("Component", "CaptureFactory");
+
         /// <summary>Cria captura GPU (Windows.Graphics.Capture / DXGI) para o monitor informado.</summary>
         public static IMonitorCapture Gpu(string monitorId)
         {
@@ -19,6 +23,9 @@ namespace Mieruka.Preview
         public static IMonitorCapture Gdi(string monitorId)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
+
+            var log = Logger.ForMonitor(monitorId);
+            log.Information("CreateForMonitor: selecting backend {Backend}", "GDI");
 
             return GdiMonitorCapture.Create(monitorId);
         }

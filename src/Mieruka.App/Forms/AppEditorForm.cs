@@ -114,6 +114,8 @@ public partial class AppEditorForm : Form
     private bool _windowPreviewRebuildScheduled;
     private readonly WinTimer _windowBoundsDebounce;
     private bool _windowBoundsDebouncePending;
+    private Rectangle _lastWindowRectLog = Rectangle.Empty;
+    private DateTime _lastWindowRectLogUtc;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
 
@@ -2220,6 +2222,22 @@ public partial class AppEditorForm : Form
         }
 
         _ = ClampWindowInputsToMonitor(null, allowFullScreen: true);
+
+        var snapshot = CaptureWindowPreviewSnapshot();
+        var bounds = snapshot.Bounds;
+        var nowUtc = DateTime.UtcNow;
+        if (!bounds.Equals(_lastWindowRectLog) || (nowUtc - _lastWindowRectLogUtc).TotalMilliseconds >= 500)
+        {
+            Logger.Debug(
+                "RectValueChanged: x={X}, y={Y}, w={W}, h={H}",
+                bounds.X,
+                bounds.Y,
+                bounds.Width,
+                bounds.Height);
+            _lastWindowRectLog = bounds;
+            _lastWindowRectLogUtc = nowUtc;
+        }
+
         _windowBoundsDebouncePending = true;
         _windowBoundsDebounce.Stop();
         _windowBoundsDebounce.Start();
@@ -2270,6 +2288,12 @@ public partial class AppEditorForm : Form
         _windowPreviewRebuildScheduled = false;
 
         RebuildSimulationOverlays();
+        Logger.Information(
+            "ApplySelectionOverlay: bounds={Bounds} monitor={MonitorId} fullScreen={FullScreen} autoStart={AutoStart}",
+            snapshot.WindowBounds,
+            snapshot.MonitorId ?? string.Empty,
+            snapshot.IsFullScreen,
+            snapshot.AutoStart);
         monitorPreviewDisplay?.Invalidate();
     }
 

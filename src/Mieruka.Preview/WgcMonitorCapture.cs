@@ -17,6 +17,8 @@ namespace Mieruka.Preview
         private static readonly ConcurrentDictionary<string, byte> _gpuBackoffLogged = new();
         private static readonly ConcurrentDictionary<string, byte> _gpuUnavailableMonitors = new();
         private static readonly ConcurrentDictionary<string, byte> _hostBlockLogged = new();
+        private static readonly object WarnGate = new();
+        private static DateTime _lastWarnUtc;
 
         public static IMonitorCapture Create(string monitorId)
         {
@@ -75,7 +77,7 @@ namespace Mieruka.Preview
                 if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
                 {
                     LogGpuBackoff(monitor.Id, monitor.DeviceName);
-                    _logger?.Warn(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI.", monitor.DeviceName);
+                    WarnRateLimited(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI. reason={Reason}", monitor.DeviceName, ex.Message);
                 }
                 throw;
             }
@@ -91,9 +93,9 @@ namespace Mieruka.Preview
                 {
                     LogGpuBackoff(monitor.Id, monitor.DeviceName);
                     var template = ex.IsPermanent
-                        ? "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff indefinido e caindo para GDI."
-                        : "Windows Graphics Capture indisponível temporariamente para {Monitor}. Aplicando backoff e caindo para GDI.";
-                    _logger?.Warn(ex, template, monitor.DeviceName);
+                        ? "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff indefinido e caindo para GDI. reason={Reason}"
+                        : "Windows Graphics Capture indisponível temporariamente para {Monitor}. Aplicando backoff e caindo para GDI. reason={Reason}";
+                    WarnRateLimited(ex, template, monitor.DeviceName, ex.Message);
                 }
 
                 throw;
@@ -103,7 +105,7 @@ namespace Mieruka.Preview
                 if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
                 {
                     LogGpuBackoff(monitor.Id, monitor.DeviceName);
-                    _logger?.Warn(ex, "Windows Graphics Capture não suportado neste host. Caindo para GDI.");
+                    WarnRateLimited(ex, "Windows Graphics Capture não suportado neste host. Caindo para GDI. monitor={Monitor} reason={Reason}", monitor.DeviceName ?? monitor.Id ?? "?", ex.Message);
                 }
                 throw;
             }
@@ -165,6 +167,31 @@ namespace Mieruka.Preview
             _logger.Information(
                 "Windows Graphics Capture indisponível para {Monitor}. Mantendo fallback GDI nesta sessão.",
                 descriptor);
+        }
+
+        private static bool ShouldLogWarning()
+        {
+            var now = DateTime.UtcNow;
+            lock (WarnGate)
+            {
+                if ((now - _lastWarnUtc).TotalSeconds <= 10)
+                {
+                    return false;
+                }
+
+                _lastWarnUtc = now;
+                return true;
+            }
+        }
+
+        private static void WarnRateLimited(Exception exception, string messageTemplate, params object?[] propertyValues)
+        {
+            if (_logger is null || !ShouldLogWarning())
+            {
+                return;
+            }
+
+            _logger.Warning(exception, messageTemplate, propertyValues);
         }
 
         private static void SafeDispose(IMonitorCapture capture)
@@ -237,14 +264,6 @@ namespace Mieruka.Preview
                     _logger.Information(messageTemplate, descriptor);
                     break;
             }
-        }
-    }
-
-    internal static class LoggerExtensions
-    {
-        public static void Warn(this ILogger logger, Exception exception, string messageTemplate, params object?[] propertyValues)
-        {
-            logger.Warning(exception, messageTemplate, propertyValues);
         }
     }
 

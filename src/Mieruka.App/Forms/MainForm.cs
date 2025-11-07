@@ -21,6 +21,7 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
+using Serilog;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.App.Forms;
@@ -151,6 +152,46 @@ public partial class MainForm : Form
         });
 
         UpdateGraphicsMenuSelection(_graphicsOptions.Mode);
+
+        const string openLogsButtonName = "openLogsButton";
+        var openLogsButton = _toolStrip.Items
+            .OfType<ToolStripButton>()
+            .FirstOrDefault(b => string.Equals(b.Name, openLogsButtonName, StringComparison.Ordinal));
+
+        if (openLogsButton is null)
+        {
+            openLogsButton = new ToolStripButton
+            {
+                Name = openLogsButtonName,
+                Text = "Abrir logs",
+                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                ToolTipText = "Abrir pasta de logs de diagnóstico"
+            };
+            openLogsButton.Click += (_, _) => OpenLogsFolder();
+            _toolStrip.Items.Add(openLogsButton);
+        }
+    }
+
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            var logsDirectory = Path.Combine(AppContext.BaseDirectory ?? string.Empty, "logs");
+            Directory.CreateDirectory(logsDirectory);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = logsDirectory,
+                UseShellExecute = true,
+            };
+
+            Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to open logs folder");
+        }
     }
 
     private ToolStripMenuItem CreateGraphicsMenuItem(string text, PreviewGraphicsMode mode, string toolTip)
@@ -261,6 +302,7 @@ public partial class MainForm : Form
         }
 
         _graphicsOptions = _graphicsOptions with { Mode = mode };
+        Log.Information("UserSetHardwareAcceleration: {Mode}", mode);
         ApplyGraphicsOptions();
     }
 

@@ -4,22 +4,29 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using Mieruka.App.Config;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
-using Mieruka.App.Config;
+using Mieruka.Core.Diagnostics;
 using Mieruka.Preview.Capture;
 using Serilog;
-using Serilog.Enrichers;
 using Serilog.Events;
+using Serilog.Formatting.Json;
+using Serilog.Enrichers;
 
 namespace Mieruka.App;
 
 internal static class Program
 {
+    internal static Guid SessionId { get; private set; }
+
     [STAThread]
     private static void Main()
     {
-        ConfigureLogging();
+        SessionId = Guid.NewGuid();
+        ConfigureLogging(SessionId);
+
+        using var sessionScope = LogContextEx.PushCorrelation(SessionId);
 
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -84,10 +91,8 @@ internal static class Program
         }
     }
 
-    private static void ConfigureLogging()
+    private static void ConfigureLogging(Guid sessionId)
     {
-        const string outputTemplate = "{Timestamp:HH:mm:ss.fff} [{Level:u3}] (T{ThreadId}) {SourceContext}: {Message:lj}{NewLine}{Exception}";
-
         var minimumLevel = LogEventLevel.Information;
 #if DEBUG
         minimumLevel = LogEventLevel.Debug;
@@ -102,27 +107,27 @@ internal static class Program
             minimumLevel = LogEventLevel.Verbose;
         }
 
-        var now = DateTime.Now;
-        var (logRootDirectory, logDirectory) = ResolveLogDirectories(now);
-        PruneOldLogFiles(logRootDirectory, TimeSpan.FromDays(14), now);
-
-        var logFilePath = Path.Combine(logDirectory, $"{now:yyyy-MM-dd}.log");
+        var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
+        Directory.CreateDirectory(logDirectory);
 
         var configuration = new LoggerConfiguration()
             .MinimumLevel.Is(minimumLevel)
             .Enrich.FromLogContext()
-            .Enrich.WithProperty("Application", "MierukaConfigurator")
             .Enrich.WithThreadId()
+            .Enrich.WithProperty("Application", "MierukaConfigurator")
+            .Enrich.WithProperty("SessionId", sessionId)
             .WriteTo.File(
-                path: logFilePath,
-                shared: true,
-                outputTemplate: outputTemplate,
-                rollingInterval: RollingInterval.Infinite,
-                retainedFileCountLimit: null);
-
-#if DEBUG
-        configuration = configuration.WriteTo.Console(outputTemplate: outputTemplate);
-#endif
+                path: Path.Combine(logDirectory, "mieruka-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                shared: true)
+            .WriteTo.File(
+                formatter: new JsonFormatter(renderMessage: true),
+                path: Path.Combine(logDirectory, "mieruka-.json"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                shared: true)
+            .WriteTo.Console();
 
         Log.Logger = configuration.CreateLogger();
     }
@@ -179,113 +184,6 @@ internal static class Program
         var directory = Path.Combine(localAppData, "Mieruka", "Configurator");
         Directory.CreateDirectory(directory);
         return Path.Combine(directory, "preview-options.json");
-    }
-
-    private static (string RootDirectory, string CurrentMonthDirectory) ResolveLogDirectories(DateTime timestamp)
-    {
-        var monthSegment = timestamp.ToString("yyyy-MM");
-        var candidates = new[]
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            AppContext.BaseDirectory,
-            Path.GetTempPath()
-        };
-
-        foreach (var baseDirectory in candidates)
-        {
-            if (string.IsNullOrWhiteSpace(baseDirectory))
-            {
-                continue;
-            }
-
-            try
-            {
-                var rootDirectory = Path.Combine(baseDirectory, "Mieruka", "Logs");
-                Directory.CreateDirectory(rootDirectory);
-
-                var monthDirectory = Path.Combine(rootDirectory, monthSegment);
-                Directory.CreateDirectory(monthDirectory);
-
-                return (rootDirectory, monthDirectory);
-            }
-            catch
-            {
-                // Ignore and try next location.
-            }
-        }
-
-        var fallbackRoot = Path.Combine(Path.GetTempPath(), "Mieruka", "Logs");
-        Directory.CreateDirectory(fallbackRoot);
-        var fallbackMonth = Path.Combine(fallbackRoot, monthSegment);
-        Directory.CreateDirectory(fallbackMonth);
-
-        return (fallbackRoot, fallbackMonth);
-    }
-
-    private static void PruneOldLogFiles(string rootDirectory, TimeSpan retention, DateTime referenceTime)
-    {
-        if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
-        {
-            return;
-        }
-
-        var cutoffUtc = referenceTime.ToUniversalTime().Subtract(retention);
-        var directoryOptions = new EnumerationOptions
-        {
-            RecurseSubdirectories = false,
-            IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.System | FileAttributes.ReparsePoint,
-        };
-
-        foreach (var directory in Directory.EnumerateDirectories(rootDirectory, "*", directoryOptions))
-        {
-            TryDeleteOldFiles(directory, cutoffUtc);
-            TryDeleteDirectoryIfEmpty(directory);
-        }
-
-        TryDeleteOldFiles(rootDirectory, cutoffUtc);
-    }
-
-    private static void TryDeleteOldFiles(string directory, DateTime cutoffUtc)
-    {
-        try
-        {
-            foreach (var file in Directory.EnumerateFiles(directory, "*.log", SearchOption.TopDirectoryOnly))
-            {
-                try
-                {
-                    var lastWrite = File.GetLastWriteTimeUtc(file);
-                    if (lastWrite < cutoffUtc)
-                    {
-                        File.Delete(file);
-                    }
-                }
-                catch
-                {
-                    // Ignore retention failures and continue with other files.
-                }
-            }
-        }
-        catch
-        {
-            // Ignore enumeration failures for retention.
-        }
-    }
-
-    private static void TryDeleteDirectoryIfEmpty(string directory)
-    {
-        try
-        {
-            using var entries = Directory.EnumerateFileSystemEntries(directory).GetEnumerator();
-            if (!entries.MoveNext())
-            {
-                Directory.Delete(directory, false);
-            }
-        }
-        catch
-        {
-            // Ignore cleanup failures.
-        }
     }
 
     private static void WriteCrashDump()
