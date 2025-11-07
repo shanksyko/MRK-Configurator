@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ConfigAppConfig = Mieruka.Core.Config.AppConfig;
 
 namespace Mieruka.Core.Models;
 
@@ -36,4 +37,9 @@ public sealed record class ProfileConfig
     /// Optional identifier of the monitor used when an entry does not specify a target monitor.
     /// </summary>
     public string? DefaultMonitorId { get; init; }
+
+    /// <summary>
+    /// Application-level configuration applied while editing and running profiles.
+    /// </summary>
+    public ConfigAppConfig App { get; init; } = new();
 }

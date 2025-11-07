@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Mieruka.Core.Layouts;
+using ConfigAppConfig = Mieruka.Core.Config.AppConfig;
 
 namespace Mieruka.Core.Models;
 
@@ -55,4 +56,9 @@ public sealed record class GeneralConfig
     /// Auto-update settings applied to the configurator.
     /// </summary>
     public UpdateConfig AutoUpdate { get; init; } = new();
+
+    /// <summary>
+    /// Application-specific configuration used by the configurator.
+    /// </summary>
+    public ConfigAppConfig App { get; init; } = new();
 }

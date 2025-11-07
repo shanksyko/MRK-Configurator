@@ -6,6 +6,9 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mieruka.Core.Models;
+using HardwareAccelerationMode = Mieruka.Core.Config.HardwareAccelerationMode;
+using PreviewConfig = Mieruka.Core.Config.PreviewConfig;
+using ProgramAppConfig = Mieruka.Core.Models.AppConfig;
 
 namespace Mieruka.Core.Config;
 
@@ -228,12 +231,32 @@ public sealed class ProfileStore
         {
             Applications = applications,
             Windows = windows,
+            App = CloneAppSettings(profile.App),
         };
     }
 
-    private static IList<AppConfig> CloneApplications(IList<AppConfig> source)
+    private static AppConfig CloneAppSettings(AppConfig source)
     {
-        var result = new List<AppConfig>(source.Count);
+        var preview = source?.Preview ?? new PreviewConfig();
+        var mode = Enum.IsDefined(typeof(HardwareAccelerationMode), preview.HardwareAccelerationMode)
+            ? preview.HardwareAccelerationMode
+            : HardwareAccelerationMode.Auto;
+
+        var sanitizedPreview = preview with
+        {
+            HardwareAccelerationMode = mode,
+            LastRunForcedGdi = mode == HardwareAccelerationMode.Auto ? preview.LastRunForcedGdi : null,
+        };
+
+        return (source ?? new AppConfig()) with
+        {
+            Preview = sanitizedPreview,
+        };
+    }
+
+    private static IList<ProgramAppConfig> CloneApplications(IList<ProgramAppConfig> source)
+    {
+        var result = new List<ProgramAppConfig>(source.Count);
 
         foreach (var app in source)
         {

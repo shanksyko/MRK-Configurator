@@ -239,6 +239,11 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
     /// <summary>
+    /// Gets a value indicating whether the current capture session is using GPU acceleration.
+    /// </summary>
+    public bool IsGpuActive => Volatile.Read(ref _isGpuActive);
+
+    /// <summary>
     /// Starts the preview using GPU capture when available.
     /// </summary>
     public bool Start(bool preferGpu)

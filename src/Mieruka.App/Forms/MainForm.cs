@@ -20,6 +20,9 @@ using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
+using ConfigAppConfig = Mieruka.Core.Config.AppConfig;
+using HardwareAccelerationMode = Mieruka.Core.Config.HardwareAccelerationMode;
+using PreviewConfig = Mieruka.Core.Config.PreviewConfig;
 
 namespace Mieruka.App.Forms;
 
@@ -39,7 +42,7 @@ public partial class MainForm : Form
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
-    private readonly AppConfig _appConfig = new();
+    private ConfigAppConfig _appConfig = new();
     private ToolStrip? _toolStrip;
     private ToolStripButton? _btnOptions;
     private ProfileExecutor? _profileExecutor;
@@ -335,7 +338,7 @@ public partial class MainForm : Form
             {
                 try
                 {
-                    if (!host.Start(preferGpu: true))
+                    if (!TryStartPreview(host))
                     {
                         _telemetry.Warn($"Pré-visualização do monitor '{monitorId}' não pôde ser iniciada.");
                     }
@@ -678,7 +681,7 @@ public partial class MainForm : Form
 
             if (context.Host.Capture is null)
             {
-                if (!context.Host.Start(preferGpu: true))
+                if (!TryStartPreview(context.Host))
                 {
                     MessageBox.Show(
                         this,
@@ -862,7 +865,7 @@ public partial class MainForm : Form
                 continue;
             }
 
-            if (!context.Host.Start(preferGpu: true))
+            if (!TryStartPreview(context.Host))
             {
                 _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
             }
@@ -1287,6 +1290,7 @@ public partial class MainForm : Form
 
     private ProfileConfig BuildProfileFromUI()
     {
+        _appConfig = CloneAppOptions(_appConfig);
         var id = !string.IsNullOrWhiteSpace(_currentProfile?.Id)
             ? _currentProfile!.Id
             : GenerateDefaultProfileId();
@@ -1295,10 +1299,10 @@ public partial class MainForm : Form
             : "Perfil atual";
         var defaultMonitor = SelectedMonitorId ?? _currentProfile?.DefaultMonitorId;
 
-        var apps = new List<AppConfig>(_programas.Count);
+        var apps = new List<ProgramaConfig>(_programas.Count);
         foreach (var programa in _programas)
         {
-            apps.Add(CloneAppConfig(programa));
+            apps.Add(CloneProgramConfig(programa));
         }
 
         var windows = _currentProfile?.Windows?.Select(CloneWindowConfig).ToList() ?? new List<WindowConfig>();
@@ -1311,17 +1315,18 @@ public partial class MainForm : Form
             DefaultMonitorId = defaultMonitor,
             Applications = apps,
             Windows = windows,
+            App = CloneAppOptions(_appConfig),
         };
     }
 
     private ProfileConfig ProfileFromSelection(ProgramaConfig selected)
     {
         var profile = BuildProfileFromUI();
-        var apps = new List<AppConfig> { CloneAppConfig(selected) };
+        var apps = new List<ProgramaConfig> { CloneProgramConfig(selected) };
         return profile with { Applications = apps };
     }
 
-    private static AppConfig CloneAppConfig(AppConfig app)
+    private static ProgramaConfig CloneProgramConfig(ProgramaConfig app)
     {
         var environment = new Dictionary<string, string>(app.EnvironmentVariables, StringComparer.OrdinalIgnoreCase);
         var window = CloneWindowConfig(app.Window);
@@ -1336,6 +1341,83 @@ public partial class MainForm : Form
             Watchdog = watchdog,
             Window = window,
         };
+    }
+
+    private static ConfigAppConfig CloneAppOptions(ConfigAppConfig config)
+    {
+        var source = config ?? new ConfigAppConfig();
+        var preview = source.Preview ?? new PreviewConfig();
+        var mode = Enum.IsDefined(typeof(HardwareAccelerationMode), preview.HardwareAccelerationMode)
+            ? preview.HardwareAccelerationMode
+            : HardwareAccelerationMode.Auto;
+
+        var sanitizedPreview = preview with
+        {
+            HardwareAccelerationMode = mode,
+            LastRunForcedGdi = mode == HardwareAccelerationMode.Auto ? preview.LastRunForcedGdi : null,
+        };
+
+        return source with
+        {
+            Preview = sanitizedPreview,
+        };
+    }
+
+    private bool ShouldPreferGpuForPreview()
+    {
+        _appConfig = CloneAppOptions(_appConfig);
+        var preview = _appConfig.Preview ?? new PreviewConfig();
+
+        return preview.HardwareAccelerationMode switch
+        {
+            HardwareAccelerationMode.PreferGdi => false,
+            HardwareAccelerationMode.PreferGpu => true,
+            _ => preview.LastRunForcedGdi is not true,
+        };
+    }
+
+    private void UpdatePreviewModeTracking(bool preferGpu, bool usedGpu)
+    {
+        var preview = _appConfig.Preview ?? new PreviewConfig();
+        bool? lastRunForcedGdi = preview.LastRunForcedGdi;
+
+        if (preview.HardwareAccelerationMode == HardwareAccelerationMode.Auto)
+        {
+            if (preferGpu)
+            {
+                lastRunForcedGdi = usedGpu ? false : true;
+            }
+        }
+        else
+        {
+            lastRunForcedGdi = null;
+        }
+
+        var updated = _appConfig with
+        {
+            Preview = preview with { LastRunForcedGdi = lastRunForcedGdi },
+        };
+
+        _appConfig = CloneAppOptions(updated);
+
+        if (_currentProfile is not null)
+        {
+            _currentProfile = _currentProfile with { App = CloneAppOptions(_appConfig) };
+        }
+    }
+
+    private bool TryStartPreview(MonitorPreviewHost host)
+    {
+        var preferGpu = ShouldPreferGpuForPreview();
+        var started = host.Start(preferGpu);
+
+        if (started || (preferGpu && (_appConfig.Preview?.HardwareAccelerationMode ?? HardwareAccelerationMode.Auto) == HardwareAccelerationMode.Auto))
+        {
+            var usedGpu = started && host.IsGpuActive;
+            UpdatePreviewModeTracking(preferGpu, usedGpu);
+        }
+
+        return started;
     }
 
     private static WindowConfig CloneWindowConfig(WindowConfig window)
@@ -1380,7 +1462,8 @@ public partial class MainForm : Form
             Name = name.Trim(),
             DefaultMonitorId = defaultMonitor,
             Windows = windows,
-            Applications = new List<AppConfig>(),
+            Applications = new List<ProgramaConfig>(),
+            App = CloneAppOptions(_appConfig),
         };
 
         return true;
@@ -1483,19 +1566,23 @@ public partial class MainForm : Form
 
     private void ApplyProfile(ProfileConfig profile)
     {
-        var applications = profile.Applications.Select(CloneAppConfig).ToList();
+        var applications = profile.Applications.Select(CloneProgramConfig).ToList();
         var windows = profile.Windows.Select(CloneWindowConfig).ToList();
+        var appOptions = CloneAppOptions(profile.App);
 
         _currentProfile = profile with
         {
             Applications = applications,
             Windows = windows,
+            App = appOptions,
         };
+
+        _appConfig = appOptions;
 
         _programas.Clear();
         foreach (var app in applications)
         {
-            _programas.Add(CloneAppConfig(app));
+            _programas.Add(CloneProgramConfig(app));
         }
 
         bsProgramas?.ResetBindings(false);

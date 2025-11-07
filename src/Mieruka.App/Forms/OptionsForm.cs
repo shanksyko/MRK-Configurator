@@ -1,17 +1,17 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using Mieruka.Core.Models;
+using ConfigAppConfig = Mieruka.Core.Config.AppConfig;
 
 namespace Mieruka.App.Forms;
 
 public sealed class OptionsForm : Form
 {
-    private readonly AppConfig _config;
+    private readonly ConfigAppConfig _config;
     private readonly Button _okButton;
     private readonly Button _cancelButton;
 
-    public OptionsForm(AppConfig config)
+    public OptionsForm(ConfigAppConfig config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
 
