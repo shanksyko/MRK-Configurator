@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -7,6 +8,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
+using Mieruka.Core.Diagnostics;
 #if WINDOWS10_0_17763_0_OR_GREATER
 using Mieruka.Preview.Capture.Interop;
 using Vortice.Direct3D;
@@ -52,6 +54,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private ID3D11DeviceContext? _d3dContext;
     private Windows.Graphics.SizeInt32 _currentSize;
     private string? _monitorId;
+    private ILogger? _captureLogger;
+    private string? _captureId;
+    private readonly Stopwatch _captureStopwatch = new();
+    private long _frames;
+    private long _dropped;
+    private long _invalidImages;
+    private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
+    private FeatureLevel _selectedFeatureLevel = FeatureLevel.Level_11_0;
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
@@ -151,6 +161,22 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
                 // ensure bounds stored so fallback can use if needed
                 _ = bounds;
+
+                var monitorKey = MonitorIdentifier.Create(monitor);
+                if (string.IsNullOrWhiteSpace(monitorKey))
+                {
+                    monitorKey = monitor.DeviceName ?? monitor.Id ?? "<unknown>";
+                }
+                _monitorId = monitorKey;
+                _captureId = Guid.NewGuid().ToString("N");
+                _captureLogger = Logger.ForMonitor(monitorKey).ForContext("CaptureId", _captureId);
+                _captureStopwatch.Restart();
+                Interlocked.Exchange(ref _frames, 0);
+                Interlocked.Exchange(ref _dropped, 0);
+                Interlocked.Exchange(ref _invalidImages, 0);
+                _lastStatsSampleUtc = DateTime.UtcNow;
+
+                _captureLogger.Information("PreviewStart: backend={Backend}, featureLevel={Level}", "WGC", _selectedFeatureLevel);
             }
             catch (GraphicsCaptureUnavailableException)
             {
@@ -300,11 +326,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             frame = sender.TryGetNextFrame();
             if (frame is null)
             {
+                RecordFrameDiscarded(invalidFrame: false);
                 return;
             }
 
             if (frame.ContentSize.Width <= 0 || frame.ContentSize.Height <= 0)
             {
+                RecordFrameDiscarded(invalidFrame: true);
                 Logger.Debug("Frame WGC com dimensões inválidas {Width}x{Height}; descartando.", frame.ContentSize.Width, frame.ContentSize.Height);
                 return;
             }
@@ -315,12 +343,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 _currentSize = SanitizeContentSize(rawSize, _captureItem.DisplayName);
                 if (rawSize.Width <= 0 || rawSize.Height <= 0)
                 {
+                    RecordFrameDiscarded(invalidFrame: true);
                     Logger.Debug("Frame pool reportou dimensões zero após resize; aguardando próximos frames.");
                     return;
                 }
 
                 if (_currentSize.Width <= 0 || _currentSize.Height <= 0)
                 {
+                    RecordFrameDiscarded(invalidFrame: true);
                     Logger.Debug("Dimensões sanitizadas inválidas após resize: {Width}x{Height}.", _currentSize.Width, _currentSize.Height);
                     return;
                 }
@@ -335,6 +365,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 }
                 catch (COMException ex)
                 {
+                    RecordFrameDiscarded(invalidFrame: false);
                     HandleFrameFailure("RecreateFramePool", ex);
                     return;
                 }
@@ -342,6 +373,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             if (_d3dDevice is null || _d3dContext is null)
             {
+                RecordFrameDiscarded(invalidFrame: false);
                 Logger.Debug("Contexto D3D ausente durante processamento de frame; ignorando frame atual.");
                 return;
             }
@@ -352,10 +384,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
         catch (COMException ex)
         {
+            RecordFrameDiscarded(invalidFrame: false);
             HandleFrameFailure("FrameProcessing", ex);
         }
         catch (Exception ex)
         {
+            RecordFrameDiscarded(invalidFrame: false);
             Logger.Debug(ex, "Falha transitória ao processar frame WGC.");
         }
         finally
@@ -412,6 +446,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _d3dContext = context ?? throw new InvalidOperationException("Failed to create a Direct3D context for capture.");
 
         var featureLevel = selectedLevel;
+        _selectedFeatureLevel = featureLevel;
         if (featureLevel < FeatureLevel.Level_11_0)
         {
             ReleaseDirect3D();
@@ -522,6 +557,29 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
     private void CleanupAfterFailure()
     {
+        var hadCapture = _captureLogger is not null || _captureStopwatch.IsRunning;
+        if (hadCapture)
+        {
+            MaybePublishStats(force: true);
+        }
+        else
+        {
+            Interlocked.Exchange(ref _frames, 0);
+            Interlocked.Exchange(ref _dropped, 0);
+            Interlocked.Exchange(ref _invalidImages, 0);
+        }
+
+        if (_captureStopwatch.IsRunning)
+        {
+            _captureStopwatch.Stop();
+            var logger = _captureLogger ?? Logger;
+            logger.Information("PreviewStop: uptimeMs={Uptime}", _captureStopwatch.ElapsedMilliseconds);
+            _captureStopwatch.Reset();
+        }
+
+        _captureLogger = null;
+        _captureId = null;
+
         if (_framePool is not null)
         {
             _framePool.FrameArrived -= OnFrameArrived;
@@ -538,6 +596,53 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _captureItem = null;
         _monitorId = null;
         ReleaseDirect3D();
+    }
+
+    private void RecordFrameProduced()
+    {
+        Interlocked.Increment(ref _frames);
+        MaybePublishStats();
+    }
+
+    private void RecordFrameDiscarded(bool invalidFrame)
+    {
+        Interlocked.Increment(ref _dropped);
+        if (invalidFrame)
+        {
+            Interlocked.Increment(ref _invalidImages);
+        }
+
+        MaybePublishStats();
+    }
+
+    private void MaybePublishStats(bool force = false)
+    {
+        var now = DateTime.UtcNow;
+        if (!force && (now - _lastStatsSampleUtc).TotalSeconds < 5)
+        {
+            return;
+        }
+
+        var frames = Interlocked.Exchange(ref _frames, 0);
+        var dropped = Interlocked.Exchange(ref _dropped, 0);
+        var invalid = Interlocked.Exchange(ref _invalidImages, 0);
+
+        if (!force && frames == 0 && dropped == 0 && invalid == 0)
+        {
+            return;
+        }
+
+        var elapsedSeconds = Math.Max(0.001, (now - _lastStatsSampleUtc).TotalSeconds);
+        _lastStatsSampleUtc = now;
+
+        var fps = frames / elapsedSeconds;
+        var logger = _captureLogger ?? Logger;
+        logger.Debug(
+            "PreviewStats: fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}",
+            fps,
+            frames,
+            dropped,
+            invalid);
     }
 
     private Direct3D11CaptureFramePool CreateFramePool(int bufferCount, Windows.Graphics.SizeInt32 size)
@@ -777,6 +882,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             bitmap.Dispose();
             return;
         }
+
+        RecordFrameProduced();
 
         var args = new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow);
 

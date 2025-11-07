@@ -1,9 +1,12 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
+using Mieruka.Core.Diagnostics;
+using Serilog;
 
 namespace Mieruka.Preview;
 
@@ -15,10 +18,18 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 {
     private const int TargetFramesPerSecond = 30;
 
+    private static readonly ILogger Logger = Log.ForContext<GdiMonitorCaptureProvider>();
+
     private CancellationTokenSource? _cts;
     private Task? _captureLoop;
     private MonitorUtilities.RECT _monitorBounds;
     private bool _initialized;
+    private readonly Stopwatch _captureStopwatch = new();
+    private long _frames;
+    private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
+    private ILogger? _captureLogger;
+    private string? _captureId;
+    private string? _monitorId;
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
@@ -49,6 +60,14 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         _monitorBounds = bounds;
         _initialized = true;
 
+        _monitorId = monitor.Id ?? monitor.DeviceName ?? string.Empty;
+        _captureId = Guid.NewGuid().ToString("N");
+        _captureLogger = Logger.ForMonitor(_monitorId).ForContext("CaptureId", _captureId);
+        _captureStopwatch.Restart();
+        Interlocked.Exchange(ref _frames, 0);
+        _lastStatsSampleUtc = DateTime.UtcNow;
+        _captureLogger.Information("PreviewStart: backend={Backend}", "GDI");
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _captureLoop = Task.Run(() => CaptureLoopAsync(_cts.Token), CancellationToken.None);
 
@@ -61,6 +80,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         if (_cts is null)
         {
             _initialized = false;
+            CompleteSession(forceStats: false);
             return;
         }
 
@@ -78,6 +98,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             _initialized = false;
             _cts.Dispose();
             _cts = null;
+            CompleteSession(forceStats: true);
         }
     }
 
@@ -147,7 +168,65 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             return;
         }
 
+        RecordFrameProduced();
         handler(this, new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow));
+    }
+
+    private void RecordFrameProduced()
+    {
+        Interlocked.Increment(ref _frames);
+        MaybePublishStats();
+    }
+
+    private void MaybePublishStats(bool force = false)
+    {
+        var now = DateTime.UtcNow;
+        if (!force && (now - _lastStatsSampleUtc).TotalSeconds < 5)
+        {
+            return;
+        }
+
+        var frames = Interlocked.Exchange(ref _frames, 0);
+        if (!force && frames == 0)
+        {
+            return;
+        }
+
+        var elapsedSeconds = Math.Max(0.001, (now - _lastStatsSampleUtc).TotalSeconds);
+        _lastStatsSampleUtc = now;
+
+        var logger = _captureLogger ?? Logger;
+        var fps = frames / elapsedSeconds;
+        logger.Debug(
+            "PreviewStats: fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}",
+            fps,
+            frames,
+            0,
+            0);
+    }
+
+    private void CompleteSession(bool forceStats)
+    {
+        var hasCapture = _captureLogger is not null || _captureStopwatch.IsRunning;
+        if (!hasCapture)
+        {
+            Interlocked.Exchange(ref _frames, 0);
+            return;
+        }
+
+        MaybePublishStats(force: forceStats);
+
+        if (_captureStopwatch.IsRunning)
+        {
+            _captureStopwatch.Stop();
+            var logger = _captureLogger ?? Logger;
+            logger.Information("PreviewStop: uptimeMs={Uptime}", _captureStopwatch.ElapsedMilliseconds);
+            _captureStopwatch.Reset();
+        }
+
+        _captureLogger = null;
+        _captureId = null;
+        _monitorId = null;
     }
 
 }
