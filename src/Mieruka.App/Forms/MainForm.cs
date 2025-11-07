@@ -4,11 +4,13 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Mieruka.App.Config;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui;
@@ -39,9 +41,13 @@ public partial class MainForm : Form
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
-    private readonly AppConfig _appConfig = new();
+    private readonly JsonStore<PreviewGraphicsOptions> _graphicsOptionsStore;
+    private PreviewGraphicsOptions _graphicsOptions;
     private ToolStrip? _toolStrip;
-    private ToolStripButton? _btnOptions;
+    private ToolStripDropDownButton? _graphicsDropDown;
+    private ToolStripMenuItem? _graphicsAutoItem;
+    private ToolStripMenuItem? _graphicsGpuItem;
+    private ToolStripMenuItem? _graphicsGdiItem;
     private ProfileExecutor? _profileExecutor;
     private CancellationTokenSource? _profileExecutionCts;
     private Task? _profileExecutionTask;
@@ -57,6 +63,9 @@ public partial class MainForm : Form
 
     public MainForm()
     {
+        _graphicsOptionsStore = CreateGraphicsOptionsStore();
+        _graphicsOptions = LoadGraphicsOptions();
+
         InitializeComponent();
         EnsureToolbarWithOptionsButton();
         ToolTipTamer.Tame(this, components);
@@ -109,44 +118,191 @@ public partial class MainForm : Form
             _toolStrip.BringToFront();
         }
 
-        var existing = _toolStrip.Items.OfType<ToolStripButton>()
-            .FirstOrDefault(b => string.Equals(b.Text, "Opções", StringComparison.OrdinalIgnoreCase));
-        if (existing != null)
+        const string dropDownName = "previewGraphicsDropDown";
+        _graphicsDropDown = _toolStrip.Items
+            .OfType<ToolStripDropDownButton>()
+            .FirstOrDefault(b => string.Equals(b.Name, dropDownName, StringComparison.Ordinal));
+
+        if (_graphicsDropDown is null)
         {
-            _btnOptions = existing;
-            _btnOptions.Click -= OnOptionsClick;
-            _btnOptions.Click += OnOptionsClick;
+            _graphicsDropDown = new ToolStripDropDownButton
+            {
+                Name = dropDownName,
+                Text = "Prévia",
+                DisplayStyle = ToolStripItemDisplayStyle.Text,
+                ToolTipText = "Selecionar modo de captura do preview"
+            };
+            _toolStrip.Items.Add(_graphicsDropDown);
+        }
+        else
+        {
+            _graphicsDropDown.DropDownItems.Clear();
+        }
+
+        _graphicsAutoItem = CreateGraphicsMenuItem("Auto", PreviewGraphicsMode.Auto, "Seleciona automaticamente entre GPU e GDI");
+        _graphicsGpuItem = CreateGraphicsMenuItem("Ativada (GPU)", PreviewGraphicsMode.Gpu, "Força o uso de GPU sempre que possível");
+        _graphicsGdiItem = CreateGraphicsMenuItem("Desativada (GDI)", PreviewGraphicsMode.Gdi, "Força o modo GDI para o preview");
+
+        _graphicsDropDown.DropDownItems.AddRange(new ToolStripItem[]
+        {
+            _graphicsAutoItem,
+            _graphicsGpuItem,
+            _graphicsGdiItem
+        });
+
+        UpdateGraphicsMenuSelection(_graphicsOptions.Mode);
+    }
+
+    private ToolStripMenuItem CreateGraphicsMenuItem(string text, PreviewGraphicsMode mode, string toolTip)
+    {
+        var item = new ToolStripMenuItem
+        {
+            Text = text,
+            ToolTipText = toolTip,
+            Tag = mode,
+            CheckOnClick = false,
+        };
+        item.Click += OnGraphicsModeMenuItemClick;
+        return item;
+    }
+
+    private void OnGraphicsModeMenuItemClick(object? sender, EventArgs e)
+    {
+        if (sender is not ToolStripMenuItem item || item.Tag is not PreviewGraphicsMode mode)
+        {
             return;
         }
 
-        _btnOptions = new ToolStripButton
-        {
-            Text = "Opções",
-            DisplayStyle = ToolStripItemDisplayStyle.Text,
-            ToolTipText = "Abrir preferências de gráficos e prévia"
-        };
-        _btnOptions.Click += OnOptionsClick;
-        _toolStrip.Items.Add(_btnOptions);
-    }
-
-    private void OnOptionsClick(object? sender, EventArgs e)
-    {
-        ShowOptionsDialog();
-    }
-
-    private void ShowOptionsDialog()
-    {
-        using (var dlg = new OptionsForm(_appConfig))
-        {
-            if (dlg.ShowDialog(this) == DialogResult.OK)
-            {
-                ApplyGraphicsOptions();
-            }
-        }
+        SetGraphicsMode(mode);
     }
 
     private void ApplyGraphicsOptions()
     {
+        UpdateGraphicsMenuSelection(_graphicsOptions.Mode);
+
+        var safeMode = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
+        var preferGpu = ShouldPreferGpu();
+
+        foreach (var context in _monitorCardOrder)
+        {
+            context.Host.PreviewSafeModeEnabled = safeMode;
+
+            var wasRunning = context.Host.Capture is not null;
+            var shouldRestart = wasRunning
+                || (_previewsRequested
+                    && !_manuallyStoppedMonitors.Contains(context.MonitorId)
+                    && WindowState != FormWindowState.Minimized);
+
+            if (!shouldRestart)
+            {
+                continue;
+            }
+
+            context.Host.Stop();
+
+            if (_manuallyStoppedMonitors.Contains(context.MonitorId)
+                || WindowState == FormWindowState.Minimized)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (!context.Host.Start(preferGpu))
+                {
+                    _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _telemetry.Warn($"Falha ao reiniciar preview do monitor '{context.MonitorId}'.", ex);
+            }
+        }
+
+        SaveGraphicsOptions(_graphicsOptions);
+    }
+
+    private void UpdateGraphicsMenuSelection(PreviewGraphicsMode mode)
+    {
+        if (_graphicsAutoItem is not null)
+        {
+            _graphicsAutoItem.Checked = mode == PreviewGraphicsMode.Auto;
+        }
+
+        if (_graphicsGpuItem is not null)
+        {
+            _graphicsGpuItem.Checked = mode == PreviewGraphicsMode.Gpu;
+        }
+
+        if (_graphicsGdiItem is not null)
+        {
+            _graphicsGdiItem.Checked = mode == PreviewGraphicsMode.Gdi;
+        }
+
+        if (_graphicsDropDown is not null)
+        {
+            var label = mode switch
+            {
+                PreviewGraphicsMode.Auto => "Auto",
+                PreviewGraphicsMode.Gpu => "GPU",
+                PreviewGraphicsMode.Gdi => "GDI",
+                _ => "Auto"
+            };
+            _graphicsDropDown.Text = $"Prévia ({label})";
+        }
+    }
+
+    private void SetGraphicsMode(PreviewGraphicsMode mode)
+    {
+        if (_graphicsOptions.Mode == mode)
+        {
+            UpdateGraphicsMenuSelection(mode);
+            return;
+        }
+
+        _graphicsOptions = _graphicsOptions with { Mode = mode };
+        ApplyGraphicsOptions();
+    }
+
+    private bool ShouldPreferGpu()
+        => _graphicsOptions.Mode != PreviewGraphicsMode.Gdi;
+
+    private static JsonStore<PreviewGraphicsOptions> CreateGraphicsOptionsStore()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+        {
+            localAppData = AppContext.BaseDirectory;
+        }
+
+        var directory = Path.Combine(localAppData, "Mieruka", "Configurator");
+        return new JsonStore<PreviewGraphicsOptions>(Path.Combine(directory, "preview-options.json"));
+    }
+
+    private PreviewGraphicsOptions LoadGraphicsOptions()
+    {
+        try
+        {
+            var options = _graphicsOptionsStore.LoadAsync().GetAwaiter().GetResult();
+            return options?.Normalize() ?? new PreviewGraphicsOptions();
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao carregar preferências de preview.", ex);
+            return new PreviewGraphicsOptions();
+        }
+    }
+
+    private void SaveGraphicsOptions(PreviewGraphicsOptions options)
+    {
+        try
+        {
+            _graphicsOptionsStore.SaveAsync(options.Normalize()).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao salvar preferências de preview.", ex);
+        }
     }
 
     private void LoadInitialData()
@@ -299,6 +455,9 @@ public partial class MainForm : Form
 
         var actualIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var safeMode = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
+        var preferGpu = ShouldPreferGpu();
+
         foreach (var source in cardSources)
         {
             var monitor = source.Monitor;
@@ -322,6 +481,7 @@ public partial class MainForm : Form
                 host = new MonitorPreviewHost(monitorId, pictureBox);
             }
 
+            host.PreviewSafeModeEnabled = safeMode;
             actualIds.Add(monitorId);
             ApplyMonitorId(card, monitorId);
 
@@ -335,7 +495,7 @@ public partial class MainForm : Form
             {
                 try
                 {
-                    if (!host.Start(preferGpu: true))
+                    if (!host.Start(preferGpu))
                     {
                         _telemetry.Warn($"Pré-visualização do monitor '{monitorId}' não pôde ser iniciada.");
                     }
@@ -676,9 +836,10 @@ public partial class MainForm : Form
         {
             _manuallyStoppedMonitors.Remove(monitorId);
 
+            context.Host.PreviewSafeModeEnabled = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
             if (context.Host.Capture is null)
             {
-                if (!context.Host.Start(preferGpu: true))
+                if (!context.Host.Start(preferGpu: ShouldPreferGpu()))
                 {
                     MessageBox.Show(
                         this,
@@ -855,6 +1016,9 @@ public partial class MainForm : Form
             return;
         }
 
+        var safeMode = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
+        var preferGpu = ShouldPreferGpu();
+
         foreach (var context in _monitorCardOrder)
         {
             if (_manuallyStoppedMonitors.Contains(context.MonitorId))
@@ -862,7 +1026,9 @@ public partial class MainForm : Form
                 continue;
             }
 
-            if (!context.Host.Start(preferGpu: true))
+            context.Host.PreviewSafeModeEnabled = safeMode;
+
+            if (!context.Host.Start(preferGpu))
             {
                 _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
             }
