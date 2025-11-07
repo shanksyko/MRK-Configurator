@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Mieruka.Core.Models;
 using Serilog;
+using Serilog.Events;
 
 namespace Mieruka.Preview
 {
@@ -15,6 +16,7 @@ namespace Mieruka.Preview
         private static readonly ILogger? _logger = Log.ForContext(typeof(WgcMonitorCapture));
         private static readonly ConcurrentDictionary<string, byte> _gpuBackoffLogged = new();
         private static readonly ConcurrentDictionary<string, byte> _gpuUnavailableMonitors = new();
+        private static readonly ConcurrentDictionary<string, byte> _hostBlockLogged = new();
 
         public static IMonitorCapture Create(string monitorId)
         {
@@ -185,6 +187,56 @@ namespace Mieruka.Preview
             }
 
             _gpuUnavailableMonitors.TryAdd(monitorId, 0);
+        }
+
+        internal static void ReportHostBlock(MonitorInfo monitor, string messageTemplate, LogEventLevel level)
+        {
+            ArgumentNullException.ThrowIfNull(monitor);
+
+            var monitorKey = !string.IsNullOrWhiteSpace(monitor.Id) ? monitor.Id : monitor.DeviceName;
+            if (!string.IsNullOrWhiteSpace(monitorKey))
+            {
+                GraphicsCaptureProvider.MarkGpuBackoff(monitorKey, Timeout.InfiniteTimeSpan);
+                MarkMonitorUnavailable(monitorKey);
+                LogGpuBackoff(monitorKey, monitor.DeviceName);
+            }
+
+            if (_logger is null)
+            {
+                return;
+            }
+
+            var descriptor = string.IsNullOrWhiteSpace(monitor.DeviceName) ? monitorKey : monitor.DeviceName;
+            descriptor ??= "<unknown>";
+            var key = string.IsNullOrWhiteSpace(monitorKey) ? descriptor : monitorKey;
+            key ??= "<unknown>";
+
+            if (!_hostBlockLogged.TryAdd(key, 0))
+            {
+                return;
+            }
+
+            switch (level)
+            {
+                case LogEventLevel.Warning:
+                    _logger.Warning(messageTemplate, descriptor);
+                    break;
+                case LogEventLevel.Error:
+                    _logger.Error(messageTemplate, descriptor);
+                    break;
+                case LogEventLevel.Fatal:
+                    _logger.Fatal(messageTemplate, descriptor);
+                    break;
+                case LogEventLevel.Debug:
+                    _logger.Debug(messageTemplate, descriptor);
+                    break;
+                case LogEventLevel.Verbose:
+                    _logger.Verbose(messageTemplate, descriptor);
+                    break;
+                default:
+                    _logger.Information(messageTemplate, descriptor);
+                    break;
+            }
         }
     }
 

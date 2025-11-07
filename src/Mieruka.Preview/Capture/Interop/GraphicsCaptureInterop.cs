@@ -17,6 +17,23 @@ internal static class GraphicsCaptureInterop
     [DllImport("combase.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
     private static extern int RoGetActivationFactory(string activatableClassId, ref Guid iid, out IntPtr factory);
 
+    public static bool IsWgcRuntimeSupported()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
+        {
+            return false;
+        }
+
+        try
+        {
+            return GraphicsCaptureSession.IsSupported();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static Windows.Graphics.Capture.GraphicsCaptureItem CreateItemForMonitor(nint monitorHandle)
     {
         if (!GraphicsCaptureSession.IsSupported())
@@ -154,5 +171,12 @@ internal static class GraphicsCaptureInterop
     {
         int GetInterface(ref Guid iid, out IntPtr resource);
     }
+}
+#else
+namespace Mieruka.Preview.Capture.Interop;
+
+internal static class GraphicsCaptureInterop
+{
+    public static bool IsWgcRuntimeSupported() => false;
 }
 #endif

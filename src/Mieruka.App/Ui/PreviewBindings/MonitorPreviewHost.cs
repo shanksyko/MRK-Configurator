@@ -662,6 +662,29 @@ public sealed class MonitorPreviewHost : IDisposable
     private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
     {
         var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
+        var hostSupportsGpu = false;
+
+        if (!gpuInBackoff)
+        {
+            MonitorInfo? monitor = null;
+            try
+            {
+                monitor = MonitorLocator.Find(MonitorId);
+            }
+            catch
+            {
+                monitor = null;
+            }
+
+            if (monitor is not null)
+            {
+                hostSupportsGpu = CreateForMonitor.IsHostSuitableForWgc(monitor);
+                if (!hostSupportsGpu)
+                {
+                    gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
+                }
+            }
+        }
 
         if (gpuInBackoff)
         {
@@ -674,7 +697,7 @@ public sealed class MonitorPreviewHost : IDisposable
             yield break;
         }
 
-        if (preferGpu && !gpuInBackoff)
+        if (preferGpu && !gpuInBackoff && hostSupportsGpu)
         {
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
             yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
@@ -683,7 +706,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
 
-        if (!gpuInBackoff)
+        if (!gpuInBackoff && hostSupportsGpu)
         {
             yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
         }
