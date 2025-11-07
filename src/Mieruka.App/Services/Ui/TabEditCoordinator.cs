@@ -4,8 +4,7 @@ using System.Threading;
 using Mieruka.Core.Contracts;
 using Serilog;
 
-using Forms = System.Windows.Forms;
-using WinTimer = System.Windows.Forms.Timer;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services.Ui;
 
@@ -17,14 +16,14 @@ internal sealed class TabEditCoordinator
     private const int ResumeDebounceIntervalMilliseconds = 150;
     private const int UiEventDebounceIntervalMilliseconds = 120;
 
-    private readonly Forms.Control _root;
+    private readonly WinForms.Control _root;
     private readonly IBindingService? _bindingService;
     private readonly Action? _pausePreview;
     private readonly Action? _resumePreview;
     private readonly ILogger _logger;
-    private readonly WinTimer _resumeDebounceTimer;
+    private readonly WinForms.Timer _resumeDebounceTimer;
     private readonly object _debounceGate = new();
-    private readonly WinTimer _uiEventDebounceTimer;
+    private readonly WinForms.Timer _uiEventDebounceTimer;
     private readonly object _uiEventDebounceGate = new();
     private readonly MethodInfo? _applyAppTypeUiMethod;
 
@@ -36,7 +35,7 @@ internal sealed class TabEditCoordinator
     private bool _uiEventHandlersAttached;
 
     public TabEditCoordinator(
-        Forms.Control root,
+        WinForms.Control root,
         IBindingService? bindingService,
         Action? pausePreview,
         Action? resumePreview,
@@ -49,13 +48,13 @@ internal sealed class TabEditCoordinator
         _logger = (logger ?? Log.ForContext<TabEditCoordinator>())
             .ForContext("RootControl", root.Name);
 
-        _resumeDebounceTimer = new WinTimer
+        _resumeDebounceTimer = new WinForms.Timer
         {
             Interval = ResumeDebounceIntervalMilliseconds,
         };
         _resumeDebounceTimer.Tick += ResumeDebounceTimerOnTick;
 
-        _uiEventDebounceTimer = new WinTimer
+        _uiEventDebounceTimer = new WinForms.Timer
         {
             Interval = UiEventDebounceIntervalMilliseconds,
         };

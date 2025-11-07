@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Globalization;
@@ -12,10 +11,10 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Drawing;
 using System.Windows.Forms;
 using Drawing = System.Drawing;
-using Forms = System.Windows.Forms;
-using WinTimer = System.Windows.Forms.Timer;
+using WinForms = System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Interop;
@@ -29,11 +28,10 @@ using Mieruka.Core.Contracts;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
 using Serilog;
 using Serilog.Context;
-using MethodInvoker = System.Windows.Forms.MethodInvoker;
 
 namespace Mieruka.App.Forms;
 
-public partial class AppEditorForm : Form
+public partial class AppEditorForm : WinForms.Form
 {
     private static readonly ILogger Logger = Log.ForContext<AppEditorForm>();
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
@@ -112,7 +110,7 @@ public partial class AppEditorForm : Form
     private bool _hasWindowPreviewSnapshot;
     private TimeSpan _lastWindowPreviewRebuild = TimeSpan.Zero;
     private bool _windowPreviewRebuildScheduled;
-    private readonly WinTimer _windowBoundsDebounce;
+    private readonly WinForms.Timer _windowBoundsDebounce;
     private bool _windowBoundsDebouncePending;
     private Rectangle _lastWindowRectLog = Rectangle.Empty;
     private DateTime _lastWindowRectLogUtc;
@@ -133,7 +131,7 @@ public partial class AppEditorForm : Form
         _uiContext = SynchronizationContext.Current;
         ToolTipTamer.Tame(this, components);
 
-        _windowBoundsDebounce = new WinTimer(components)
+        _windowBoundsDebounce = new WinForms.Timer(components)
         {
             Interval = 150
         };
@@ -1904,7 +1902,7 @@ public partial class AppEditorForm : Form
             }
         }
 
-        var callback = new MethodInvoker(InvokeSafely);
+        var callback = new WinForms.MethodInvoker(InvokeSafely);
 
         if (!IsOnUiThread())
         {
@@ -1915,7 +1913,7 @@ public partial class AppEditorForm : Form
                 {
                     context.Post(static state =>
                     {
-                        if (state is MethodInvoker invoker)
+                        if (state is WinForms.MethodInvoker invoker)
                         {
                             invoker();
                         }
@@ -3076,13 +3074,13 @@ public partial class AppEditorForm : Form
     {
         if (!ValidarCampos())
         {
-            DialogResult = Forms.DialogResult.None;
+            DialogResult = WinForms.DialogResult.None;
             return;
         }
 
         Resultado = ConstruirPrograma();
         CommitProfileMetadata();
-        DialogResult = Forms.DialogResult.OK;
+        DialogResult = WinForms.DialogResult.OK;
         Close();
     }
 
@@ -3519,7 +3517,7 @@ public partial class AppEditorForm : Form
 
     private void btnCancelar_Click(object? sender, EventArgs e)
     {
-        DialogResult = Forms.DialogResult.Cancel;
+        DialogResult = WinForms.DialogResult.Cancel;
         Close();
     }
 
