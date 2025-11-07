@@ -1,22 +1,22 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Forms;
+using Drawing = System.Drawing;
+using Forms = System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Preview;
 
 namespace Mieruka.App.Ui;
 
-internal sealed partial class PreviewForm : Form
+internal sealed partial class PreviewForm : Forms.Form
 {
     private readonly List<MonitorInfo> _monitors = new();
     private Func<IMonitorCapture>? _captureFactory;
     private IMonitorCapture? _activeCapture;
     private readonly object _captureGate = new();
-    private Bitmap? _currentFrame;
+    private Drawing.Bitmap? _currentFrame;
 
     public PreviewForm()
     {
@@ -32,7 +32,7 @@ internal sealed partial class PreviewForm : Form
         CarregarMonitores(monitors);
     }
 
-    protected override void OnFormClosing(FormClosingEventArgs e)
+    protected override void OnFormClosing(Forms.FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
         StopCaptureAsync().GetAwaiter().GetResult();
@@ -41,9 +41,9 @@ internal sealed partial class PreviewForm : Form
 
     private void CarregarMonitores()
     {
-        var monitors = Screen.AllScreens.Select(screen => new MonitorInfo
+        var monitors = Forms.Screen.AllScreens.Select(screen => new MonitorInfo
         {
-            Key = new MonitorKey { DisplayIndex = Array.IndexOf(Screen.AllScreens, screen) },
+            Key = new MonitorKey { DisplayIndex = Array.IndexOf(Forms.Screen.AllScreens, screen) },
             Name = string.IsNullOrWhiteSpace(screen.DeviceName) ? screen.FriendlyName() : screen.DeviceName,
             DeviceName = screen.DeviceName,
             Width = screen.Bounds.Width,
@@ -157,7 +157,7 @@ internal sealed partial class PreviewForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Captura GPU indisponível: {ex.Message}", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Forms.MessageBox.Show(this, $"Captura GPU indisponível: {ex.Message}", "Preview", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Information);
             return;
         }
 
@@ -195,11 +195,11 @@ internal sealed partial class PreviewForm : Form
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
-        Bitmap? frame = null;
+        Drawing.Bitmap? frame = null;
         try
         {
             var source = e.Frame;
-            var bounds = new Rectangle(0, 0, source.Width, source.Height);
+            var bounds = new Drawing.Rectangle(0, 0, source.Width, source.Height);
             frame = source.Clone(bounds, source.PixelFormat);
         }
         catch
@@ -219,7 +219,7 @@ internal sealed partial class PreviewForm : Form
         BeginInvoke(new Action(() => ExibirFrame(frame)));
     }
 
-    private void ExibirFrame(Bitmap frame)
+    private void ExibirFrame(Drawing.Bitmap frame)
     {
         LiberarFrameAtual();
         _currentFrame = frame;
@@ -267,7 +267,7 @@ internal sealed partial class PreviewForm : Form
 
 internal static class ScreenExtensions
 {
-    public static string FriendlyName(this Screen screen)
+    public static string FriendlyName(this Forms.Screen screen)
     {
         return string.IsNullOrWhiteSpace(screen.DeviceName)
             ? "Monitor"
