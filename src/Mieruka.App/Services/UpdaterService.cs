@@ -31,7 +31,8 @@ public sealed class UpdaterService : IDisposable
     private readonly string _applicationDirectory;
     private readonly object _gate = new();
 
-    private Timer? _timer;
+    // Usa System.Threading.Timer (thread pool). Não tocar UI diretamente; marshalar para o thread da UI com BeginInvoke.
+    private System.Threading.Timer? _threadTimer;
     private UpdateConfig _configuration = new();
     private Version _currentVersion;
     private int _updateInProgress;
@@ -64,8 +65,8 @@ public sealed class UpdaterService : IDisposable
 
             _configuration = config ?? new UpdateConfig();
 
-            _timer?.Dispose();
-            _timer = null;
+            _threadTimer?.Dispose();
+            _threadTimer = null;
 
             if (!_configuration.Enabled || string.IsNullOrWhiteSpace(_configuration.ManifestUrl))
             {
@@ -73,7 +74,7 @@ public sealed class UpdaterService : IDisposable
             }
 
             var interval = ResolveInterval(_configuration.CheckIntervalMinutes);
-            _timer = new Timer(OnTimerTick, null, TimeSpan.Zero, interval);
+            _threadTimer = new System.Threading.Timer(OnTimerTick, null, TimeSpan.Zero, interval);
         }
     }
 
@@ -89,8 +90,8 @@ public sealed class UpdaterService : IDisposable
 
         lock (_gate)
         {
-            _timer?.Dispose();
-            _timer = null;
+            _threadTimer?.Dispose();
+            _threadTimer = null;
             _disposed = true;
         }
 

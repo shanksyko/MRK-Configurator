@@ -1,11 +1,11 @@
 using System;
 using System.Reflection;
 using System.Threading;
-using System.Windows.Forms;
 using Mieruka.Core.Contracts;
 using Serilog;
 
-using UITimer = System.Windows.Forms.Timer;
+using Forms = System.Windows.Forms;
+using WinTimer = System.Windows.Forms.Timer;
 
 namespace Mieruka.App.Services.Ui;
 
@@ -17,14 +17,14 @@ internal sealed class TabEditCoordinator
     private const int ResumeDebounceIntervalMilliseconds = 150;
     private const int UiEventDebounceIntervalMilliseconds = 120;
 
-    private readonly Control _root;
+    private readonly Forms.Control _root;
     private readonly IBindingService? _bindingService;
     private readonly Action? _pausePreview;
     private readonly Action? _resumePreview;
     private readonly ILogger _logger;
-    private readonly UITimer _resumeDebounceTimer;
+    private readonly WinTimer _resumeDebounceTimer;
     private readonly object _debounceGate = new();
-    private readonly UITimer _uiEventDebounceTimer;
+    private readonly WinTimer _uiEventDebounceTimer;
     private readonly object _uiEventDebounceGate = new();
     private readonly MethodInfo? _applyAppTypeUiMethod;
 
@@ -36,7 +36,7 @@ internal sealed class TabEditCoordinator
     private bool _uiEventHandlersAttached;
 
     public TabEditCoordinator(
-        Control root,
+        Forms.Control root,
         IBindingService? bindingService,
         Action? pausePreview,
         Action? resumePreview,
@@ -49,13 +49,13 @@ internal sealed class TabEditCoordinator
         _logger = (logger ?? Log.ForContext<TabEditCoordinator>())
             .ForContext("RootControl", root.Name);
 
-        _resumeDebounceTimer = new UITimer
+        _resumeDebounceTimer = new WinTimer
         {
             Interval = ResumeDebounceIntervalMilliseconds,
         };
         _resumeDebounceTimer.Tick += ResumeDebounceTimerOnTick;
 
-        _uiEventDebounceTimer = new UITimer
+        _uiEventDebounceTimer = new WinTimer
         {
             Interval = UiEventDebounceIntervalMilliseconds,
         };
