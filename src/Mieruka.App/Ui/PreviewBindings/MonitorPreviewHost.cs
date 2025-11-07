@@ -1,14 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Drawing = System.Drawing;
-using Forms = System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
@@ -18,7 +17,7 @@ using Serilog;
 namespace Mieruka.App.Ui.PreviewBindings;
 
 /// <summary>
-/// Hosts a monitor preview session and binds frames to a <see cref="Forms.PictureBox"/>.
+/// Hosts a monitor preview session and binds frames to a <see cref="WinForms.PictureBox"/>.
 /// </summary>
 public sealed class MonitorPreviewHost : IDisposable
 {
@@ -60,7 +59,7 @@ public sealed class MonitorPreviewHost : IDisposable
         Disposing,
     }
 
-    private readonly Forms.PictureBox _target;
+    private readonly WinForms.PictureBox _target;
     private readonly ILogger _logger;
     private readonly object _gate = new();
     private readonly object _frameTimingGate = new();
@@ -130,7 +129,7 @@ public sealed class MonitorPreviewHost : IDisposable
         return State;
     }
 
-    public MonitorPreviewHost(string monitorId, Forms.PictureBox target, ILogger? logger = null)
+    public MonitorPreviewHost(string monitorId, WinForms.PictureBox target, ILogger? logger = null)
     {
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
@@ -152,7 +151,7 @@ public sealed class MonitorPreviewHost : IDisposable
         EnsurePictureBoxSizeMode();
     }
 
-    public MonitorPreviewHost(MonitorDescriptor descriptor, Forms.PictureBox target, ILogger? logger = null)
+    public MonitorPreviewHost(MonitorDescriptor descriptor, WinForms.PictureBox target, ILogger? logger = null)
         : this(CreateMonitorId(descriptor), target, logger)
     {
         _monitorBounds = descriptor.Bounds;
@@ -1717,9 +1716,9 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void EnsurePictureBoxSizeMode()
     {
-        if (_target.SizeMode != Forms.PictureBoxSizeMode.Zoom)
+        if (_target.SizeMode != WinForms.PictureBoxSizeMode.Zoom)
         {
-            _target.SizeMode = Forms.PictureBoxSizeMode.Zoom;
+            _target.SizeMode = WinForms.PictureBoxSizeMode.Zoom;
         }
 
         EnableDoubleBuffering(_target);
@@ -1744,11 +1743,11 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private static void EnableDoubleBuffering(Forms.PictureBox target)
+    private static void EnableDoubleBuffering(WinForms.PictureBox target)
     {
         try
         {
-            typeof(Forms.Control)
+            typeof(WinForms.Control)
                 .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?
                 .SetValue(target, true);
         }
@@ -1874,7 +1873,7 @@ public sealed class MonitorPreviewHost : IDisposable
         try
         {
             using var graphics = Drawing.Graphics.FromImage(bitmap);
-            using var font = SystemFonts.CaptionFont ?? SystemFonts.MessageBoxFont ?? Forms.Control.DefaultFont;
+            using var font = Drawing.SystemFonts.CaptionFont ?? Drawing.SystemFonts.MessageBoxFont ?? WinForms.Control.DefaultFont;
             using var background = new Drawing.SolidBrush(Drawing.Color.FromArgb(160, Drawing.Color.Black));
             using var foreground = new Drawing.SolidBrush(Drawing.Color.White);
 
@@ -1893,7 +1892,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 text = string.Concat(text, " ", _orientation);
             }
 
-            var safeFont = font ?? Forms.Control.DefaultFont;
+            var safeFont = font ?? WinForms.Control.DefaultFont;
             var safeText = text ?? string.Empty;
             var measured = graphics.MeasureString(safeText, safeFont);
             var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);

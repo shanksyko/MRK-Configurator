@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Drawing = System.Drawing;
 using Drawing2D = System.Drawing.Drawing2D;
-using Forms = System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Models;
 using Serilog;
@@ -15,14 +15,14 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// <summary>
 /// Provides a reusable monitor preview control backed by <see cref="MonitorPreviewHost"/>.
 /// </summary>
-public sealed class MonitorPreviewDisplay : Forms.UserControl
+public sealed class MonitorPreviewDisplay : WinForms.UserControl
 {
     private static readonly ILogger Logger = Log.ForContext<MonitorPreviewDisplay>();
 
-    private readonly Forms.PictureBox _pictureBox;
+    private readonly WinForms.PictureBox _pictureBox;
     private readonly List<SimRect> _simRects;
     private readonly List<(Drawing.RectangleF Bounds, string Text)> _glyphRegions;
-    private readonly Forms.ToolTip _tooltip;
+    private readonly WinForms.ToolTip _tooltip;
     private MonitorPreviewHost? _host;
     private MonitorInfo? _monitor;
     private string? _currentGlyphTooltip;
@@ -40,18 +40,18 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
     public MonitorPreviewDisplay()
     {
         SetStyle(
-            Forms.ControlStyles.OptimizedDoubleBuffer
-            | Forms.ControlStyles.AllPaintingInWmPaint
-            | Forms.ControlStyles.UserPaint,
+            WinForms.ControlStyles.OptimizedDoubleBuffer
+            | WinForms.ControlStyles.AllPaintingInWmPaint
+            | WinForms.ControlStyles.UserPaint,
             true);
 
         SuspendLayout();
 
-        _pictureBox = new Forms.PictureBox
+        _pictureBox = new WinForms.PictureBox
         {
-            Dock = Forms.DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             BackColor = Drawing.Color.FromArgb(176, 176, 176),
-            SizeMode = Forms.PictureBoxSizeMode.Zoom,
+            SizeMode = WinForms.PictureBoxSizeMode.Zoom,
         };
 
         Controls.Add(_pictureBox);
@@ -328,7 +328,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
         return true;
     }
 
-    private void PictureBoxOnMouseMove(object? sender, Forms.MouseEventArgs e)
+    private void PictureBoxOnMouseMove(object? sender, WinForms.MouseEventArgs e)
     {
         UpdateGlyphTooltip(e.Location);
 
@@ -366,7 +366,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
         MonitorMouseLeft?.Invoke(this, EventArgs.Empty);
     }
 
-    private void PictureBoxOnPaint(object? sender, Forms.PaintEventArgs e)
+    private void PictureBoxOnPaint(object? sender, WinForms.PaintEventArgs e)
     {
         try
         {
@@ -483,14 +483,14 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
         graphics.FillRectangle(background, layout);
         graphics.DrawRectangle(border, layout);
 
-        var font = Font ?? Forms.Control.DefaultFont;
-        Forms.TextRenderer.DrawText(
+        var font = Font ?? WinForms.Control.DefaultFont;
+        WinForms.TextRenderer.DrawText(
             graphics,
             text,
             font,
             layout,
             Drawing.Color.Black,
-            Forms.TextFormatFlags.HorizontalCenter | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.WordBreak);
+            WinForms.TextFormatFlags.HorizontalCenter | WinForms.TextFormatFlags.VerticalCenter | WinForms.TextFormatFlags.WordBreak);
     }
 
     private void DrawLabel(Drawing.Graphics graphics, SimRect rect, Drawing.RectangleF canvasRect)
@@ -501,7 +501,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
             return;
         }
 
-        var labelSize = Forms.TextRenderer.MeasureText(label, Font, Drawing.Size.Empty, Forms.TextFormatFlags.NoPadding);
+        var labelSize = WinForms.TextRenderer.MeasureText(label, Font, Drawing.Size.Empty, WinForms.TextFormatFlags.NoPadding);
         var labelRect = new Drawing.Rectangle(
             (int)Math.Round(canvasRect.X + 4f),
             (int)Math.Round(canvasRect.Y + 4f),
@@ -515,13 +515,13 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
 
         using var labelBrush = new Drawing.SolidBrush(Drawing.Color.FromArgb(180, 0, 0, 0));
         graphics.FillRectangle(labelBrush, labelRect);
-        Forms.TextRenderer.DrawText(
+        WinForms.TextRenderer.DrawText(
             graphics,
             label,
             Font,
             labelRect,
             Drawing.Color.White,
-            Forms.TextFormatFlags.Left | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.NoPadding);
+            WinForms.TextFormatFlags.Left | WinForms.TextFormatFlags.VerticalCenter | WinForms.TextFormatFlags.NoPadding);
     }
 
     private void DrawIndicatorGlyphs(Drawing.Graphics graphics, SimRect rect, Drawing.RectangleF canvasRect, Drawing.Color borderColor)
@@ -535,7 +535,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
                 return;
             }
 
-            var glyphSize = Forms.TextRenderer.MeasureText(glyph, Font, Drawing.Size.Empty, Forms.TextFormatFlags.NoPadding);
+            var glyphSize = WinForms.TextRenderer.MeasureText(glyph, Font, Drawing.Size.Empty, WinForms.TextFormatFlags.NoPadding);
             var glyphRect = new Drawing.Rectangle(
                 (int)Math.Round(rightEdge - glyphSize.Width - 6f),
                 (int)Math.Round(canvasRect.Y + 4f),
@@ -553,13 +553,13 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
             using var glyphBorder = new Drawing.Pen(borderColor, 1.5f);
             graphics.DrawEllipse(glyphBorder, glyphRect);
 
-            Forms.TextRenderer.DrawText(
+            WinForms.TextRenderer.DrawText(
                 graphics,
                 glyph,
                 Font,
                 glyphRect,
                 Drawing.Color.Black,
-                Forms.TextFormatFlags.HorizontalCenter | Forms.TextFormatFlags.VerticalCenter | Forms.TextFormatFlags.NoPadding);
+                WinForms.TextFormatFlags.HorizontalCenter | WinForms.TextFormatFlags.VerticalCenter | WinForms.TextFormatFlags.NoPadding);
 
             _glyphRegions.Add((new Drawing.RectangleF(glyphRect.X, glyphRect.Y, glyphRect.Width, glyphRect.Height), tooltip));
             rightEdge = glyphRect.X - 4f;
@@ -593,7 +593,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
         return string.Concat(orderText, ". ", title);
     }
 
-    private static Drawing.RectangleF GetImageDisplayRectangle(Forms.PictureBox pictureBox)
+    private static Drawing.RectangleF GetImageDisplayRectangle(WinForms.PictureBox pictureBox)
     {
         var image = TryGetCurrentImage(pictureBox);
         if (!IsValidImage(image))
@@ -608,19 +608,19 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
 
         return pictureBox.SizeMode switch
         {
-            Forms.PictureBoxSizeMode.Normal or Forms.PictureBoxSizeMode.AutoSize => new Drawing.RectangleF(0, 0, imageWidth, imageHeight),
-            Forms.PictureBoxSizeMode.StretchImage => new Drawing.RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
-            Forms.PictureBoxSizeMode.CenterImage => new Drawing.RectangleF(
+            WinForms.PictureBoxSizeMode.Normal or WinForms.PictureBoxSizeMode.AutoSize => new Drawing.RectangleF(0, 0, imageWidth, imageHeight),
+            WinForms.PictureBoxSizeMode.StretchImage => new Drawing.RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
+            WinForms.PictureBoxSizeMode.CenterImage => new Drawing.RectangleF(
                 (pictureBox.ClientSize.Width - imageWidth) / 2f,
                 (pictureBox.ClientSize.Height - imageHeight) / 2f,
                 imageWidth,
                 imageHeight),
-            Forms.PictureBoxSizeMode.Zoom => CalculateZoomRectangle(pictureBox, image, imageWidth, imageHeight),
+            WinForms.PictureBoxSizeMode.Zoom => CalculateZoomRectangle(pictureBox, image, imageWidth, imageHeight),
             _ => new Drawing.RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
         };
     }
 
-    private static Drawing.RectangleF CalculateZoomRectangle(Forms.PictureBox pictureBox, Drawing.Image image, int imageWidth, int imageHeight)
+    private static Drawing.RectangleF CalculateZoomRectangle(WinForms.PictureBox pictureBox, Drawing.Image image, int imageWidth, int imageHeight)
     {
         if (imageWidth <= 0 || imageHeight <= 0)
         {
@@ -687,7 +687,7 @@ public sealed class MonitorPreviewDisplay : Forms.UserControl
         }
     }
 
-    private static Drawing.Image? TryGetCurrentImage(Forms.PictureBox pictureBox)
+    private static Drawing.Image? TryGetCurrentImage(WinForms.PictureBox pictureBox)
     {
         try
         {

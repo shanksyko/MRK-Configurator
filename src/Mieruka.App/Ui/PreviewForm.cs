@@ -4,13 +4,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Drawing = System.Drawing;
-using Forms = System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Preview;
 
 namespace Mieruka.App.Ui;
 
-internal sealed partial class PreviewForm : Forms.Form
+internal sealed partial class PreviewForm : WinForms.Form
 {
     private readonly List<MonitorInfo> _monitors = new();
     private Func<IMonitorCapture>? _captureFactory;
@@ -32,7 +32,7 @@ internal sealed partial class PreviewForm : Forms.Form
         CarregarMonitores(monitors);
     }
 
-    protected override void OnFormClosing(Forms.FormClosingEventArgs e)
+    protected override void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
         StopCaptureAsync().GetAwaiter().GetResult();
@@ -41,9 +41,9 @@ internal sealed partial class PreviewForm : Forms.Form
 
     private void CarregarMonitores()
     {
-        var monitors = Forms.Screen.AllScreens.Select(screen => new MonitorInfo
+        var monitors = WinForms.Screen.AllScreens.Select(screen => new MonitorInfo
         {
-            Key = new MonitorKey { DisplayIndex = Array.IndexOf(Forms.Screen.AllScreens, screen) },
+            Key = new MonitorKey { DisplayIndex = Array.IndexOf(WinForms.Screen.AllScreens, screen) },
             Name = string.IsNullOrWhiteSpace(screen.DeviceName) ? screen.FriendlyName() : screen.DeviceName,
             DeviceName = screen.DeviceName,
             Width = screen.Bounds.Width,
@@ -157,7 +157,7 @@ internal sealed partial class PreviewForm : Forms.Form
         }
         catch (Exception ex)
         {
-            Forms.MessageBox.Show(this, $"Captura GPU indisponível: {ex.Message}", "Preview", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, $"Captura GPU indisponível: {ex.Message}", "Preview", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -267,7 +267,7 @@ internal sealed partial class PreviewForm : Forms.Form
 
 internal static class ScreenExtensions
 {
-    public static string FriendlyName(this Forms.Screen screen)
+    public static string FriendlyName(this WinForms.Screen screen)
     {
         return string.IsNullOrWhiteSpace(screen.DeviceName)
             ? "Monitor"
