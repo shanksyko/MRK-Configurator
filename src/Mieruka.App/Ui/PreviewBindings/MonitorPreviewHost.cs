@@ -7,7 +7,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
+using Drawing = System.Drawing;
+using Forms = System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Preview;
@@ -16,7 +17,7 @@ using Serilog;
 namespace Mieruka.App.Ui.PreviewBindings;
 
 /// <summary>
-/// Hosts a monitor preview session and binds frames to a <see cref="PictureBox"/>.
+/// Hosts a monitor preview session and binds frames to a <see cref="Forms.PictureBox"/>.
 /// </summary>
 public sealed class MonitorPreviewHost : IDisposable
 {
@@ -58,21 +59,21 @@ public sealed class MonitorPreviewHost : IDisposable
         Disposing,
     }
 
-    private readonly PictureBox _target;
+    private readonly Forms.PictureBox _target;
     private readonly ILogger _logger;
     private readonly object _gate = new();
     private readonly object _frameTimingGate = new();
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
-    private readonly HashSet<Bitmap> _pendingFrames = new();
+    private readonly HashSet<Drawing.Bitmap> _pendingFrames = new();
     private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
-    private Bitmap? _currentFrame;
+    private Drawing.Bitmap? _currentFrame;
     private int _stateRaw = (int)PreviewState.Stopped;
     private bool _disposed;
-    private Rectangle _monitorBounds;
-    private Rectangle _monitorWorkArea;
+    private Drawing.Rectangle _monitorBounds;
+    private Drawing.Rectangle _monitorWorkArea;
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
@@ -126,7 +127,7 @@ public sealed class MonitorPreviewHost : IDisposable
         return State;
     }
 
-    public MonitorPreviewHost(string monitorId, PictureBox target, ILogger? logger = null)
+    public MonitorPreviewHost(string monitorId, Forms.PictureBox target, ILogger? logger = null)
     {
         MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
         _target = target ?? throw new ArgumentNullException(nameof(target));
@@ -148,7 +149,7 @@ public sealed class MonitorPreviewHost : IDisposable
         EnsurePictureBoxSizeMode();
     }
 
-    public MonitorPreviewHost(MonitorDescriptor descriptor, PictureBox target, ILogger? logger = null)
+    public MonitorPreviewHost(MonitorDescriptor descriptor, Forms.PictureBox target, ILogger? logger = null)
         : this(CreateMonitorId(descriptor), target, logger)
     {
         _monitorBounds = descriptor.Bounds;
@@ -181,12 +182,12 @@ public sealed class MonitorPreviewHost : IDisposable
     /// <summary>
     /// Gets the bounds of the monitor being captured when available.
     /// </summary>
-    public Rectangle MonitorBounds => _monitorBounds;
+    public Drawing.Rectangle MonitorBounds => _monitorBounds;
 
     /// <summary>
     /// Gets the work area of the monitor being captured when available.
     /// </summary>
-    public Rectangle MonitorWorkArea => _monitorWorkArea;
+    public Drawing.Rectangle MonitorWorkArea => _monitorWorkArea;
 
     /// <summary>
     /// Gets the orientation of the monitor when available.
@@ -1032,7 +1033,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            Bitmap? clone = null;
+            Drawing.Bitmap? clone = null;
             try
             {
                 var bitmap = e.Frame;
@@ -1077,11 +1078,11 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private Bitmap? TryCloneFrame(Image frame, int width, int height)
+    private Drawing.Bitmap? TryCloneFrame(Drawing.Image frame, int width, int height)
     {
         try
         {
-            return new Bitmap(frame);
+            return new Drawing.Bitmap(frame);
         }
         catch (Exception ex) when (ex is ArgumentException or ExternalException or InvalidOperationException)
         {
@@ -1103,7 +1104,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private void UpdateTarget(Bitmap frame)
+    private void UpdateTarget(Drawing.Bitmap frame)
     {
         if (_suppressEvents)
         {
@@ -1130,7 +1131,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
             try
             {
-                _target.BeginInvoke(new Action<Bitmap>(UpdateTarget), frame);
+                _target.BeginInvoke(new Action<Drawing.Bitmap>(UpdateTarget), frame);
             }
             catch
             {
@@ -1211,7 +1212,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private bool TryGetFrameSize(Image frame, out int width, out int height)
+    private bool TryGetFrameSize(Drawing.Image frame, out int width, out int height)
     {
         try
         {
@@ -1228,7 +1229,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private bool StopAnimationSafe(Image image)
+    private bool StopAnimationSafe(Drawing.Image image)
     {
         if (!CanAnimate(image))
         {
@@ -1246,7 +1247,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private void StartAnimationSafe(Image image)
+    private void StartAnimationSafe(Drawing.Image image)
     {
         if (!CanAnimate(image))
         {
@@ -1263,7 +1264,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private static bool CanAnimate(Image image)
+    private static bool CanAnimate(Drawing.Image image)
     {
         try
         {
@@ -1275,7 +1276,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private static void DisposeFrame(Image frame)
+    private static void DisposeFrame(Drawing.Image frame)
     {
         try
         {
@@ -1568,7 +1569,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private void RegisterPendingFrame(Bitmap frame)
+    private void RegisterPendingFrame(Drawing.Bitmap frame)
     {
         lock (_pendingFramesGate)
         {
@@ -1576,7 +1577,7 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private void UnregisterPendingFrame(Bitmap frame)
+    private void UnregisterPendingFrame(Drawing.Bitmap frame)
     {
         lock (_pendingFramesGate)
         {
@@ -1586,13 +1587,13 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void DisposePendingFrames()
     {
-        Bitmap[]? frames = null;
+        Drawing.Bitmap[]? frames = null;
 
         lock (_pendingFramesGate)
         {
             if (_pendingFrames.Count > 0)
             {
-                frames = new Bitmap[_pendingFrames.Count];
+                frames = new Drawing.Bitmap[_pendingFrames.Count];
                 _pendingFrames.CopyTo(frames);
                 _pendingFrames.Clear();
             }
@@ -1695,9 +1696,9 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void EnsurePictureBoxSizeMode()
     {
-        if (_target.SizeMode != PictureBoxSizeMode.Zoom)
+        if (_target.SizeMode != Forms.PictureBoxSizeMode.Zoom)
         {
-            _target.SizeMode = PictureBoxSizeMode.Zoom;
+            _target.SizeMode = Forms.PictureBoxSizeMode.Zoom;
         }
 
         EnableDoubleBuffering(_target);
@@ -1722,11 +1723,11 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private static void EnableDoubleBuffering(PictureBox target)
+    private static void EnableDoubleBuffering(Forms.PictureBox target)
     {
         try
         {
-            typeof(Control)
+            typeof(Forms.Control)
                 .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?
                 .SetValue(target, true);
         }
@@ -1738,7 +1739,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private bool PopulateMetadataFromMonitor()
     {
-        if (_monitorBounds != Rectangle.Empty)
+        if (_monitorBounds != Drawing.Rectangle.Empty)
         {
             return true;
         }
@@ -1755,12 +1756,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
         if (info is not null)
         {
-            if (info.Bounds != Rectangle.Empty)
+            if (info.Bounds != Drawing.Rectangle.Empty)
             {
                 _monitorBounds = info.Bounds;
             }
 
-            if (info.WorkArea != Rectangle.Empty)
+            if (info.WorkArea != Drawing.Rectangle.Empty)
             {
                 _monitorWorkArea = info.WorkArea;
             }
@@ -1775,17 +1776,17 @@ public sealed class MonitorPreviewHost : IDisposable
                 _rotation = info.Rotation;
             }
 
-            if (_monitorBounds == Rectangle.Empty && info.Width > 0 && info.Height > 0)
+            if (_monitorBounds == Drawing.Rectangle.Empty && info.Width > 0 && info.Height > 0)
             {
-                _monitorBounds = new Rectangle(0, 0, info.Width, info.Height);
+                _monitorBounds = new Drawing.Rectangle(0, 0, info.Width, info.Height);
             }
 
-            if (_monitorWorkArea == Rectangle.Empty && _monitorBounds != Rectangle.Empty)
+            if (_monitorWorkArea == Drawing.Rectangle.Empty && _monitorBounds != Drawing.Rectangle.Empty)
             {
                 _monitorWorkArea = _monitorBounds;
             }
 
-            if (_monitorBounds != Rectangle.Empty)
+            if (_monitorBounds != Drawing.Rectangle.Empty)
             {
                 return true;
             }
@@ -1801,20 +1802,20 @@ public sealed class MonitorPreviewHost : IDisposable
             var service = new MonitorService();
             var fallback = service.PrimaryOrFirst();
 
-            if (fallback.Bounds != Rectangle.Empty)
+            if (fallback.Bounds != Drawing.Rectangle.Empty)
             {
                 _monitorBounds = fallback.Bounds;
             }
             else if (fallback.Width > 0 && fallback.Height > 0)
             {
-                _monitorBounds = new Rectangle(0, 0, fallback.Width, fallback.Height);
+                _monitorBounds = new Drawing.Rectangle(0, 0, fallback.Width, fallback.Height);
             }
 
-            if (fallback.WorkArea != Rectangle.Empty)
+            if (fallback.WorkArea != Drawing.Rectangle.Empty)
             {
                 _monitorWorkArea = fallback.WorkArea;
             }
-            else if (_monitorBounds != Rectangle.Empty)
+            else if (_monitorBounds != Drawing.Rectangle.Empty)
             {
                 _monitorWorkArea = _monitorBounds;
             }
@@ -1834,7 +1835,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 _refreshRate = fallback.RefreshHz;
             }
 
-            return _monitorBounds != Rectangle.Empty;
+            return _monitorBounds != Drawing.Rectangle.Empty;
         }
         catch (InvalidOperationException)
         {
@@ -1847,14 +1848,14 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
 #if DEBUG
-    private void DrawDebugOverlay(Bitmap bitmap)
+    private void DrawDebugOverlay(Drawing.Bitmap bitmap)
     {
         try
         {
-            using var graphics = Graphics.FromImage(bitmap);
-            using var font = SystemFonts.CaptionFont ?? SystemFonts.MessageBoxFont ?? Control.DefaultFont;
-            using var background = new SolidBrush(Color.FromArgb(160, Color.Black));
-            using var foreground = new SolidBrush(Color.White);
+            using var graphics = Drawing.Graphics.FromImage(bitmap);
+            using var font = SystemFonts.CaptionFont ?? SystemFonts.MessageBoxFont ?? Forms.Control.DefaultFont;
+            using var background = new Drawing.SolidBrush(Drawing.Color.FromArgb(160, Drawing.Color.Black));
+            using var foreground = new Drawing.SolidBrush(Drawing.Color.White);
 
             var text = string.Concat(MonitorId, " ", bitmap.Width, "x", bitmap.Height);
             if (_refreshRate > 0)
@@ -1871,7 +1872,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 text = string.Concat(text, " ", _orientation);
             }
 
-            var safeFont = font ?? Control.DefaultFont;
+            var safeFont = font ?? Forms.Control.DefaultFont;
             var safeText = text ?? string.Empty;
             var measured = graphics.MeasureString(safeText, safeFont);
             var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);

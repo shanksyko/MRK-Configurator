@@ -1,7 +1,8 @@
 using System;
-using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
+using Drawing = System.Drawing;
+using Forms = System.Windows.Forms;
+using WinTimer = System.Windows.Forms.Timer;
 using Mieruka.Core.Security;
 using Mieruka.Core.Security.Policy;
 
@@ -10,7 +11,7 @@ namespace Mieruka.App.Forms;
 /// <summary>
 /// Provides a configuration surface for security sensitive settings.
 /// </summary>
-public sealed class SecuritySettingsForm : Form
+public sealed class SecuritySettingsForm : Forms.Form
 {
     private readonly UrlAllowlist _allowlist;
     private readonly SecurityPolicy _policy;
@@ -19,13 +20,13 @@ public sealed class SecuritySettingsForm : Form
     private readonly AuditLog _auditLog;
     private readonly IntegrityManifest? _manifest;
 
-    private readonly ComboBox _policyCombo;
-    private readonly ListBox _allowListBox;
-    private readonly TextBox _hostInput;
-    private readonly ListBox _cookieHosts;
-    private readonly CheckBox _telemetryOptIn;
-    private readonly Label _integrityStatus;
-    private readonly Timer _cleanupTimer;
+    private readonly Forms.ComboBox _policyCombo;
+    private readonly Forms.ListBox _allowListBox;
+    private readonly Forms.TextBox _hostInput;
+    private readonly Forms.ListBox _cookieHosts;
+    private readonly Forms.CheckBox _telemetryOptIn;
+    private readonly Forms.Label _integrityStatus;
+    private readonly WinTimer _cleanupTimer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SecuritySettingsForm"/> class.
@@ -46,33 +47,33 @@ public sealed class SecuritySettingsForm : Form
         _manifest = manifest;
 
         Text = "Segurança";
-        StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(640, 480);
-        MinimumSize = new Size(600, 420);
+        StartPosition = Forms.FormStartPosition.CenterParent;
+        Size = new Drawing.Size(640, 480);
+        MinimumSize = new Drawing.Size(600, 420);
 
-        var layout = new TableLayoutPanel
+        var layout = new Forms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 5,
-            Padding = new Padding(8),
+            Padding = new Forms.Padding(8),
             AutoSize = true,
         };
 
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 50));
+        layout.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 50));
 
         // Policy selector
-        var policyLabel = new Label
+        var policyLabel = new Forms.Label
         {
             Text = "Perfil de política",
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
             AutoSize = true,
         };
-        _policyCombo = new ComboBox
+        _policyCombo = new Forms.ComboBox
         {
-            Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = Forms.DockStyle.Fill,
+            DropDownStyle = Forms.ComboBoxStyle.DropDownList,
             DataSource = Enum.GetValues(typeof(SecurityProfile)),
         };
         _policyCombo.SelectedItem = _policy.Profile;
@@ -82,25 +83,25 @@ public sealed class SecuritySettingsForm : Form
         layout.Controls.Add(_policyCombo, 1, 0);
 
         // Allowlist controls
-        _allowListBox = new ListBox { Dock = DockStyle.Fill }; 
-        _hostInput = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "Adicionar host" };
-        var addHostButton = new Button { Text = "Adicionar", Dock = DockStyle.Fill };
-        var removeHostButton = new Button { Text = "Remover", Dock = DockStyle.Fill };
+        _allowListBox = new Forms.ListBox { Dock = Forms.DockStyle.Fill };
+        _hostInput = new Forms.TextBox { Dock = Forms.DockStyle.Fill, PlaceholderText = "Adicionar host" };
+        var addHostButton = new Forms.Button { Text = "Adicionar", Dock = Forms.DockStyle.Fill };
+        var removeHostButton = new Forms.Button { Text = "Remover", Dock = Forms.DockStyle.Fill };
 
         addHostButton.Click += (_, _) => AddAllowlistEntry();
         removeHostButton.Click += (_, _) => RemoveAllowlistEntry();
 
-        var allowListPanel = new TableLayoutPanel
+        var allowListPanel = new Forms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 3,
         };
-        allowListPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70));
-        allowListPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
-        allowListPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        allowListPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        allowListPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        allowListPanel.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 70));
+        allowListPanel.ColumnStyles.Add(new Forms.ColumnStyle(Forms.SizeType.Percent, 30));
+        allowListPanel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
+        allowListPanel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        allowListPanel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
 
         allowListPanel.Controls.Add(_hostInput, 0, 0);
         allowListPanel.Controls.Add(addHostButton, 1, 0);
@@ -108,10 +109,10 @@ public sealed class SecuritySettingsForm : Form
         allowListPanel.Controls.Add(_allowListBox, 0, 1);
         allowListPanel.Controls.Add(removeHostButton, 1, 2);
 
-        var allowListGroup = new GroupBox
+        var allowListGroup = new Forms.GroupBox
         {
             Text = "Hosts permitidos",
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
         };
         allowListGroup.Controls.Add(allowListPanel);
 
@@ -119,23 +120,23 @@ public sealed class SecuritySettingsForm : Form
         layout.SetColumnSpan(allowListGroup, 2);
 
         // Cookie management
-        _cookieHosts = new ListBox { Dock = DockStyle.Fill };
-        var revokeButton = new Button { Text = "Revogar cookies", Dock = DockStyle.Fill };
+        _cookieHosts = new Forms.ListBox { Dock = Forms.DockStyle.Fill };
+        var revokeButton = new Forms.Button { Text = "Revogar cookies", Dock = Forms.DockStyle.Fill };
         revokeButton.Click += (_, _) => RevokeSelectedCookie();
 
-        var cookieGroup = new GroupBox
+        var cookieGroup = new Forms.GroupBox
         {
             Text = "Cookies armazenados",
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
         };
-        var cookiePanel = new TableLayoutPanel
+        var cookiePanel = new Forms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
         };
-        cookiePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        cookiePanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cookiePanel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.Percent, 100));
+        cookiePanel.RowStyles.Add(new Forms.RowStyle(Forms.SizeType.AutoSize));
         cookiePanel.Controls.Add(_cookieHosts, 0, 0);
         cookiePanel.Controls.Add(revokeButton, 0, 1);
         cookieGroup.Controls.Add(cookiePanel);
@@ -144,10 +145,10 @@ public sealed class SecuritySettingsForm : Form
         layout.SetColumnSpan(cookieGroup, 2);
 
         // Telemetry options
-        _telemetryOptIn = new CheckBox
+        _telemetryOptIn = new Forms.CheckBox
         {
             Text = "Permitir telemetria anônima",
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
         };
         _telemetryOptIn.CheckedChanged += (_, _) => _auditLog.WriteEvent(new AuditLog.AuditEvent("telemetry")
         {
@@ -158,16 +159,16 @@ public sealed class SecuritySettingsForm : Form
         layout.SetColumnSpan(_telemetryOptIn, 2);
 
         // Integrity status
-        _integrityStatus = new Label
+        _integrityStatus = new Forms.Label
         {
             Text = "Integridade: não verificada",
-            Dock = DockStyle.Fill,
+            Dock = Forms.DockStyle.Fill,
             AutoSize = true,
         };
-        var revalidateButton = new Button
+        var revalidateButton = new Forms.Button
         {
             Text = "Revalidar",
-            Dock = DockStyle.Right,
+            Dock = Forms.DockStyle.Right,
         };
         revalidateButton.Click += (_, _) => RevalidateIntegrity();
 
@@ -178,7 +179,7 @@ public sealed class SecuritySettingsForm : Form
 
         Load += (_, _) => RefreshData();
 
-        _cleanupTimer = new Timer { Interval = (int)TimeSpan.FromMinutes(15).TotalMilliseconds };
+        _cleanupTimer = new WinTimer { Interval = (int)TimeSpan.FromMinutes(15).TotalMilliseconds };
         _cleanupTimer.Tick += (_, _) => _cookieStore.PurgeExpired();
         _cleanupTimer.Start();
     }
@@ -229,7 +230,7 @@ public sealed class SecuritySettingsForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Host inválido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Forms.MessageBox.Show(this, ex.Message, "Host inválido", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Warning);
         }
     }
 
@@ -310,7 +311,7 @@ public sealed class SecuritySettingsForm : Form
         catch (IntegrityViolationException ex)
         {
             UpdateIntegrityStatus("falha");
-            MessageBox.Show(this, ex.Message, "Integridade", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Forms.MessageBox.Show(this, ex.Message, "Integridade", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Error);
         }
     }
 

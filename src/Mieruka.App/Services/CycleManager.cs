@@ -34,7 +34,8 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
     private List<CycleTargetContext> _playlist = new();
     private CycleConfig _cycleConfig = new();
     private PlaybackState _playbackState = PlaybackState.Stopped;
-    private Timer? _timer;
+    // Usa System.Threading.Timer (thread pool). Não tocar UI diretamente; marshalar para o thread da UI com BeginInvoke.
+    private System.Threading.Timer? _threadTimer;
     private DateTimeOffset _currentStartTime = DateTimeOffset.MinValue;
     private TimeSpan _currentDuration = TimeSpan.Zero;
     private TimeSpan _remainingWhenPaused = TimeSpan.Zero;
@@ -218,7 +219,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
         StopInternal();
         ClearHotkeys();
 
-        _timer?.Dispose();
+        _threadTimer?.Dispose();
 
         if (_ownsHotkeyManager)
         {
@@ -239,7 +240,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
 
             _playbackState = PlaybackState.Stopped;
             _remainingWhenPaused = TimeSpan.Zero;
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _threadTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -256,7 +257,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
             }
 
             _playbackState = PlaybackState.Paused;
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _threadTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             start = _currentStartTime;
             duration = _currentDuration;
         }
@@ -539,14 +540,14 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
 
         lock (_gate)
         {
-            if (_timer is null)
+            if (_threadTimer is null)
             {
-                _timer = new Timer(OnTimerTick, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                _threadTimer = new System.Threading.Timer(OnTimerTick, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             }
             _currentStartTime = start;
             _currentDuration = dueTime;
             _remainingWhenPaused = TimeSpan.Zero;
-            _timer.Change(dueTime, Timeout.InfiniteTimeSpan);
+            _threadTimer.Change(dueTime, Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -557,7 +558,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
     {
         lock (_gate)
         {
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _threadTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         }
     }
 

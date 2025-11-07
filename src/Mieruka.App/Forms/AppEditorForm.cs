@@ -13,6 +13,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Drawing = System.Drawing;
+using Forms = System.Windows.Forms;
+using WinTimer = System.Windows.Forms.Timer;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Forms.Controls.Apps;
 using Mieruka.App.Interop;
@@ -60,7 +63,7 @@ public partial class AppEditorForm : Form
 
     private readonly record struct WindowPreviewSnapshot(
         string? MonitorId,
-        Rectangle WindowBounds,
+        Drawing.Rectangle WindowBounds,
         bool IsFullScreen,
         bool AutoStart,
         string AppId);
@@ -90,8 +93,8 @@ public partial class AppEditorForm : Form
     private SimRectDisplay? _activeCycleDisplay;
     private int _nextSimRectIndex;
     private readonly Stopwatch _hoverSw = new();
-    private Point? _hoverPendingPoint;
-    private Point? _hoverAppliedPoint;
+    private Drawing.Point? _hoverPendingPoint;
+    private Drawing.Point? _hoverAppliedPoint;
     private CancellationTokenSource? _hoverThrottleCts;
     private readonly SynchronizationContext? _uiContext;
     private readonly int _uiThreadId;
@@ -109,7 +112,7 @@ public partial class AppEditorForm : Form
     private bool _hasWindowPreviewSnapshot;
     private TimeSpan _lastWindowPreviewRebuild = TimeSpan.Zero;
     private bool _windowPreviewRebuildScheduled;
-    private readonly Timer _windowBoundsDebounce;
+    private readonly WinTimer _windowBoundsDebounce;
     private bool _windowBoundsDebouncePending;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
@@ -128,7 +131,7 @@ public partial class AppEditorForm : Form
         _uiContext = SynchronizationContext.Current;
         ToolTipTamer.Tame(this, components);
 
-        _windowBoundsDebounce = new Timer(components)
+        _windowBoundsDebounce = new WinTimer(components)
         {
             Interval = 150
         };
@@ -1705,7 +1708,7 @@ public partial class AppEditorForm : Form
         }
     }
 
-    private void UpdateMonitorCoordinateLabel(Point? coordinates)
+    private void UpdateMonitorCoordinateLabel(Drawing.Point? coordinates)
     {
         if (lblMonitorCoordinates is not { IsDisposed: false } label)
         {
@@ -1722,7 +1725,7 @@ public partial class AppEditorForm : Form
         }
     }
 
-    private void MonitorPreviewDisplay_MouseMovedInMonitorSpace(object? sender, Point point)
+    private void MonitorPreviewDisplay_MouseMovedInMonitorSpace(object? sender, Drawing.Point point)
     {
         if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
         {
@@ -1834,7 +1837,7 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        if (_hoverPendingPoint is not Point pending)
+        if (_hoverPendingPoint is not Drawing.Point pending)
         {
             return;
         }
@@ -1856,7 +1859,7 @@ public partial class AppEditorForm : Form
             return;
         }
 
-        if (_hoverAppliedPoint is Point applied && applied == pending)
+        if (_hoverAppliedPoint is Drawing.Point applied && applied == pending)
         {
             _hoverSw.Restart();
             return;
@@ -1979,7 +1982,7 @@ public partial class AppEditorForm : Form
     }
 
     private bool ClampWindowInputsToMonitor(
-        Point? pointer,
+        Drawing.Point? pointer,
         bool allowFullScreen = false,
         (NumericUpDown X, NumericUpDown Y, NumericUpDown Width, NumericUpDown Height)? windowInputs = null)
     {
@@ -2037,7 +2040,7 @@ public partial class AppEditorForm : Form
                 height = clampedHeight;
             }
 
-            if (pointer is Point target)
+            if (pointer is Drawing.Point target)
             {
                 var targetX = target.X;
                 if (monitorWidth > 0)
@@ -3049,13 +3052,13 @@ public partial class AppEditorForm : Form
     {
         if (!ValidarCampos())
         {
-            DialogResult = DialogResult.None;
+            DialogResult = Forms.DialogResult.None;
             return;
         }
 
         Resultado = ConstruirPrograma();
         CommitProfileMetadata();
-        DialogResult = DialogResult.OK;
+        DialogResult = Forms.DialogResult.OK;
         Close();
     }
 
@@ -3492,7 +3495,7 @@ public partial class AppEditorForm : Form
 
     private void btnCancelar_Click(object? sender, EventArgs e)
     {
-        DialogResult = DialogResult.Cancel;
+        DialogResult = Forms.DialogResult.Cancel;
         Close();
     }
 
