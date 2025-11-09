@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
+using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Mieruka.Core.Diagnostics;
 #if WINDOWS10_0_17763_0_OR_GREATER
@@ -68,15 +69,20 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
     /// <inheritdoc />
     [SupportedOSPlatform("windows10.0.17763")]
-    public bool IsSupported => IsGraphicsCaptureAvailable;
+    public bool IsSupported => GpuCaptureGuard.CanUseGpu() && IsGraphicsCaptureAvailable;
 
     /// <inheritdoc />
     [SupportedOSPlatform("windows10.0.17763")]
-    public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
+        public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (!GpuCaptureGuard.CanUseGpu())
+        {
+            throw new GraphicsCaptureUnavailableException("GPU disabled by guard.", isPermanent: true);
+        }
 
         if (IsGpuGloballyDisabled)
         {

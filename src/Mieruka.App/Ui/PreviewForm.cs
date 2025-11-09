@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Drawing = System.Drawing;
 using WinForms = System.Windows.Forms;
+using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Mieruka.Preview;
 
@@ -147,6 +148,17 @@ internal sealed partial class PreviewForm : WinForms.Form
 
     private async void btnCapturaGpu_Click(object? sender, EventArgs e)
     {
+        if (!GpuCaptureGuard.CanUseGpu())
+        {
+            WinForms.MessageBox.Show(
+                this,
+                "Captura GPU está desabilitada para esta sessão.",
+                "Preview",
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
+            return;
+        }
+
         try
         {
             await using var probe = new GraphicsCaptureProvider();
@@ -161,7 +173,15 @@ internal sealed partial class PreviewForm : WinForms.Form
             return;
         }
 
-        _captureFactory = () => new GraphicsCaptureProvider();
+        _captureFactory = () =>
+        {
+            if (!GpuCaptureGuard.CanUseGpu())
+            {
+                throw new GraphicsCaptureUnavailableException("GPU disabled by guard.", isPermanent: true);
+            }
+
+            return new GraphicsCaptureProvider();
+        };
         AtualizarStatus("Modo de captura GPU selecionado.");
     }
 

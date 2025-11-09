@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mieruka.Core.Config;
 
 namespace Mieruka.Preview;
 
@@ -37,7 +38,7 @@ public static class MonitorCaptureFactory
         var providers = new List<IMonitorCapture>();
 
 #if WINDOWS10_0_17763_0_OR_GREATER
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && GpuCaptureGuard.CanUseGpu())
         {
             try
             {

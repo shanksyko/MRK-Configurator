@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Drawing = System.Drawing;
 using WinForms = System.Windows.Forms;
+using Mieruka.Core.Config;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
@@ -743,7 +744,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
             if (monitor is not null)
             {
-                hostSupportsGpu = CreateForMonitor.IsHostSuitableForWgc(monitor);
+                hostSupportsGpu = CaptureFactory.IsHostSuitableForWgc(monitor);
                 if (!hostSupportsGpu)
                 {
                     gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
@@ -758,22 +759,22 @@ public sealed class MonitorPreviewHost : IDisposable
 
         if (PreviewSafeModeEnabled)
         {
-            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+            yield return ("GDI", () => CaptureFactory.Gdi(MonitorId));
             yield break;
         }
 
         if (preferGpu && !gpuInBackoff && hostSupportsGpu)
         {
-            yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
-            yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+            yield return ("GPU", () => CaptureFactory.Gpu(MonitorId));
+            yield return ("GDI", () => CaptureFactory.Gdi(MonitorId));
             yield break;
         }
 
-        yield return ("GDI", () => CreateForMonitor.Gdi(MonitorId));
+        yield return ("GDI", () => CaptureFactory.Gdi(MonitorId));
 
         if (!gpuInBackoff && hostSupportsGpu)
         {
-            yield return ("GPU", () => CreateForMonitor.Gpu(MonitorId));
+            yield return ("GPU", () => CaptureFactory.Gpu(MonitorId));
         }
     }
 
@@ -970,6 +971,11 @@ public sealed class MonitorPreviewHost : IDisposable
                             reason);
                     }
                 }
+
+                if (isGpu)
+                {
+                    EvaluateGpuDisable(ex);
+                }
                 if (capture is not null)
                 {
                     capture.FrameArrived -= OnFrameArrived;
@@ -988,6 +994,23 @@ public sealed class MonitorPreviewHost : IDisposable
         }
 
         return false;
+    }
+
+    private static void EvaluateGpuDisable(Exception exception)
+    {
+        switch (exception)
+        {
+            case GraphicsCaptureUnavailableException unavailable when unavailable.IsPermanent:
+                GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailableException");
+                break;
+            case ArgumentException:
+            case NotSupportedException:
+            case InvalidOperationException:
+            case System.ComponentModel.Win32Exception:
+            case System.Runtime.InteropServices.COMException:
+                GpuCaptureGuard.DisableGpuPermanently($"{exception.GetType().Name}: {exception.Message}");
+                break;
+        }
     }
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)

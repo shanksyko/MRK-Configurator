@@ -7,6 +7,6 @@ public static class Preview
 {
     public static IMonitorCapture CreateForMonitor(string monitorId)
     {
-        return WgcMonitorCapture.Create(monitorId);
+        return CaptureFactory.Gpu(monitorId);
     }
 }
