@@ -3,16 +3,16 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Windows.Forms;
 using Mieruka.App.Config;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Diagnostics;
-using Mieruka.Preview.Capture;
+using Mieruka.Preview;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
 using Serilog.Enrichers;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App;
 
@@ -29,9 +29,9 @@ internal static class Program
         using var sessionScope = LogContextEx.PushCorrelation(SessionId);
 
         ApplicationConfiguration.Initialize();
-        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        Application.AddMessageFilter(new MouseMoveCoalescer(16));
-        Application.ThreadException += OnThreadException;
+        WinForms.Application.SetUnhandledExceptionMode(WinForms.UnhandledExceptionMode.CatchException);
+        WinForms.Application.AddMessageFilter(new MouseMoveCoalescer(16));
+        WinForms.Application.ThreadException += OnThreadException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
 
         try
@@ -42,7 +42,7 @@ internal static class Program
 
             var mainForm = new MainForm();
             TabLayoutGuard.Attach(mainForm);
-            Application.Run(mainForm);
+            WinForms.Application.Run(mainForm);
         }
         catch (Exception ex)
         {

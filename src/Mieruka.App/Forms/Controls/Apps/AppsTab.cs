@@ -8,23 +8,25 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Serilog;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Forms.Controls.Apps;
 
-public sealed class AppsTab : UserControl
+public sealed class AppsTab : WinForms.UserControl
 {
     private static readonly ILogger Logger = Log.ForContext<AppsTab>();
 
-    private readonly TextBox _txtSearch;
+    private readonly WinForms.TextBox _txtSearch;
     private readonly DataGridView _grid;
-    private readonly Button _btnSelectExecutable;
-    private readonly Button _btnAdd;
-    private readonly Button _btnRemove;
-    private readonly Button _btnEditArgs;
-    private readonly Button _btnOpen;
-    private readonly Button _btnTest;
-    private readonly TextBox _txtArgs;
-    private readonly TextBox _txtPreview;
+    private readonly WinForms.Button _btnSelectExecutable;
+    private readonly WinForms.Button _btnAdd;
+    private readonly WinForms.Button _btnRemove;
+    private readonly WinForms.Button _btnEditArgs;
+    private readonly WinForms.Button _btnOpen;
+    private readonly WinForms.Button _btnTest;
+    private readonly WinForms.TextBox _txtArgs;
+    private readonly WinForms.TextBox _txtPreview;
     private readonly BindingList<InstalledAppInfo> _allApps = new();
     private readonly BindingList<InstalledAppInfo> _filteredApps = new();
     private bool _suppressSelectionNotifications;
@@ -33,28 +35,28 @@ public sealed class AppsTab : UserControl
 
     public AppsTab()
     {
-        Dock = DockStyle.Fill;
+        Dock = WinForms.DockStyle.Fill;
 
-        var layout = new TableLayoutPanel
+        var layout = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 3,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(8),
+            Padding = new WinForms.Padding(8),
         };
 
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200F));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 100F));
+        layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Absolute, 200F));
+        layout.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new WinForms.RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
 
-        _txtSearch = new TextBox
+        _txtSearch = new WinForms.TextBox
         {
             PlaceholderText = "Buscar aplicativos instalados...",
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
         };
         _txtSearch.TextChanged += TxtSearch_TextChanged;
 
@@ -63,7 +65,7 @@ public sealed class AppsTab : UserControl
 
         _grid = new DataGridView
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ReadOnly = true,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
@@ -108,31 +110,31 @@ public sealed class AppsTab : UserControl
 
         layout.Controls.Add(_grid, 0, 1);
 
-        var buttonPanel = new FlowLayoutPanel
+        var buttonPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        _btnSelectExecutable = new Button { Text = "Selecionar executável...", AutoSize = true };
+        _btnSelectExecutable = new WinForms.Button { Text = "Selecionar executável...", AutoSize = true };
         _btnSelectExecutable.Click += (_, _) => SelectExecutableFromDialog();
 
-        _btnAdd = new Button { Text = "Adicionar", AutoSize = true };
+        _btnAdd = new WinForms.Button { Text = "Adicionar", AutoSize = true };
         _btnAdd.Click += (_, _) => ApplySelection();
 
-        _btnRemove = new Button { Text = "Remover", AutoSize = true };
+        _btnRemove = new WinForms.Button { Text = "Remover", AutoSize = true };
         _btnRemove.Click += (_, _) => ClearSelection();
 
-        _btnEditArgs = new Button { Text = "Editar Args", AutoSize = true };
+        _btnEditArgs = new WinForms.Button { Text = "Editar Args", AutoSize = true };
         _btnEditArgs.Click += (_, _) => FocusArgs();
 
-        _btnOpen = new Button { Text = "Abrir", AutoSize = true };
+        _btnOpen = new WinForms.Button { Text = "Abrir", AutoSize = true };
         _btnOpen.Click += (_, _) => OpenSelectedExecutableAsync();
 
-        _btnTest = new Button { Text = "Testar", AutoSize = true };
+        _btnTest = new WinForms.Button { Text = "Testar", AutoSize = true };
         _btnTest.Click += (_, _) => TestSelectedExecutableAsync();
 
         buttonPanel.Controls.Add(_btnSelectExecutable);
@@ -144,45 +146,45 @@ public sealed class AppsTab : UserControl
 
         layout.Controls.Add(buttonPanel, 1, 1);
 
-        var footer = new TableLayoutPanel
+        var footer = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 2,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(0, 8, 0, 0),
+            Margin = new WinForms.Padding(0, 8, 0, 0),
         };
 
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80F));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        footer.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Absolute, 80F));
+        footer.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 100F));
 
-        footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        footer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        footer.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
+        footer.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
 
-        var lblArgs = new Label
+        var lblArgs = new WinForms.Label
         {
             Text = "Args:",
             TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
         };
 
-        _txtArgs = new TextBox
+        _txtArgs = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
         };
         _txtArgs.TextChanged += (_, _) => HandleArgsChanged();
 
-        var lblPreview = new Label
+        var lblPreview = new WinForms.Label
         {
             Text = "Linha final:",
             TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
         };
 
-        _txtPreview = new TextBox
+        _txtPreview = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ReadOnly = true,
         };
 
@@ -253,12 +255,12 @@ public sealed class AppsTab : UserControl
 
             void ShowError()
             {
-                MessageBox.Show(
+                WinForms.MessageBox.Show(
                     this,
                     "Não foi possível carregar a lista de aplicativos instalados. Consulte o log para mais detalhes.",
                     "Aplicativos instalados",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    WinForms.MessageBoxButtons.OK,
+                    WinForms.MessageBoxIcon.Warning);
             }
 
             if (InvokeRequired)
@@ -472,7 +474,7 @@ public sealed class AppsTab : UserControl
 
     private void SelectExecutableFromDialog()
     {
-        using var dialog = new OpenFileDialog
+        using var dialog = new WinForms.OpenFileDialog
         {
             Filter = "Aplicativos (*.exe)|*.exe|Todos os arquivos (*.*)|*.*",
             Title = "Selecionar executável",
@@ -480,7 +482,7 @@ public sealed class AppsTab : UserControl
             Multiselect = false,
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
         {
             return;
         }
@@ -526,12 +528,12 @@ public sealed class AppsTab : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível abrir o aplicativo selecionado: {ex.Message}",
                 "Abrir aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -552,12 +554,12 @@ public sealed class AppsTab : UserControl
 
         if (TestRequested is null)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "O teste de posicionamento não está disponível neste contexto.",
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -572,12 +574,12 @@ public sealed class AppsTab : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível testar o aplicativo selecionado: {ex.Message}",
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -593,23 +595,23 @@ public sealed class AppsTab : UserControl
         var executablePath = _currentExecutablePath.Trim();
         if (string.IsNullOrWhiteSpace(executablePath))
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Selecione um executável antes de continuar.",
                 "Aplicativos",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return null;
         }
 
         if (validateExecutable && !File.Exists(executablePath))
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "O executável informado não foi encontrado.",
                 "Aplicativos",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Warning);
             return null;
         }
 

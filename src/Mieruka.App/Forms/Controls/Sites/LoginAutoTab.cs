@@ -6,10 +6,11 @@ using System.Windows.Forms;
 using Mieruka.Automation.Login;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
-internal sealed partial class LoginAutoTab : UserControl
+internal sealed partial class LoginAutoTab : WinForms.UserControl
 {
     private readonly LoginOrchestrator _orchestrator = new();
     private readonly BindingList<string> _ssoHints = new();
@@ -73,7 +74,7 @@ internal sealed partial class LoginAutoTab : UserControl
     {
         if (_site is null)
         {
-            MessageBox.Show(this, "Selecione um site para detectar campos.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Selecione um site para detectar campos.", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -81,11 +82,11 @@ internal sealed partial class LoginAutoTab : UserControl
         {
             btnDetectarCampos.Enabled = false;
             await Task.Delay(250).ConfigureAwait(true);
-            MessageBox.Show(this, "Detecção automática não está disponível nesta versão.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Detecção automática não está disponível nesta versão.", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Falha ao detectar campos: {ex.Message}", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, $"Falha ao detectar campos: {ex.Message}", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
         }
         finally
         {
@@ -121,7 +122,7 @@ internal sealed partial class LoginAutoTab : UserControl
     {
         if (_site is null)
         {
-            MessageBox.Show(this, "Selecione um site antes de testar.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Selecione um site antes de testar.", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -129,12 +130,12 @@ internal sealed partial class LoginAutoTab : UserControl
         {
             var sucesso = _orchestrator.EnsureLoggedIn(_site);
             var mensagem = sucesso ? "Login bem-sucedido." : "Falha ao efetuar login.";
-            var icone = sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning;
-            MessageBox.Show(this, mensagem, "Login Automático", MessageBoxButtons.OK, icone);
+            var icone = sucesso ? WinForms.MessageBoxIcon.Information : WinForms.MessageBoxIcon.Warning;
+            WinForms.MessageBox.Show(this, mensagem, "Login Automático", WinForms.MessageBoxButtons.OK, icone);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Erro ao testar login: {ex.Message}", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, $"Erro ao testar login: {ex.Message}", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
         }
 
         TestLoginRequested?.Invoke(this, _site.Id);
@@ -144,7 +145,7 @@ internal sealed partial class LoginAutoTab : UserControl
     {
         if (_site is null)
         {
-            MessageBox.Show(this, "Selecione um site antes de aplicar a posição.", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Selecione um site antes de aplicar a posição.", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -155,7 +156,7 @@ internal sealed partial class LoginAutoTab : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Erro ao aplicar posição: {ex.Message}", "Login Automático", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, $"Erro ao aplicar posição: {ex.Message}", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
         }
     }
 }

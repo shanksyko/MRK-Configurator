@@ -1,4 +1,4 @@
-using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App;
 
@@ -12,8 +12,8 @@ internal static class ApplicationConfiguration
     /// </summary>
     public static void Initialize()
     {
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
+        WinForms.Application.SetHighDpiMode(WinForms.HighDpiMode.PerMonitorV2);
+        WinForms.Application.EnableVisualStyles();
+        WinForms.Application.SetCompatibleTextRenderingDefault(false);
     }
 }

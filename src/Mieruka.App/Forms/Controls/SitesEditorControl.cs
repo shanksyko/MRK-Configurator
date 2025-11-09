@@ -3,10 +3,11 @@ using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Sites;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls;
 
-public partial class SitesEditorControl : UserControl
+public partial class SitesEditorControl : WinForms.UserControl
 {
     private BindingList<SiteConfig> _sites = new();
     private SiteConfig? _selectedSite;

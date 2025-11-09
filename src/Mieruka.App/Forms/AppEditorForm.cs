@@ -40,16 +40,16 @@ public partial class AppEditorForm : WinForms.Form
     private static readonly TimeSpan HoverThrottleInterval = TimeSpan.FromMilliseconds(1000d / 30d);
     private static readonly MethodInfo? ClearAppsInventorySelectionMethod =
         typeof(AppsTab).GetMethod("ClearSelection", BindingFlags.Instance | BindingFlags.NonPublic);
-    private static readonly Color[] SimulationPalette =
+    private static readonly Drawing.Color[] SimulationPalette =
     {
-        Color.FromArgb(0x4A, 0x90, 0xE2),
-        Color.FromArgb(0x50, 0xC8, 0x8D),
-        Color.FromArgb(0xF5, 0xA6, 0x2B),
-        Color.FromArgb(0xD4, 0x6A, 0x6A),
-        Color.FromArgb(0x9B, 0x59, 0xB6),
-        Color.FromArgb(0x1A, 0xBC, 0x9C),
-        Color.FromArgb(0xE6, 0x7E, 0x22),
-        Color.FromArgb(0x2E, 0x86, 0xAB),
+        Drawing.Color.FromArgb(0x4A, 0x90, 0xE2),
+        Drawing.Color.FromArgb(0x50, 0xC8, 0x8D),
+        Drawing.Color.FromArgb(0xF5, 0xA6, 0x2B),
+        Drawing.Color.FromArgb(0xD4, 0x6A, 0x6A),
+        Drawing.Color.FromArgb(0x9B, 0x59, 0xB6),
+        Drawing.Color.FromArgb(0x1A, 0xBC, 0x9C),
+        Drawing.Color.FromArgb(0xE6, 0x7E, 0x22),
+        Drawing.Color.FromArgb(0x2E, 0x86, 0xAB),
     };
 
     private enum ExecSourceMode
@@ -61,7 +61,7 @@ public partial class AppEditorForm : WinForms.Form
 
     private readonly record struct WindowPreviewSnapshot(
         string? MonitorId,
-        Drawing.Rectangle WindowBounds,
+        Drawing.Rectangle Bounds,
         bool IsFullScreen,
         bool AutoStart,
         string AppId);
@@ -98,8 +98,8 @@ public partial class AppEditorForm : WinForms.Form
     private readonly int _uiThreadId;
     private readonly IInstalledAppsProvider _installedAppsProvider = new RegistryInstalledAppsProvider();
     private readonly List<InstalledAppInfo> _allApps = new();
-    private readonly Label _installedAppsStatusLabel = new();
-    private TextBox? _installedAppsSearchBox;
+    private readonly WinForms.Label _installedAppsStatusLabel = new();
+    private WinForms.TextBox? _installedAppsSearchBox;
     private bool _appsListLoaded;
     private readonly Guid _editSessionId;
     private readonly IDisposable _logScope;
@@ -112,7 +112,7 @@ public partial class AppEditorForm : WinForms.Form
     private bool _windowPreviewRebuildScheduled;
     private readonly WinForms.Timer _windowBoundsDebounce;
     private bool _windowBoundsDebouncePending;
-    private Rectangle _lastWindowRectLog = Rectangle.Empty;
+    private Drawing.Rectangle _lastWindowRectLog = Drawing.Rectangle.Empty;
     private DateTime _lastWindowRectLogUtc;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
@@ -131,7 +131,7 @@ public partial class AppEditorForm : WinForms.Form
         _uiContext = SynchronizationContext.Current;
         ToolTipTamer.Tame(this, components);
 
-        _windowBoundsDebounce = new WinForms.Timer(components)
+        _windowBoundsDebounce = new WinForms.Timer(components!)
         {
             Interval = 150
         };
@@ -309,20 +309,20 @@ public partial class AppEditorForm : WinForms.Form
         ApplyAppTypeUI();
     }
 
-    private void ConfigureInstalledAppsSection(ListView installedAppsList)
+    private void ConfigureInstalledAppsSection(WinForms.ListView installedAppsList)
     {
         var statusLabel = _installedAppsStatusLabel;
-        statusLabel.Dock = DockStyle.Bottom;
+        statusLabel.Dock = WinForms.DockStyle.Bottom;
         statusLabel.Height = 20;
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
         statusLabel.ForeColor = SystemColors.GrayText;
-        statusLabel.Padding = new Padding(0, 4, 0, 0);
+        statusLabel.Padding = new WinForms.Padding(0, 4, 0, 0);
         statusLabel.Visible = false;
         grpInstalledApps.Controls.Add(statusLabel);
 
-        _installedAppsSearchBox = new TextBox
+        _installedAppsSearchBox = new WinForms.TextBox
         {
-            Dock = DockStyle.Top,
+            Dock = WinForms.DockStyle.Top,
             PlaceholderText = "Buscar aplicativos instalados...",
         };
         _installedAppsSearchBox.TextChanged += InstalledAppsSearch_TextChanged;
@@ -415,7 +415,7 @@ public partial class AppEditorForm : WinForms.Form
         UpdateMonitorPreview();
     }
 
-    private static decimal AjustarRange(NumericUpDown control, int value)
+    private static decimal AjustarRange(WinForms.NumericUpDown control, int value)
     {
         var decimalValue = (decimal)value;
         if (decimalValue < control.Minimum)
@@ -929,9 +929,9 @@ public partial class AppEditorForm : WinForms.Form
         }
     }
 
-    private static ListViewItem CreateListViewItem(InstalledAppInfo app)
+    private static WinForms.ListViewItem CreateListViewItem(InstalledAppInfo app)
     {
-        var item = new ListViewItem(app.Name)
+        var item = new WinForms.ListViewItem(app.Name)
         {
             Tag = app,
         };
@@ -955,11 +955,11 @@ public partial class AppEditorForm : WinForms.Form
         var hasText = !string.IsNullOrWhiteSpace(text);
 
         _installedAppsStatusLabel.Text = text;
-        _installedAppsStatusLabel.ForeColor = isError ? Color.Maroon : SystemColors.GrayText;
+        _installedAppsStatusLabel.ForeColor = isError ? Drawing.Color.Maroon : SystemColors.GrayText;
         _installedAppsStatusLabel.Visible = hasText && (rbExe?.Checked ?? false);
     }
 
-    private static void EnsureInstalledAppsColumns(ListView listView)
+    private static void EnsureInstalledAppsColumns(WinForms.ListView listView)
     {
         if (listView.Columns.Count > 0)
         {
@@ -1020,10 +1020,10 @@ public partial class AppEditorForm : WinForms.Form
         var items = BuildSimRectList();
         if (items.Count == 0)
         {
-            var placeholder = new Label
+            var placeholder = new WinForms.Label
             {
                 AutoSize = true,
-                Margin = new Padding(12),
+                Margin = new WinForms.Padding(12),
                 Text = "Nenhum item disponível para simulação.",
             };
 
@@ -1088,24 +1088,24 @@ public partial class AppEditorForm : WinForms.Form
 
     private SimRectDisplay CreateSimRectDisplay(AppCycleSimulator.SimRect rect)
     {
-        var panel = new Panel
+        var panel = new WinForms.Panel
         {
             Width = 200,
             Height = 120,
-            Margin = new Padding(12),
-            Padding = new Padding(4),
+            Margin = new WinForms.Padding(12),
+            Padding = new WinForms.Padding(4),
             BorderStyle = BorderStyle.FixedSingle,
             BackColor = SystemColors.ControlLightLight,
         };
 
-        var label = new Label
+        var label = new WinForms.Label
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
             Text = rect.DisplayName,
             AutoEllipsis = true,
-            Padding = new Padding(4),
+            Padding = new WinForms.Padding(4),
         };
 
         panel.Controls.Add(label);
@@ -1370,8 +1370,8 @@ public partial class AppEditorForm : WinForms.Form
         if (isActive)
         {
             display.Panel.BorderStyle = BorderStyle.Fixed3D;
-            display.Panel.BackColor = Color.FromArgb(32, 146, 204);
-            display.Label.ForeColor = Color.White;
+            display.Panel.BackColor = Drawing.Color.FromArgb(32, 146, 204);
+            display.Label.ForeColor = Drawing.Color.White;
             display.Label.Font = display.BoldFont;
         }
         else
@@ -1984,7 +1984,7 @@ public partial class AppEditorForm : WinForms.Form
     private bool ClampWindowInputsToMonitor(
         Drawing.Point? pointer,
         bool allowFullScreen = false,
-        (NumericUpDown X, NumericUpDown Y, NumericUpDown Width, NumericUpDown Height)? windowInputs = null)
+        (WinForms.NumericUpDown X, WinForms.NumericUpDown Y, WinForms.NumericUpDown Width, WinForms.NumericUpDown Height)? windowInputs = null)
     {
         var fullScreenToggle = chkJanelaTelaCheia;
         if (!allowFullScreen && fullScreenToggle is not null && !fullScreenToggle.IsDisposed && fullScreenToggle.Checked)
@@ -1992,7 +1992,7 @@ public partial class AppEditorForm : WinForms.Form
             return false;
         }
 
-        (NumericUpDown X, NumericUpDown Y, NumericUpDown Width, NumericUpDown Height) inputs;
+        (WinForms.NumericUpDown X, WinForms.NumericUpDown Y, WinForms.NumericUpDown Width, WinForms.NumericUpDown Height) inputs;
         if (windowInputs is { } provided)
         {
             inputs = provided;
@@ -2092,15 +2092,15 @@ public partial class AppEditorForm : WinForms.Form
     }
 
     private bool TryGetWindowInputs(
-        out NumericUpDown xInput,
-        out NumericUpDown yInput,
-        out NumericUpDown widthInput,
-        out NumericUpDown heightInput)
+        out WinForms.NumericUpDown xInput,
+        out WinForms.NumericUpDown yInput,
+        out WinForms.NumericUpDown widthInput,
+        out WinForms.NumericUpDown heightInput)
     {
-        if (nudJanelaX is NumericUpDown x && !x.IsDisposed &&
-            nudJanelaY is NumericUpDown y && !y.IsDisposed &&
-            nudJanelaLargura is NumericUpDown width && !width.IsDisposed &&
-            nudJanelaAltura is NumericUpDown height && !height.IsDisposed)
+        if (nudJanelaX is WinForms.NumericUpDown x && !x.IsDisposed &&
+            nudJanelaY is WinForms.NumericUpDown y && !y.IsDisposed &&
+            nudJanelaLargura is WinForms.NumericUpDown width && !width.IsDisposed &&
+            nudJanelaAltura is WinForms.NumericUpDown height && !height.IsDisposed)
         {
             xInput = x;
             yInput = y;
@@ -2116,7 +2116,7 @@ public partial class AppEditorForm : WinForms.Form
         return false;
     }
 
-    private static bool UpdateNumericControl(NumericUpDown control, int value)
+    private static bool UpdateNumericControl(WinForms.NumericUpDown control, int value)
     {
         var adjusted = AjustarRange(control, value);
         if (control.Value != adjusted)
@@ -2131,9 +2131,9 @@ public partial class AppEditorForm : WinForms.Form
     private sealed class RedrawScope : IDisposable
     {
         private const int WmSetRedraw = 0x000B;
-        private readonly Control[] _controls;
+        private readonly WinForms.Control[] _controls;
 
-        private RedrawScope(Control[] controls)
+        private RedrawScope(WinForms.Control[] controls)
         {
             _controls = controls;
 
@@ -2146,7 +2146,7 @@ public partial class AppEditorForm : WinForms.Form
             }
         }
 
-        public static RedrawScope Begin(params Control[] controls)
+        public static RedrawScope Begin(params WinForms.Control[] controls)
         {
             return new RedrawScope(controls);
         }
@@ -2262,13 +2262,13 @@ public partial class AppEditorForm : WinForms.Form
         var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
         var appId = txtId?.Text?.Trim() ?? string.Empty;
 
-        var bounds = Rectangle.Empty;
+        var bounds = Drawing.Rectangle.Empty;
         if (nudJanelaX is not null &&
             nudJanelaY is not null &&
             nudJanelaLargura is not null &&
             nudJanelaAltura is not null)
         {
-            bounds = new Rectangle(
+            bounds = new Drawing.Rectangle(
                 (int)nudJanelaX.Value,
                 (int)nudJanelaY.Value,
                 (int)nudJanelaLargura.Value,
@@ -2288,7 +2288,7 @@ public partial class AppEditorForm : WinForms.Form
         RebuildSimulationOverlays();
         Logger.Information(
             "ApplySelectionOverlay: bounds={Bounds} monitor={MonitorId} fullScreen={FullScreen} autoStart={AutoStart}",
-            snapshot.WindowBounds,
+            snapshot.Bounds,
             snapshot.MonitorId ?? string.Empty,
             snapshot.IsFullScreen,
             snapshot.AutoStart);
@@ -2457,7 +2457,7 @@ public partial class AppEditorForm : WinForms.Form
         return null;
     }
 
-    private static Rectangle CalculateMonitorRelativeBounds(WindowConfig window, MonitorInfo monitor)
+    private static Drawing.Rectangle CalculateMonitorRelativeBounds(WindowConfig window, MonitorInfo monitor)
     {
         var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
         var monitorWidth = monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width;
@@ -2468,7 +2468,7 @@ public partial class AppEditorForm : WinForms.Form
 
         if (window.FullScreen)
         {
-            return new Rectangle(0, 0, monitorWidth, monitorHeight);
+            return new Drawing.Rectangle(0, 0, monitorWidth, monitorHeight);
         }
 
         var width = window.Width ?? monitorWidth;
@@ -2481,15 +2481,15 @@ public partial class AppEditorForm : WinForms.Form
         x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
         y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
 
-        var relative = new Rectangle(x, y, width, height);
+        var relative = new Drawing.Rectangle(x, y, width, height);
 
         var bounds = monitor.Bounds;
         var workArea = monitor.WorkArea;
         if (bounds.Width > 0 && bounds.Height > 0 && workArea.Width > 0 && workArea.Height > 0)
         {
-            var absolute = new Rectangle(bounds.Left + relative.X, bounds.Top + relative.Y, relative.Width, relative.Height);
+            var absolute = new Drawing.Rectangle(bounds.Left + relative.X, bounds.Top + relative.Y, relative.Width, relative.Height);
             var clamped = DisplayUtils.ClampToWorkArea(absolute, workArea);
-            relative = new Rectangle(
+            relative = new Drawing.Rectangle(
                 clamped.Left - bounds.Left,
                 clamped.Top - bounds.Top,
                 clamped.Width,
@@ -2499,11 +2499,11 @@ public partial class AppEditorForm : WinForms.Form
         return relative;
     }
 
-    private static Color ResolveSimulationColor(string? id)
+    private static Drawing.Color ResolveSimulationColor(string? id)
     {
         if (SimulationPalette.Length == 0)
         {
-            return Color.DodgerBlue;
+            return Drawing.Color.DodgerBlue;
         }
 
         if (string.IsNullOrWhiteSpace(id))
@@ -2619,7 +2619,7 @@ public partial class AppEditorForm : WinForms.Form
         ApplyBoundsToInputs(relative);
     }
 
-    private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
+    private static Drawing.Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
     {
         var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
         var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
@@ -2633,10 +2633,10 @@ public partial class AppEditorForm : WinForms.Form
         x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
         y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
 
-        return new Rectangle(x, y, width, height);
+        return new Drawing.Rectangle(x, y, width, height);
     }
 
-    private void ApplyBoundsToInputs(Rectangle bounds)
+    private void ApplyBoundsToInputs(Drawing.Rectangle bounds)
     {
         if (chkJanelaTelaCheia.Checked)
         {
@@ -2701,35 +2701,35 @@ public partial class AppEditorForm : WinForms.Form
     {
         if (!OperatingSystem.IsWindows())
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "O teste de posicionamento está disponível apenas no Windows.",
                 "Teste de janela",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return;
         }
 
         if (rbExe?.Checked == true && string.IsNullOrWhiteSpace(txtExecutavel?.Text))
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Informe o caminho do executável antes de iniciar o teste.",
                 "Teste de janela",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Warning);
             return;
         }
 
         var monitor = GetSelectedMonitor();
         if (monitor is null)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Selecione um monitor para testar a posição.",
                 "Teste de janela",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -2754,12 +2754,12 @@ public partial class AppEditorForm : WinForms.Form
         catch (Exception ex)
         {
             Logger.Error("Falha ao testar a posição em modo simulado.", ex);
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível testar a posição: {ex.Message}",
                 "Teste de janela",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -2776,12 +2776,12 @@ public partial class AppEditorForm : WinForms.Form
     {
         if (!OperatingSystem.IsWindows())
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "O teste de posicionamento está disponível apenas no Windows.",
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -2814,12 +2814,12 @@ public partial class AppEditorForm : WinForms.Form
         catch (Exception ex)
         {
             Logger.Error("Falha ao executar o aplicativo real durante o teste.", ex);
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível executar o aplicativo real: {ex.Message}",
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -2838,7 +2838,7 @@ public partial class AppEditorForm : WinForms.Form
         string messageTitle,
         out ProgramaConfig app,
         out MonitorInfo monitor,
-        out Rectangle bounds,
+        out Drawing.Rectangle bounds,
         string? executableOverride = null,
         string? argumentsOverride = null,
         bool requireExecutable = true)
@@ -2850,12 +2850,12 @@ public partial class AppEditorForm : WinForms.Form
         var selectedMonitor = GetSelectedMonitor();
         if (selectedMonitor is null)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Selecione um monitor para testar a posição.",
                 messageTitle,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return false;
         }
 
@@ -2878,23 +2878,23 @@ public partial class AppEditorForm : WinForms.Form
         var executablePath = config.ExecutablePath;
         if (requireExecutable && string.IsNullOrWhiteSpace(executablePath))
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Informe um executável válido antes de executar o teste.",
                 messageTitle,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return false;
         }
 
         if (requireExecutable && !string.IsNullOrWhiteSpace(executablePath) && !File.Exists(executablePath))
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Executável não encontrado. Ajuste o caminho antes de executar o teste.",
                 messageTitle,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return false;
         }
 
@@ -3521,7 +3521,7 @@ public partial class AppEditorForm : WinForms.Form
         Close();
     }
 
-    protected override void OnFormClosing(FormClosingEventArgs e)
+    protected override void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
         StopCycleSimulation();
         base.OnFormClosing(e);
@@ -3627,12 +3627,12 @@ public partial class AppEditorForm : WinForms.Form
     {
         if (string.IsNullOrWhiteSpace(e.ExecutablePath) || !File.Exists(e.ExecutablePath))
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Selecione um executável válido para abrir.",
                 "Abrir aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Warning);
             return;
         }
 
@@ -3642,12 +3642,12 @@ public partial class AppEditorForm : WinForms.Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível abrir o aplicativo selecionado: {ex.Message}",
                 "Abrir aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -3655,12 +3655,12 @@ public partial class AppEditorForm : WinForms.Form
     {
         if (!OperatingSystem.IsWindows())
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "O teste de posicionamento está disponível apenas no Windows.",
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -3703,12 +3703,12 @@ public partial class AppEditorForm : WinForms.Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível testar a posição: {ex.Message}",
                 "Teste de aplicativo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -3773,25 +3773,25 @@ public partial class AppEditorForm : WinForms.Form
 
     private sealed class SimRectDisplay : IDisposable
     {
-        public SimRectDisplay(AppCycleSimulator.SimRect rect, Panel panel, Label label)
+        public SimRectDisplay(AppCycleSimulator.SimRect rect, WinForms.Panel panel, WinForms.Label label)
         {
             Rect = rect;
             Panel = panel;
             Label = label;
             NormalFont = label.Font;
-            BoldFont = new Font(label.Font, FontStyle.Bold);
+            BoldFont = new Drawing.Font(label.Font, FontStyle.Bold);
             LastResult = SimRectStatus.None;
         }
 
         public AppCycleSimulator.SimRect Rect { get; }
 
-        public Panel Panel { get; }
+        public WinForms.Panel Panel { get; }
 
-        public Label Label { get; }
+        public WinForms.Label Label { get; }
 
-        public Font NormalFont { get; }
+        public Drawing.Font NormalFont { get; }
 
-        public Font BoldFont { get; }
+        public Drawing.Font BoldFont { get; }
 
         public DateTime? LastActivation { get; set; }
 

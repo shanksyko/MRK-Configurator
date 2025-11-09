@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
 using static Serilog.Log;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Services;
 
@@ -20,7 +21,7 @@ public interface IAppRunner
     Task RunAndPositionAsync(
         AppConfig app,
         MonitorInfo monitor,
-        Rectangle bounds,
+        Drawing.Rectangle bounds,
         CancellationToken cancellationToken = default);
 }
 
@@ -47,7 +48,7 @@ public sealed class AppRunner : IAppRunner
     public async Task RunAndPositionAsync(
         AppConfig app,
         MonitorInfo monitor,
-        Rectangle bounds,
+        Drawing.Rectangle bounds,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(app);
@@ -108,7 +109,7 @@ public sealed class AppRunner : IAppRunner
         string executablePath,
         string? arguments,
         MonitorInfo monitor,
-        Rectangle bounds,
+        Drawing.Rectangle bounds,
         bool alwaysOnTop,
         CancellationToken cancellationToken)
     {
@@ -145,7 +146,7 @@ public sealed class AppRunner : IAppRunner
     private async Task PositionExistingProcessAsync(
         Process process,
         MonitorInfo monitor,
-        Rectangle bounds,
+        Drawing.Rectangle bounds,
         bool alwaysOnTop,
         CancellationToken cancellationToken)
     {
@@ -166,7 +167,7 @@ public sealed class AppRunner : IAppRunner
         ApplyWindowPosition(handle, monitor, bounds, alwaysOnTop);
     }
 
-    private void ApplyWindowPosition(IntPtr handle, MonitorInfo monitor, Rectangle bounds, bool alwaysOnTop)
+    private void ApplyWindowPosition(IntPtr handle, MonitorInfo monitor, Drawing.Rectangle bounds, bool alwaysOnTop)
     {
         if (handle == IntPtr.Zero)
         {

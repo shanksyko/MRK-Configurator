@@ -2,6 +2,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services.Ui;
 
@@ -14,7 +15,7 @@ internal static class TabLayoutGuard
     private sealed class TabState
     {
         public bool LayoutSuspended;
-        public Control? Container;
+        public WinForms.Control? Container;
     }
 
     private sealed class ControlRegistration
@@ -22,14 +23,14 @@ internal static class TabLayoutGuard
     }
 
     private static readonly ConditionalWeakTable<TabControl, TabState> TabStates = new();
-    private static readonly ConditionalWeakTable<Control, ControlRegistration> ControlRegistrations = new();
+    private static readonly ConditionalWeakTable<WinForms.Control, ControlRegistration> ControlRegistrations = new();
 
     /// <summary>
     /// Observes the specified control tree and attaches layout guards to any
     /// <see cref="TabControl"/> instances that are found.
     /// </summary>
     /// <param name="root">Root control that contains tab controls.</param>
-    public static void Attach(Control root)
+    public static void Attach(WinForms.Control root)
     {
         if (root is null)
         {
@@ -39,7 +40,7 @@ internal static class TabLayoutGuard
         AttachRecursive(root);
     }
 
-    private static void AttachRecursive(Control control)
+    private static void AttachRecursive(WinForms.Control control)
     {
         if (control is TabControl tabControl)
         {
@@ -53,7 +54,7 @@ internal static class TabLayoutGuard
             control.Disposed += ControlOnDisposed;
         }
 
-        foreach (Control child in control.Controls)
+        foreach (WinForms.Control child in control.Controls)
         {
             AttachRecursive(child);
         }
@@ -71,7 +72,7 @@ internal static class TabLayoutGuard
 
     private static void ControlOnDisposed(object? sender, EventArgs e)
     {
-        if (sender is Control control)
+        if (sender is WinForms.Control control)
         {
             control.ControlAdded -= ControlOnControlAdded;
             control.Disposed -= ControlOnDisposed;

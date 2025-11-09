@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services.Ui;
 

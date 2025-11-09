@@ -3,10 +3,11 @@ using System;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Security;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls;
 
-public sealed partial class CredentialVaultPanel : UserControl
+public sealed partial class CredentialVaultPanel : WinForms.UserControl
 {
     private readonly SecretsProvider? _secretsProvider;
     private readonly UiSecretsBridge? _secretsBridge;
@@ -98,14 +99,14 @@ public sealed partial class CredentialVaultPanel : UserControl
             return;
         }
 
-        var confirmation = MessageBox.Show(
+        var confirmation = WinForms.MessageBox.Show(
             this,
             "Deseja realmente remover as credenciais?",
             "Credential Vault",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
+            WinForms.MessageBoxButtons.YesNo,
+            WinForms.MessageBoxIcon.Question);
 
-        if (confirmation != DialogResult.Yes)
+        if (confirmation != WinForms.DialogResult.Yes)
         {
             return;
         }
@@ -176,12 +177,12 @@ public sealed partial class CredentialVaultPanel : UserControl
 
         if (_secretsBridge is null)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 "Serviços de credencial indisponíveis nesta instalação.",
                 "Credential Vault",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Information);
             return false;
         }
 

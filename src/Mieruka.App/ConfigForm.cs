@@ -21,6 +21,8 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using OpenQA.Selenium;
 using Serilog;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App;
 
@@ -28,52 +30,52 @@ namespace Mieruka.App;
 /// Main window used to assign applications and sites to monitors while exposing
 /// validation feedback about the configuration.
 /// </summary>
-internal sealed class ConfigForm : Form
+internal sealed class ConfigForm : WinForms.Form
 {
     private readonly ConfiguratorWorkspace _workspace;
     private readonly JsonStore<GeneralConfig> _store;
     private readonly ConfigMigrator _migrator;
     private readonly IDisplayService? _displayService;
     private readonly ConfigValidator _validator;
-    private readonly ImageList _imageList;
-    private readonly ImageList _issueImageList;
-    private readonly ListView _applicationsList;
-    private readonly ListView _sitesList;
+    private readonly WinForms.ImageList _imageList;
+    private readonly WinForms.ImageList _issueImageList;
+    private readonly WinForms.ListView _applicationsList;
+    private readonly WinForms.ListView _sitesList;
     private readonly BindingSource _appsBinding;
     private readonly BindingSource _sitesBinding;
-    private Button? _appAddButton;
-    private Button? _appEditButton;
-    private Button? _appRemoveButton;
-    private Button? _appDuplicateButton;
-    private Button? _appTestButton;
-    private Button? _siteAddButton;
-    private Button? _siteEditButton;
-    private Button? _siteRemoveButton;
-    private Button? _siteDuplicateButton;
-    private Button? _siteTestButton;
-    private readonly FlowLayoutPanel _applicationButtonPanel;
-    private readonly FlowLayoutPanel _siteButtonPanel;
-    private readonly ListView _issuesList;
+    private WinForms.Button? _appAddButton;
+    private WinForms.Button? _appEditButton;
+    private WinForms.Button? _appRemoveButton;
+    private WinForms.Button? _appDuplicateButton;
+    private WinForms.Button? _appTestButton;
+    private WinForms.Button? _siteAddButton;
+    private WinForms.Button? _siteEditButton;
+    private WinForms.Button? _siteRemoveButton;
+    private WinForms.Button? _siteDuplicateButton;
+    private WinForms.Button? _siteTestButton;
+    private readonly WinForms.FlowLayoutPanel _applicationButtonPanel;
+    private readonly WinForms.FlowLayoutPanel _siteButtonPanel;
+    private readonly WinForms.ListView _issuesList;
     private const double ContentSplitterRatio = 0.35;
     private const double LayoutSplitterRatio = 0.35;
-    private static readonly Size DefaultMinimumSizeLogical = new(960, 600);
+    private static readonly Drawing.Size DefaultMinimumSizeLogical = new(960, 600);
     private const int ContentPanel1MinLogical = 120;
     private const int ContentPanel2MinLogical = 160;
     private const int LayoutPanel1MinLogical = 140;
     private const int LayoutPanel2MinLogical = 200;
 
-    private readonly FlowLayoutPanel _monitorPanel;
-    private readonly SplitContainer _layoutContainer;
-    private readonly SplitContainer _contentContainer;
-    private readonly StatusStrip _statusStrip;
-    private readonly ToolStripStatusLabel _statusLabel;
+    private readonly WinForms.FlowLayoutPanel _monitorPanel;
+    private readonly WinForms.SplitContainer _layoutContainer;
+    private readonly WinForms.SplitContainer _contentContainer;
+    private readonly WinForms.StatusStrip _statusStrip;
+    private readonly WinForms.ToolStripStatusLabel _statusLabel;
     private readonly List<MonitorPreviewControl> _monitorPreviews = new();
     private ConfigValidationReport _validationReport = ConfigValidationReport.Empty;
 
     private readonly ITelemetry _telemetry;
     private readonly MonitorSeeder _monitorSeeder;
-    private readonly ToolTip _toolTip;
-    private readonly FlowLayoutPanel _footerPanel;
+    private readonly WinForms.ToolTip _toolTip;
+    private readonly WinForms.FlowLayoutPanel _footerPanel;
     private MonitorPreviewControl? _activePreview;
     private string? _selectedMonitorStableId;
     private readonly List<MonitorSelectionBinding> _monitorSelectionBindings = new();
@@ -100,37 +102,37 @@ internal sealed class ConfigForm : Form
 
         _toolTip = ToolTipTamer.Create();
 
-        _footerPanel = new FlowLayoutPanel
+        _footerPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Bottom,
+            Dock = WinForms.DockStyle.Bottom,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(8),
+            Padding = new WinForms.Padding(8),
         };
 
-        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = WinForms.AutoScaleMode.Dpi;
 
         Text = "MRK Configurator";
-        StartPosition = FormStartPosition.CenterScreen;
+        StartPosition = WinForms.FormStartPosition.CenterScreen;
         var minimumWidth = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Width);
         var minimumHeight = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Height);
-        MinimumSize = new Size(minimumWidth, minimumHeight);
+        MinimumSize = new Drawing.Size(minimumWidth, minimumHeight);
 
         var menuStrip = BuildMenu();
 
-        _imageList = new ImageList
+        _imageList = new WinForms.ImageList
         {
-            ImageSize = new Size(32, 32),
+            ImageSize = new Drawing.Size(32, 32),
             ColorDepth = ColorDepth.Depth32Bit,
         };
         _imageList.Images.Add("app", SystemIcons.Application);
         _imageList.Images.Add("site", SystemIcons.Information);
 
-        _issueImageList = new ImageList
+        _issueImageList = new WinForms.ImageList
         {
-            ImageSize = new Size(16, 16),
+            ImageSize = new Drawing.Size(16, 16),
             ColorDepth = ColorDepth.Depth32Bit,
         };
         _issueImageList.Images.Add("error", SystemIcons.Error);
@@ -153,75 +155,75 @@ internal sealed class ConfigForm : Form
         _appsBinding.ListChanged += (_, _) => RefreshApplicationsList();
         _sitesBinding.ListChanged += (_, _) => RefreshSitesList();
 
-        _applicationButtonPanel = new FlowLayoutPanel
+        _applicationButtonPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = false,
-            Padding = new Padding(0, 6, 0, 0),
+            Padding = new WinForms.Padding(0, 6, 0, 0),
         };
 
-        _siteButtonPanel = new FlowLayoutPanel
+        _siteButtonPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = false,
-            Padding = new Padding(0, 6, 0, 0),
+            Padding = new WinForms.Padding(0, 6, 0, 0),
         };
 
         var appsTab = new TabPage("Aplicativos")
         {
-            Padding = new Padding(4),
+            Padding = new WinForms.Padding(4),
         };
         appsTab.Controls.Add(BuildApplicationTab());
 
         var sitesTab = new TabPage("Sites")
         {
-            Padding = new Padding(4),
+            Padding = new WinForms.Padding(4),
         };
         sitesTab.Controls.Add(BuildSiteTab());
 
         var tabControl = new TabControl
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
         };
         tabControl.TabPages.Add(appsTab);
         tabControl.TabPages.Add(sitesTab);
 
-        var monitorContainer = new Panel
+        var monitorContainer = new WinForms.Panel
         {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(8),
+            Dock = WinForms.DockStyle.Fill,
+            Padding = new WinForms.Padding(8),
         };
 
-        _monitorPanel = new FlowLayoutPanel
+        _monitorPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             AutoScroll = true,
             WrapContents = true,
             FlowDirection = FlowDirection.LeftToRight,
-            Padding = new Padding(4),
+            Padding = new WinForms.Padding(4),
         };
 
         monitorContainer.Controls.Add(_monitorPanel);
 
-        _contentContainer = new SplitContainer
+        _contentContainer = new WinForms.SplitContainer
         {
             Name = "ContentSplitContainer",
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
         };
 
         _contentContainer.Panel1.Controls.Add(tabControl);
         _contentContainer.Panel2.Controls.Add(monitorContainer);
 
-        _issuesList = new ListView
+        _issuesList = new WinForms.ListView
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             MultiSelect = false,
             HideSelection = false,
             View = View.Details,
@@ -232,27 +234,27 @@ internal sealed class ConfigForm : Form
         _issuesList.Columns.Add("Tipo", 100, HorizontalAlignment.Left);
         _issuesList.Columns.Add("Mensagem", 400, HorizontalAlignment.Left);
 
-        var issuesLabel = new Label
+        var issuesLabel = new WinForms.Label
         {
-            Dock = DockStyle.Top,
+            Dock = WinForms.DockStyle.Top,
             Text = "Problemas detectados",
             Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
-            Padding = new Padding(0, 0, 0, 6),
+            Padding = new WinForms.Padding(0, 0, 0, 6),
         };
 
-        var issuesPanel = new Panel
+        var issuesPanel = new WinForms.Panel
         {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(8),
+            Dock = WinForms.DockStyle.Fill,
+            Padding = new WinForms.Padding(8),
         };
 
         issuesPanel.Controls.Add(_issuesList);
         issuesPanel.Controls.Add(issuesLabel);
 
-        _layoutContainer = new SplitContainer
+        _layoutContainer = new WinForms.SplitContainer
         {
             Name = "LayoutSplitContainer",
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Orientation = Orientation.Horizontal,
         };
 
@@ -260,8 +262,8 @@ internal sealed class ConfigForm : Form
         _layoutContainer.Panel2.Controls.Add(_contentContainer);
         _layoutContainer.Panel1Collapsed = true;
 
-        _statusLabel = new ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
-        _statusStrip = new StatusStrip();
+        _statusLabel = new WinForms.ToolStripStatusLabel("Arraste um item para um monitor e selecione a área desejada.");
+        _statusStrip = new WinForms.StatusStrip();
         _statusStrip.Items.Add(_statusLabel);
 
         var detectMonitorsButton = CreateFooterButton(
@@ -293,7 +295,7 @@ internal sealed class ConfigForm : Form
             "Fecha a janela do configurador.",
             OnCloseRequested);
 
-        _footerPanel.Controls.AddRange(new Control[]
+        _footerPanel.Controls.AddRange(new WinForms.Control[]
         {
             detectMonitorsButton,
             saveButton,
@@ -331,19 +333,19 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private MenuStrip BuildMenu()
+    private WinForms.MenuStrip BuildMenu()
     {
-        var menuStrip = new MenuStrip
+        var menuStrip = new WinForms.MenuStrip
         {
             Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
         };
 
-        var fileMenu = new ToolStripMenuItem("Arquivo");
+        var fileMenu = new WinForms.ToolStripMenuItem("Arquivo");
 
-        var importItem = new ToolStripMenuItem("Importar...");
+        var importItem = new WinForms.ToolStripMenuItem("Importar...");
         importItem.Click += OnImportConfiguration;
 
-        var exportItem = new ToolStripMenuItem("Exportar...");
+        var exportItem = new WinForms.ToolStripMenuItem("Exportar...");
         exportItem.Click += OnExportConfiguration;
 
         fileMenu.DropDownItems.Add(importItem);
@@ -394,7 +396,7 @@ internal sealed class ConfigForm : Form
     }
 
     /// <inheritdoc />
-    protected override void OnFormClosing(FormClosingEventArgs e)
+    protected override void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
 
@@ -407,19 +409,19 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao salvar a configuração.");
-            MessageBox.Show(this, $"Não foi possível salvar as alterações: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível salvar as alterações: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
     private void OnImportConfiguration(object? sender, EventArgs e)
     {
-        using var dialog = new OpenFileDialog
+        using var dialog = new WinForms.OpenFileDialog
         {
             Filter = "Configurações JSON (*.json)|*.json|Todos os arquivos (*.*)|*.*",
             Title = "Importar configuração",
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
         {
             return;
         }
@@ -447,20 +449,20 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao importar configuração.");
-            MessageBox.Show(this, $"Não foi possível importar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível importar a configuração: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
     private void OnExportConfiguration(object? sender, EventArgs e)
     {
-        using var dialog = new SaveFileDialog
+        using var dialog = new WinForms.SaveFileDialog
         {
             Filter = "Configurações JSON (*.json)|*.json|Todos os arquivos (*.*)|*.*",
             Title = "Exportar configuração",
             FileName = "appsettings.json",
         };
 
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
         {
             return;
         }
@@ -474,7 +476,7 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao exportar configuração.");
-            MessageBox.Show(this, $"Não foi possível exportar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível exportar a configuração: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -490,7 +492,7 @@ internal sealed class ConfigForm : Form
             if (probes.Count == 0)
             {
                 Log.Warning("Nenhum monitor foi encontrado durante a detecção manual.");
-                MessageBox.Show(this, "Nenhum monitor foi detectado. Verifique as conexões e tente novamente.", "Detecção de Monitores", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                WinForms.MessageBox.Show(this, "Nenhum monitor foi detectado. Verifique as conexões e tente novamente.", "Detecção de Monitores", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
                 return;
             }
 
@@ -507,7 +509,7 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao executar a detecção de monitores.");
-            MessageBox.Show(this, $"Não foi possível detectar monitores: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível detectar monitores: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -520,7 +522,7 @@ internal sealed class ConfigForm : Form
             var config = _workspace.BuildConfiguration();
             if (!TryValidateBeforeSave(config, out var validationMessage))
             {
-                MessageBox.Show(this, validationMessage, "Salvar Configuração", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                WinForms.MessageBox.Show(this, validationMessage, "Salvar Configuração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
                 return;
             }
 
@@ -532,7 +534,7 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Erro ao salvar a configuração manualmente.");
-            MessageBox.Show(this, $"Não foi possível salvar a configuração: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível salvar a configuração: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -595,13 +597,13 @@ internal sealed class ConfigForm : Form
         if (issueCount == 0)
         {
             UpdateStatus("Nenhum problema encontrado.");
-            MessageBox.Show(this, "Nenhum problema foi encontrado na configuração.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Nenhum problema foi encontrado na configuração.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             Log.Information("Validação manual concluída sem problemas.");
         }
         else
         {
             UpdateStatus($"{issueCount} problema(s) encontrado(s).");
-            MessageBox.Show(this, $"Foram encontrados {issueCount} problema(s). Consulte a lista para mais detalhes.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, $"Foram encontrados {issueCount} problema(s). Consulte a lista para mais detalhes.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             Log.Information("Validação manual encontrou {IssueCount} problema(s).", issueCount);
         }
     }
@@ -612,19 +614,19 @@ internal sealed class ConfigForm : Form
 
         if (_selectedEntry is null)
         {
-            MessageBox.Show(this, "Selecione um aplicativo ou site antes de aplicar um preset.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Selecione um aplicativo ou site antes de aplicar um preset.", "Aplicar Preset", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
         var config = _workspace.BuildConfiguration();
         if (config.ZonePresets.Count == 0)
         {
-            MessageBox.Show(this, "Nenhum preset de zonas está disponível. Utilize 'Restaurar Padrão' para recriá-los.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Nenhum preset de zonas está disponível. Utilize 'Restaurar Padrão' para recriá-los.", "Aplicar Preset", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
         using var dialog = new PresetSelectionDialog(config.ZonePresets);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
         {
             Log.Information("Aplicação de preset cancelada pelo usuário.");
             return;
@@ -644,7 +646,7 @@ internal sealed class ConfigForm : Form
 
         if (_workspace.Monitors.Count == 0)
         {
-            MessageBox.Show(this, "Nenhum monitor está configurado para exibição de preview.", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Nenhum monitor está configurado para exibição de preview.", "Preview", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -658,7 +660,7 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao abrir a janela de preview.");
-            MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -679,7 +681,7 @@ internal sealed class ConfigForm : Form
         catch (Exception ex)
         {
             Log.Error(ex, "Falha ao restaurar os presets padrão.");
-            MessageBox.Show(this, $"Não foi possível restaurar os presets padrão: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível restaurar os presets padrão: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -716,7 +718,7 @@ internal sealed class ConfigForm : Form
         {
             var severityText = issue.Severity == ConfigValidationSeverity.Error ? "Erro" : "Aviso";
             var description = string.IsNullOrWhiteSpace(issue.Source) ? issue.Message : $"{issue.Source}: {issue.Message}";
-            var item = new ListViewItem(severityText)
+            var item = new WinForms.ListViewItem(severityText)
             {
                 ImageKey = issue.Severity == ConfigValidationSeverity.Error ? "error" : "warning",
                 Tag = issue,
@@ -832,11 +834,11 @@ internal sealed class ConfigForm : Form
         UpdateSiteButtons();
     }
 
-    private ListViewItem CreateApplicationItem(AppConfig app)
+    private WinForms.ListViewItem CreateApplicationItem(AppConfig app)
     {
         var entry = EntryReference.Create(EntryKind.Application, app.Id);
         var displayName = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
-        var item = new ListViewItem(displayName)
+        var item = new WinForms.ListViewItem(displayName)
         {
             Tag = entry,
             ImageKey = "app",
@@ -849,11 +851,11 @@ internal sealed class ConfigForm : Form
         return item;
     }
 
-    private ListViewItem CreateSiteItem(SiteConfig site)
+    private WinForms.ListViewItem CreateSiteItem(SiteConfig site)
     {
         var entry = EntryReference.Create(EntryKind.Site, site.Id);
         var displayName = string.IsNullOrWhiteSpace(site.Window.Title) ? site.Id : site.Window.Title;
-        var item = new ListViewItem(displayName)
+        var item = new WinForms.ListViewItem(displayName)
         {
             Tag = entry,
             ImageKey = "site",
@@ -891,7 +893,7 @@ internal sealed class ConfigForm : Form
         return item;
     }
 
-    private static void AutoSizeColumns(ListView listView)
+    private static void AutoSizeColumns(WinForms.ListView listView)
     {
         if (listView.Columns.Count == 0)
         {
@@ -930,7 +932,7 @@ internal sealed class ConfigForm : Form
             {
                 Width = 320,
                 Height = 260,
-                Margin = new Padding(8),
+                Margin = new WinForms.Padding(8),
             };
 
             preview.Monitor = monitor;
@@ -947,11 +949,11 @@ internal sealed class ConfigForm : Form
         UpdateMonitorPreviews();
     }
 
-    private static ListView CreateListView()
+    private static WinForms.ListView CreateListView()
     {
-        return new ListView
+        return new WinForms.ListView
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             MultiSelect = false,
             HideSelection = false,
             ShowItemToolTips = true,
@@ -961,40 +963,40 @@ internal sealed class ConfigForm : Form
         };
     }
 
-    private Control BuildApplicationTab()
+    private WinForms.Control BuildApplicationTab()
     {
-        var container = new TableLayoutPanel
+        var container = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        container.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        container.RowStyles.Add(new WinForms.RowStyle(SizeType.Percent, 100f));
+        container.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
 
-        _applicationsList.Dock = DockStyle.Fill;
+        _applicationsList.Dock = WinForms.DockStyle.Fill;
         container.Controls.Add(_applicationsList, 0, 0);
 
         container.Controls.Add(_applicationButtonPanel, 0, 1);
         return container;
     }
 
-    private Control BuildSiteTab()
+    private WinForms.Control BuildSiteTab()
     {
-        var container = new TableLayoutPanel
+        var container = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        container.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        container.RowStyles.Add(new WinForms.RowStyle(SizeType.Percent, 100f));
+        container.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
 
-        _sitesList.Dock = DockStyle.Fill;
+        _sitesList.Dock = WinForms.DockStyle.Fill;
         container.Controls.Add(_sitesList, 0, 0);
 
         container.Controls.Add(_siteButtonPanel, 0, 1);
@@ -1036,21 +1038,21 @@ internal sealed class ConfigForm : Form
         _siteButtonPanel.ResumeLayout();
     }
 
-    private Button CreateActionButton(string text, EventHandler onClick, bool enabled = true)
+    private WinForms.Button CreateActionButton(string text, EventHandler onClick, bool enabled = true)
     {
-        var button = new Button
+        var button = new WinForms.Button
         {
             Text = text,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Enabled = enabled,
-            Margin = new Padding(0, 0, 6, 0),
+            Margin = new WinForms.Padding(0, 0, 6, 0),
         };
         button.Click += onClick;
         return button;
     }
 
-    private static void ConfigureApplicationListView(ListView listView)
+    private static void ConfigureApplicationListView(WinForms.ListView listView)
     {
         listView.Columns.Clear();
         listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
@@ -1059,7 +1061,7 @@ internal sealed class ConfigForm : Form
         listView.Columns.Add("Destino", 220, HorizontalAlignment.Left);
     }
 
-    private static void ConfigureSiteListView(ListView listView)
+    private static void ConfigureSiteListView(WinForms.ListView listView)
     {
         listView.Columns.Clear();
         listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
@@ -1137,7 +1139,7 @@ internal sealed class ConfigForm : Form
 
     private void OnListItemDrag(object? sender, ItemDragEventArgs e)
     {
-        if (e.Item is not ListViewItem item || item.Tag is not EntryReference entry)
+        if (e.Item is not WinForms.ListViewItem item || item.Tag is not EntryReference entry)
         {
             return;
         }
@@ -1149,7 +1151,7 @@ internal sealed class ConfigForm : Form
     {
         if (!_workspace.TryAssignEntryToMonitor(e.Entry, e.Monitor))
         {
-            MessageBox.Show(this, "Não foi possível aplicar a configuração ao monitor selecionado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Não foi possível aplicar a configuração ao monitor selecionado.", "Aviso", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
@@ -1175,7 +1177,7 @@ internal sealed class ConfigForm : Form
 
         if (!_workspace.TryApplySelection(_selectedEntry, e.Monitor, e.Selection))
         {
-            MessageBox.Show(this, "Não foi possível aplicar a seleção ao item atual.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Não foi possível aplicar a seleção ao item atual.", "Aviso", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
@@ -1220,7 +1222,7 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        Rectangle? selection;
+        Drawing.Rectangle? selection;
         if (window.FullScreen)
         {
             selection = null;
@@ -1231,7 +1233,7 @@ internal sealed class ConfigForm : Form
             var monitorWidth = Math.Max(1, previewBounds.Width > 0 ? previewBounds.Width : preview.Monitor.Width);
             var monitorHeight = Math.Max(1, previewBounds.Height > 0 ? previewBounds.Height : preview.Monitor.Height);
 
-            selection = new Rectangle(
+            selection = new Drawing.Rectangle(
                 window.X ?? 0,
                 window.Y ?? 0,
                 window.Width ?? monitorWidth,
@@ -1240,7 +1242,7 @@ internal sealed class ConfigForm : Form
 
         if (!_workspace.TryAssignEntryToMonitor(_selectedEntry, preview.Monitor, selection))
         {
-            MessageBox.Show(this, "Não foi possível atribuir o monitor selecionado ao item atual.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Não foi possível atribuir o monitor selecionado ao item atual.", "Aviso", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
@@ -1416,18 +1418,18 @@ internal sealed class ConfigForm : Form
         ApplySplitterRatio(_contentContainer, ContentSplitterRatio);
     }
 
-    private Button CreateFooterButton(string text, string toolTipText, EventHandler handler)
+    private WinForms.Button CreateFooterButton(string text, string toolTipText, EventHandler handler)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(toolTipText);
         ArgumentNullException.ThrowIfNull(handler);
 
         var font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
-        var button = new Button
+        var button = new WinForms.Button
         {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(4),
+            Margin = new WinForms.Padding(4),
             Text = text,
             Font = font,
         };
@@ -1441,7 +1443,7 @@ internal sealed class ConfigForm : Form
     {
         var minWidth = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Width);
         var minHeight = LogicalToDeviceUnits(DefaultMinimumSizeLogical.Height);
-        MinimumSize = new Size(minWidth, minHeight);
+        MinimumSize = new Drawing.Size(minWidth, minHeight);
 
         if (_contentContainer is not null)
         {
@@ -1458,7 +1460,7 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private void ApplySplitterRatio(SplitContainer? container, double ratio)
+    private void ApplySplitterRatio(WinForms.SplitContainer? container, double ratio)
     {
         if (container is null || container.IsDisposed)
         {
@@ -1485,7 +1487,7 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private static bool TryGetAvailableLength(SplitContainer container, out int length)
+    private static bool TryGetAvailableLength(WinForms.SplitContainer container, out int length)
     {
         length = container.Orientation == Orientation.Horizontal
             ? container.ClientSize.Height
@@ -1494,7 +1496,7 @@ internal sealed class ConfigForm : Form
         return length > 0;
     }
 
-    private string GetContainerContext(SplitContainer container)
+    private string GetContainerContext(WinForms.SplitContainer container)
     {
         if (ReferenceEquals(container, _layoutContainer))
         {
@@ -1533,21 +1535,21 @@ internal sealed class ConfigForm : Form
         var window = _workspace.GetWindow(_selectedEntry);
         if (window is null)
         {
-            MessageBox.Show(this, "O item selecionado ainda não possui uma janela configurada.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "O item selecionado ainda não possui uma janela configurada.", "Aplicar Preset", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
         var monitor = _workspace.FindMonitor(window.Monitor);
         if (monitor is null)
         {
-            MessageBox.Show(this, "Associe o item a um monitor antes de aplicar um preset.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Associe o item a um monitor antes de aplicar um preset.", "Aplicar Preset", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
         var rectangle = CalculateZoneRectangle(zone, monitor);
         if (!_workspace.TryAssignEntryToMonitor(_selectedEntry, monitor, rectangle))
         {
-            MessageBox.Show(this, "Não foi possível aplicar o preset ao item selecionado.", "Aplicar Preset", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Não foi possível aplicar o preset ao item selecionado.", "Aplicar Preset", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
@@ -1561,7 +1563,7 @@ internal sealed class ConfigForm : Form
             monitor.Name);
     }
 
-    private static Rectangle CalculateZoneRectangle(ZonePreset.Zone zone, MonitorInfo monitor)
+    private static Drawing.Rectangle CalculateZoneRectangle(ZonePreset.Zone zone, MonitorInfo monitor)
     {
         var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
         var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
@@ -1610,7 +1612,7 @@ internal sealed class ConfigForm : Form
         x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
         y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
 
-        return new Rectangle(x, y, width, height);
+        return new Drawing.Rectangle(x, y, width, height);
     }
 
     private static bool KeysEqual(MonitorKey? left, MonitorKey? right)
@@ -1955,7 +1957,7 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private void RegisterMonitorBinding(Form dialog, Action<string?> applySelection)
+    private void RegisterMonitorBinding(WinForms.Form dialog, Action<string?> applySelection)
     {
         if (dialog is null || applySelection is null)
         {
@@ -1965,7 +1967,7 @@ internal sealed class ConfigForm : Form
         _monitorSelectionBindings.Add(new MonitorSelectionBinding(dialog, applySelection));
     }
 
-    private void UnregisterMonitorBinding(Form dialog)
+    private void UnregisterMonitorBinding(WinForms.Form dialog)
     {
         for (var i = _monitorSelectionBindings.Count - 1; i >= 0; i--)
         {
@@ -1979,7 +1981,7 @@ internal sealed class ConfigForm : Form
     private void OnDialogMonitorSelectionChanged(object? sender, string? stableId)
         => UpdateSelectedMonitor(stableId);
 
-    private sealed record class MonitorSelectionBinding(Form Dialog, Action<string?> Apply);
+    private sealed record class MonitorSelectionBinding(WinForms.Form Dialog, Action<string?> Apply);
 
 
     private void OnAddApplicationClicked(object? sender, EventArgs e)
@@ -1998,7 +2000,7 @@ internal sealed class ConfigForm : Form
         dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
         UnregisterMonitorBinding(dialog);
 
-        if (result != DialogResult.OK || dialog.Result is null)
+        if (result != WinForms.DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2041,7 +2043,7 @@ internal sealed class ConfigForm : Form
         dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
         UnregisterMonitorBinding(dialog);
 
-        if (result != DialogResult.OK || dialog.Result is null)
+        if (result != WinForms.DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2070,7 +2072,7 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        if (MessageBox.Show(this, $"Deseja remover o aplicativo '{current.Id}'?", "Remover aplicativo", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        if (WinForms.MessageBox.Show(this, $"Deseja remover o aplicativo '{current.Id}'?", "Remover aplicativo", WinForms.MessageBoxButtons.YesNo, WinForms.MessageBoxIcon.Question) != WinForms.DialogResult.Yes)
         {
             return;
         }
@@ -2139,7 +2141,7 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private async Task<bool> RunApplicationTestAsync(AppConfig app, Control owner, bool updateStatus)
+    private async Task<bool> RunApplicationTestAsync(AppConfig app, WinForms.Control owner, bool updateStatus)
     {
         if (updateStatus)
         {
@@ -2167,12 +2169,12 @@ internal sealed class ConfigForm : Form
         return success;
     }
 
-    private bool TestApplication(AppConfig app, Control owner)
+    private bool TestApplication(AppConfig app, WinForms.Control owner)
     {
         if (!File.Exists(app.ExecutablePath))
         {
             owner.BeginInvoke(new Action(() =>
-                MessageBox.Show(owner, $"O executável '{app.ExecutablePath}' não foi encontrado.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+                WinForms.MessageBox.Show(owner, $"O executável '{app.ExecutablePath}' não foi encontrado.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning)));
             return false;
         }
 
@@ -2194,7 +2196,7 @@ internal sealed class ConfigForm : Form
             if (process is null)
             {
                 owner.BeginInvoke(new Action(() =>
-                    MessageBox.Show(owner, "Process.Start retornou nulo ao iniciar o aplicativo.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                    WinForms.MessageBox.Show(owner, "Process.Start retornou nulo ao iniciar o aplicativo.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
                 return false;
             }
 
@@ -2213,7 +2215,7 @@ internal sealed class ConfigForm : Form
             if (process.MainWindowHandle == IntPtr.Zero)
             {
                 owner.BeginInvoke(new Action(() =>
-                    MessageBox.Show(owner, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+                    WinForms.MessageBox.Show(owner, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning)));
             }
 
             return true;
@@ -2222,7 +2224,7 @@ internal sealed class ConfigForm : Form
         {
             Log.Error(ex, "Falha ao testar aplicativo {AppId}.", app.Id);
             owner.BeginInvoke(new Action(() =>
-                MessageBox.Show(owner, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                WinForms.MessageBox.Show(owner, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
             return false;
         }
     }
@@ -2293,7 +2295,7 @@ internal sealed class ConfigForm : Form
         dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
         UnregisterMonitorBinding(dialog);
 
-        if (result != DialogResult.OK || dialog.Result is null)
+        if (result != WinForms.DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2342,7 +2344,7 @@ internal sealed class ConfigForm : Form
         dialog.MonitorSelectionChanged -= OnDialogMonitorSelectionChanged;
         UnregisterMonitorBinding(dialog);
 
-        if (result != DialogResult.OK || dialog.Result is null)
+        if (result != WinForms.DialogResult.OK || dialog.Result is null)
         {
             return;
         }
@@ -2377,7 +2379,7 @@ internal sealed class ConfigForm : Form
             return;
         }
 
-        if (MessageBox.Show(this, $"Deseja remover o site '{current.Id}'?", "Remover site", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        if (WinForms.MessageBox.Show(this, $"Deseja remover o site '{current.Id}'?", "Remover site", WinForms.MessageBoxButtons.YesNo, WinForms.MessageBoxIcon.Question) != WinForms.DialogResult.Yes)
         {
             return;
         }
@@ -2448,7 +2450,7 @@ internal sealed class ConfigForm : Form
         }
     }
 
-    private bool TestSite(SiteConfig site, Control owner)
+    private bool TestSite(SiteConfig site, WinForms.Control owner)
     {
         try
         {
@@ -2460,12 +2462,12 @@ internal sealed class ConfigForm : Form
         {
             Log.Error(ex, "Falha ao testar site {SiteId}.", site.Id);
             owner.BeginInvoke(new Action(() =>
-                MessageBox.Show(owner, $"Falha ao testar o site: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                WinForms.MessageBox.Show(owner, $"Falha ao testar o site: {ex.Message}", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
             return false;
         }
     }
 
-    private async Task<bool> RunSiteTestAsync(SiteConfig site, Control owner, bool updateStatus)
+    private async Task<bool> RunSiteTestAsync(SiteConfig site, WinForms.Control owner, bool updateStatus)
     {
         if (updateStatus)
         {
@@ -2511,7 +2513,7 @@ internal sealed class ConfigForm : Form
         return site.AllowedTabHosts?.Any(host => !string.IsNullOrWhiteSpace(host)) == true;
     }
 
-    private bool TestSiteWithProcess(SiteConfig site, Control owner)
+    private bool TestSiteWithProcess(SiteConfig site, WinForms.Control owner)
     {
         var executable = ResolveBrowserExecutable(site.Browser);
         var arguments = BuildBrowserArgumentString(site);
@@ -2527,7 +2529,7 @@ internal sealed class ConfigForm : Form
         if (process is null)
         {
             owner.BeginInvoke(new Action(() =>
-                MessageBox.Show(owner, "Falha ao iniciar o navegador.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                WinForms.MessageBox.Show(owner, "Falha ao iniciar o navegador.", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
             return false;
         }
 
@@ -2546,13 +2548,13 @@ internal sealed class ConfigForm : Form
         if (process.MainWindowHandle == IntPtr.Zero)
         {
             owner.BeginInvoke(new Action(() =>
-                MessageBox.Show(owner, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+                WinForms.MessageBox.Show(owner, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning)));
         }
 
         return true;
     }
 
-    private bool TestSiteWithSelenium(SiteConfig site, Control owner)
+    private bool TestSiteWithSelenium(SiteConfig site, WinForms.Control owner)
     {
         IWebDriver? driver = null;
 
@@ -2593,7 +2595,7 @@ internal sealed class ConfigForm : Form
         {
             Log.Error(ex, "Erro ao testar site via Selenium {SiteId}.", site.Id);
             owner.BeginInvoke(new Action(() =>
-                MessageBox.Show(owner, $"Falha ao iniciar o Selenium: {ex.Message}", "Teste de site", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                WinForms.MessageBox.Show(owner, $"Falha ao iniciar o Selenium: {ex.Message}", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
             return false;
         }
         finally

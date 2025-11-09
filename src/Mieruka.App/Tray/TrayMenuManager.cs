@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Tray;
 
@@ -19,13 +21,13 @@ internal sealed class TrayMenuManager : IDisposable
     private readonly Func<Task<GeneralConfig>> _loadConfigurationAsync;
     private readonly Action<GeneralConfig> _applyConfiguration;
     private readonly string _logDirectory;
-    private readonly NotifyIcon _notifyIcon;
-    private readonly ContextMenuStrip _contextMenu;
-    private readonly ToolStripMenuItem _statusItem;
-    private readonly ToolStripMenuItem _toggleItem;
-    private readonly ToolStripMenuItem _reloadItem;
-    private readonly ToolStripMenuItem _openLogsItem;
-    private readonly ToolStripMenuItem _exitItem;
+    private readonly WinForms.NotifyIcon _notifyIcon;
+    private readonly WinForms.ContextMenuStrip _contextMenu;
+    private readonly WinForms.ToolStripMenuItem _statusItem;
+    private readonly WinForms.ToolStripMenuItem _toggleItem;
+    private readonly WinForms.ToolStripMenuItem _reloadItem;
+    private readonly WinForms.ToolStripMenuItem _openLogsItem;
+    private readonly WinForms.ToolStripMenuItem _exitItem;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     private bool _disposed;
@@ -54,38 +56,38 @@ internal sealed class TrayMenuManager : IDisposable
 
         _logDirectory = logDirectory;
 
-        _contextMenu = new ContextMenuStrip();
+        _contextMenu = new WinForms.ContextMenuStrip();
         _ = _contextMenu.Handle; // Force handle creation for cross-thread updates.
 
-        _statusItem = new ToolStripMenuItem
+        _statusItem = new WinForms.ToolStripMenuItem
         {
             Enabled = false,
         };
 
-        _toggleItem = new ToolStripMenuItem();
+        _toggleItem = new WinForms.ToolStripMenuItem();
         _toggleItem.Click += OnToggleClick;
 
-        _reloadItem = new ToolStripMenuItem("Reload Config");
+        _reloadItem = new WinForms.ToolStripMenuItem("Reload Config");
         _reloadItem.Click += OnReloadClick;
 
-        _openLogsItem = new ToolStripMenuItem("Open Logs");
+        _openLogsItem = new WinForms.ToolStripMenuItem("Open Logs");
         _openLogsItem.Click += OnOpenLogsClick;
 
-        _exitItem = new ToolStripMenuItem("Exit");
+        _exitItem = new WinForms.ToolStripMenuItem("Exit");
         _exitItem.Click += OnExitClick;
 
-        _contextMenu.Items.AddRange(new ToolStripItem[]
+        _contextMenu.Items.AddRange(new WinForms.ToolStripItem[]
         {
             _statusItem,
-            new ToolStripSeparator(),
+            new WinForms.ToolStripSeparator(),
             _toggleItem,
             _reloadItem,
             _openLogsItem,
-            new ToolStripSeparator(),
+            new WinForms.ToolStripSeparator(),
             _exitItem,
         });
 
-        _notifyIcon = new NotifyIcon
+        _notifyIcon = new WinForms.NotifyIcon
         {
             Icon = SystemIcons.Application,
             Visible = true,
@@ -169,16 +171,16 @@ internal sealed class TrayMenuManager : IDisposable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 $"Unable to open log directory: {ex.Message}",
                 "Tray Menu",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
     }
 
     private void OnExitClick(object? sender, EventArgs e)
-        => Application.Exit();
+        => WinForms.Application.Exit();
 
     private async Task ExecuteWithLockAsync(Func<Task> operation)
     {
@@ -195,11 +197,11 @@ internal sealed class TrayMenuManager : IDisposable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 $"Operation failed: {ex.Message}",
                 "Tray Menu",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -214,7 +216,7 @@ internal sealed class TrayMenuManager : IDisposable
     {
         if (_contextMenu.IsHandleCreated && _contextMenu.InvokeRequired)
         {
-            _contextMenu.BeginInvoke(new MethodInvoker(UpdateMenuState));
+            _contextMenu.BeginInvoke(new WinForms.MethodInvoker(UpdateMenuState));
             return;
         }
 

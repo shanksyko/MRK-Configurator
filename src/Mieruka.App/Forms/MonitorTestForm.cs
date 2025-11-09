@@ -1,36 +1,38 @@
 using System.Drawing;
 using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Forms;
 
-internal sealed class MonitorTestForm : Form
+internal sealed class MonitorTestForm : WinForms.Form
 {
-    private readonly Label _messageLabel;
+    private readonly WinForms.Label _messageLabel;
 
     public MonitorTestForm(string monitorDisplayName)
     {
-        StartPosition = FormStartPosition.Manual;
-        FormBorderStyle = FormBorderStyle.SizableToolWindow;
+        StartPosition = WinForms.FormStartPosition.Manual;
+        FormBorderStyle = WinForms.FormBorderStyle.SizableToolWindow;
         Text = "Teste de Monitor";
         ShowInTaskbar = false;
         TopMost = true;
-        MinimumSize = new Size(200, 150);
-        BackColor = Color.FromArgb(32, 32, 32);
-        ForeColor = Color.White;
+        MinimumSize = new Drawing.Size(200, 150);
+        BackColor = Drawing.Color.FromArgb(32, 32, 32);
+        ForeColor = Drawing.Color.White;
 
-        var font = SystemFonts.CaptionFont ?? Control.DefaultFont;
+        var font = SystemFonts.CaptionFont ?? WinForms.Control.DefaultFont;
         var boldFont = font is null
-            ? new Font(FontFamily.GenericSansSerif, 12F, FontStyle.Bold)
-            : new Font(font, font.Style | FontStyle.Bold);
+            ? new Drawing.Font(FontFamily.GenericSansSerif, 12F, FontStyle.Bold)
+            : new Drawing.Font(font, font.Style | FontStyle.Bold);
 
-        _messageLabel = new Label
+        _messageLabel = new WinForms.Label
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
             Font = boldFont,
-            ForeColor = Color.White,
-            BackColor = Color.Transparent,
-            Padding = new Padding(16),
+            ForeColor = Drawing.Color.White,
+            BackColor = Drawing.Color.Transparent,
+            Padding = new WinForms.Padding(16),
         };
 
         Controls.Add(_messageLabel);

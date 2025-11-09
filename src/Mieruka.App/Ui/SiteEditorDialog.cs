@@ -9,41 +9,43 @@ using Mieruka.App.Services;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using System.Text;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Ui;
 
-internal sealed class SiteEditorDialog : Form
+internal sealed class SiteEditorDialog : WinForms.Form
 {
     private readonly IReadOnlyList<MonitorInfo> _monitors;
     private readonly IReadOnlyList<ZonePreset> _zonePresets;
     private readonly List<MonitorOption> _monitorOptions = new();
     private readonly List<ZoneOption> _zoneOptions = new();
-    private readonly TextBox _nameBox;
-    private readonly TextBox _titleBox;
-    private readonly TextBox _urlBox;
-    private readonly ComboBox _browserBox;
-    private readonly TextBox _userDataBox;
-    private readonly TextBox _profileBox;
-    private readonly TextBox _argsBox;
-    private readonly TextBox _allowedHostsBox;
-    private readonly TextBox _commandPreviewBox;
-    private readonly CheckBox _appModeCheck;
-    private readonly CheckBox _kioskCheck;
-    private readonly CheckBox _reloadCheck;
-    private readonly NumericUpDown _reloadIntervalBox;
-    private readonly ComboBox _monitorBox;
-    private readonly ComboBox _zoneBox;
-    private readonly CheckBox _topMostCheck;
+    private readonly WinForms.TextBox _nameBox;
+    private readonly WinForms.TextBox _titleBox;
+    private readonly WinForms.TextBox _urlBox;
+    private readonly WinForms.ComboBox _browserBox;
+    private readonly WinForms.TextBox _userDataBox;
+    private readonly WinForms.TextBox _profileBox;
+    private readonly WinForms.TextBox _argsBox;
+    private readonly WinForms.TextBox _allowedHostsBox;
+    private readonly WinForms.TextBox _commandPreviewBox;
+    private readonly WinForms.CheckBox _appModeCheck;
+    private readonly WinForms.CheckBox _kioskCheck;
+    private readonly WinForms.CheckBox _reloadCheck;
+    private readonly WinForms.NumericUpDown _reloadIntervalBox;
+    private readonly WinForms.ComboBox _monitorBox;
+    private readonly WinForms.ComboBox _zoneBox;
+    private readonly WinForms.CheckBox _topMostCheck;
 
-    private readonly TextBox _loginUserBox;
-    private readonly TextBox _loginPassBox;
-    private readonly TextBox _loginUserSelectorBox;
-    private readonly TextBox _loginPassSelectorBox;
-    private readonly TextBox _loginSubmitSelectorBox;
-    private readonly TextBox _loginScriptBox;
-    private readonly NumericUpDown _loginTimeoutBox;
+    private readonly WinForms.TextBox _loginUserBox;
+    private readonly WinForms.TextBox _loginPassBox;
+    private readonly WinForms.TextBox _loginUserSelectorBox;
+    private readonly WinForms.TextBox _loginPassSelectorBox;
+    private readonly WinForms.TextBox _loginSubmitSelectorBox;
+    private readonly WinForms.TextBox _loginScriptBox;
+    private readonly WinForms.NumericUpDown _loginTimeoutBox;
 
-    private readonly Button _testButton;
+    private readonly WinForms.Button _testButton;
 
     private bool _suppressMonitorEvents;
 
@@ -56,11 +58,11 @@ internal sealed class SiteEditorDialog : Form
         _monitors = monitors ?? Array.Empty<MonitorInfo>();
         _zonePresets = zonePresets ?? Array.Empty<ZonePreset>();
 
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96f, 96f);
-        MinimumSize = new Size(900, 600);
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.Sizable;
+        AutoScaleMode = WinForms.AutoScaleMode.Dpi;
+        AutoScaleDimensions = new Drawing.SizeF(96f, 96f);
+        MinimumSize = new Drawing.Size(900, 600);
+        StartPosition = WinForms.FormStartPosition.CenterParent;
+        FormBorderStyle = WinForms.FormBorderStyle.Sizable;
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
@@ -68,16 +70,16 @@ internal sealed class SiteEditorDialog : Form
 
         var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
-        var layout = new TableLayoutPanel
+        var layout = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
-            Padding = new Padding(16),
+            Padding = new WinForms.Padding(16),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72f));
+        layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 28f));
+        layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 72f));
 
         _nameBox = CreateTextBox(baseFont);
         _titleBox = CreateTextBox(baseFont);
@@ -87,10 +89,10 @@ internal sealed class SiteEditorDialog : Form
         _profileBox = CreateTextBox(baseFont);
         _profileBox.TextChanged += (_, _) => UpdateBrowserPreview();
 
-        _browserBox = new ComboBox
+        _browserBox = new WinForms.ComboBox
         {
-            Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = WinForms.DockStyle.Fill,
+            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
         foreach (var browser in Enum.GetValues<BrowserType>())
@@ -99,9 +101,9 @@ internal sealed class SiteEditorDialog : Form
         }
         _browserBox.SelectedIndexChanged += (_, _) => UpdateBrowserPreview();
 
-        _argsBox = new TextBox
+        _argsBox = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
             Multiline = true,
             ScrollBars = ScrollBars.Vertical,
@@ -109,44 +111,44 @@ internal sealed class SiteEditorDialog : Form
         };
         _argsBox.TextChanged += (_, _) => UpdateBrowserPreview();
 
-        _allowedHostsBox = new TextBox
+        _allowedHostsBox = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
             Multiline = true,
             ScrollBars = ScrollBars.Vertical,
             Height = 80,
         };
 
-        _commandPreviewBox = new TextBox
+        _commandPreviewBox = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
-            Font = new Font(FontFamily.GenericMonospace, 9f, FontStyle.Regular, GraphicsUnit.Point),
+            Dock = WinForms.DockStyle.Fill,
+            Font = new Drawing.Font(FontFamily.GenericMonospace, 9f, FontStyle.Regular, GraphicsUnit.Point),
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
             Height = 60,
         };
 
-        _appModeCheck = new CheckBox { Text = "Modo aplicativo", Dock = DockStyle.Fill, Font = baseFont };
+        _appModeCheck = new WinForms.CheckBox { Text = "Modo aplicativo", Dock = WinForms.DockStyle.Fill, Font = baseFont };
         _appModeCheck.CheckedChanged += (_, _) => UpdateBrowserPreview();
-        _kioskCheck = new CheckBox { Text = "Modo quiosque", Dock = DockStyle.Fill, Font = baseFont };
+        _kioskCheck = new WinForms.CheckBox { Text = "Modo quiosque", Dock = WinForms.DockStyle.Fill, Font = baseFont };
         _kioskCheck.CheckedChanged += (_, _) => UpdateBrowserPreview();
-        _reloadCheck = new CheckBox { Text = "Recarregar ao ativar", Dock = DockStyle.Fill, Font = baseFont };
+        _reloadCheck = new WinForms.CheckBox { Text = "Recarregar ao ativar", Dock = WinForms.DockStyle.Fill, Font = baseFont };
         _reloadCheck.CheckedChanged += (_, _) => UpdateReloadState();
-        _reloadIntervalBox = new NumericUpDown
+        _reloadIntervalBox = new WinForms.NumericUpDown
         {
-            Dock = DockStyle.Left,
+            Dock = WinForms.DockStyle.Left,
             Minimum = 5,
             Maximum = 3600,
             Value = 60,
             Enabled = false,
         };
 
-        _monitorBox = new ComboBox
+        _monitorBox = new WinForms.ComboBox
         {
-            Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = WinForms.DockStyle.Fill,
+            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
         _monitorBox.DisplayMember = nameof(MonitorOption.DisplayName);
@@ -154,14 +156,14 @@ internal sealed class SiteEditorDialog : Form
         _monitorBox.SelectedIndexChanged += (_, _) => PopulateZones(GetSelectedZoneIdentifier());
         _monitorBox.SelectedValueChanged += OnMonitorSelectionChanged;
 
-        _zoneBox = new ComboBox
+        _zoneBox = new WinForms.ComboBox
         {
-            Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = WinForms.DockStyle.Fill,
+            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
 
-        _topMostCheck = new CheckBox { Text = "Sempre no topo", Dock = DockStyle.Fill, Font = baseFont };
+        _topMostCheck = new WinForms.CheckBox { Text = "Sempre no topo", Dock = WinForms.DockStyle.Fill, Font = baseFont };
 
         _loginUserBox = CreateTextBox(baseFont);
         _loginPassBox = CreateTextBox(baseFont);
@@ -169,17 +171,17 @@ internal sealed class SiteEditorDialog : Form
         _loginUserSelectorBox = CreateTextBox(baseFont);
         _loginPassSelectorBox = CreateTextBox(baseFont);
         _loginSubmitSelectorBox = CreateTextBox(baseFont);
-        _loginScriptBox = new TextBox
+        _loginScriptBox = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
             Multiline = true,
             ScrollBars = ScrollBars.Vertical,
             Height = 80,
         };
-        _loginTimeoutBox = new NumericUpDown
+        _loginTimeoutBox = new WinForms.NumericUpDown
         {
-            Dock = DockStyle.Left,
+            Dock = WinForms.DockStyle.Left,
             Minimum = 1,
             Maximum = 300,
             Value = 15,
@@ -198,20 +200,20 @@ internal sealed class SiteEditorDialog : Form
         AddRow(layout, string.Empty, _appModeCheck);
         AddRow(layout, string.Empty, _kioskCheck);
 
-        var reloadPanel = new FlowLayoutPanel
+        var reloadPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
         reloadPanel.Controls.Add(_reloadCheck);
-        reloadPanel.Controls.Add(new Label
+        reloadPanel.Controls.Add(new WinForms.Label
         {
             Text = "Intervalo (s):",
             AutoSize = true,
             TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(12, 6, 6, 0),
+            Margin = new WinForms.Padding(12, 6, 6, 0),
         });
         reloadPanel.Controls.Add(_reloadIntervalBox);
         AddRow(layout, string.Empty, reloadPanel);
@@ -220,22 +222,22 @@ internal sealed class SiteEditorDialog : Form
         AddRow(layout, "Zona", _zoneBox);
         AddRow(layout, string.Empty, _topMostCheck);
 
-        var loginGroup = new GroupBox
+        var loginGroup = new WinForms.GroupBox
         {
             Text = "Login Automático",
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
-            Padding = new Padding(10),
+            Padding = new WinForms.Padding(10),
         };
-        var loginLayout = new TableLayoutPanel
+        var loginLayout = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        loginLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
-        loginLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
+        loginLayout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 30f));
+        loginLayout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 70f));
 
         AddRow(loginLayout, "Usuário", _loginUserBox);
         AddRow(loginLayout, "Senha", _loginPassBox);
@@ -248,19 +250,19 @@ internal sealed class SiteEditorDialog : Form
         loginGroup.Controls.Add(loginLayout);
         AddRow(layout, string.Empty, loginGroup);
 
-        var buttonPanel = new FlowLayoutPanel
+        var buttonPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Bottom,
+            Dock = WinForms.DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(16),
+            Padding = new WinForms.Padding(16),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        var okButton = new Button { Text = "Salvar", AutoSize = true, DialogResult = DialogResult.OK };
+        var okButton = new WinForms.Button { Text = "Salvar", AutoSize = true, DialogResult = WinForms.DialogResult.OK };
         okButton.Click += OnSaveRequested;
-        var cancelButton = new Button { Text = "Cancelar", AutoSize = true, DialogResult = DialogResult.Cancel };
-        _testButton = new Button { Text = "Testar", AutoSize = true };
+        var cancelButton = new WinForms.Button { Text = "Cancelar", AutoSize = true, DialogResult = WinForms.DialogResult.Cancel };
+        _testButton = new WinForms.Button { Text = "Testar", AutoSize = true };
         _testButton.Click += OnTestClicked;
 
         buttonPanel.Controls.Add(okButton);
@@ -313,20 +315,20 @@ internal sealed class SiteEditorDialog : Form
         }
     }
 
-    private static TextBox CreateTextBox(Font font)
+    private static WinForms.TextBox CreateTextBox(Drawing.Font font)
     {
-        return new TextBox
+        return new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = font,
         };
     }
 
-    private static NumericUpDown CreateNumericBox(int minimum = 0, int maximum = 40000, int defaultValue = 0)
+    private static WinForms.NumericUpDown CreateNumericBox(int minimum = 0, int maximum = 40000, int defaultValue = 0)
     {
-        return new NumericUpDown
+        return new WinForms.NumericUpDown
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Minimum = minimum,
             Maximum = maximum,
             Value = defaultValue,
@@ -335,27 +337,27 @@ internal sealed class SiteEditorDialog : Form
         };
     }
 
-    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
+    private static void AddRow(WinForms.TableLayoutPanel panel, string caption, WinForms.Control control)
     {
         var row = panel.RowCount++;
-        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
         if (!string.IsNullOrEmpty(caption))
         {
-            panel.Controls.Add(new Label
+            panel.Controls.Add(new WinForms.Label
             {
                 Text = caption,
-                Dock = DockStyle.Fill,
+                Dock = WinForms.DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoSize = true,
-                Margin = new Padding(0, 0, 6, 6),
+                Margin = new WinForms.Padding(0, 0, 6, 6),
             }, 0, row);
         }
         else
         {
-            panel.Controls.Add(new Label { AutoSize = true }, 0, row);
+            panel.Controls.Add(new WinForms.Label { AutoSize = true }, 0, row);
         }
 
-        control.Margin = new Padding(0, 0, 0, 6);
+        control.Margin = new WinForms.Padding(0, 0, 0, 6);
         panel.Controls.Add(control, 1, row);
     }
 
@@ -650,7 +652,7 @@ internal sealed class SiteEditorDialog : Form
     {
         if (!ValidateInputs())
         {
-            DialogResult = DialogResult.None;
+            DialogResult = WinForms.DialogResult.None;
             return;
         }
 
@@ -774,35 +776,35 @@ internal sealed class SiteEditorDialog : Form
     {
         if (string.IsNullOrWhiteSpace(_nameBox.Text))
         {
-            MessageBox.Show(this, "Informe um nome para o site.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Informe um nome para o site.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _nameBox.Focus();
             return false;
         }
 
         if (_browserBox.SelectedItem is null)
         {
-            MessageBox.Show(this, "Selecione um navegador para o site.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Selecione um navegador para o site.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _browserBox.Focus();
             return false;
         }
 
         if (!_appModeCheck.Checked && string.IsNullOrWhiteSpace(_urlBox.Text))
         {
-            MessageBox.Show(this, "Informe a URL do site.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Informe a URL do site.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _urlBox.Focus();
             return false;
         }
 
         if (_appModeCheck.Checked && string.IsNullOrWhiteSpace(_urlBox.Text))
         {
-            MessageBox.Show(this, "Modo aplicativo requer uma URL.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Modo aplicativo requer uma URL.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _urlBox.Focus();
             return false;
         }
 
         if (_zoneBox.Enabled && _zoneBox.SelectedItem is not ZoneOption)
         {
-            MessageBox.Show(this, "Selecione uma zona para posicionar o site.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Selecione uma zona para posicionar o site.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _zoneBox.Focus();
             return false;
         }
@@ -810,7 +812,7 @@ internal sealed class SiteEditorDialog : Form
         return true;
     }
 
-    private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
+    private static Drawing.Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
     {
         var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
         var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
@@ -859,7 +861,7 @@ internal sealed class SiteEditorDialog : Form
         x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
         y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
 
-        return new Rectangle(x, y, width, height);
+        return new Drawing.Rectangle(x, y, width, height);
     }
 
     private static bool ZoneMatches(ZonePreset.Zone zone, WindowPlacementHelper.ZoneRect rect)

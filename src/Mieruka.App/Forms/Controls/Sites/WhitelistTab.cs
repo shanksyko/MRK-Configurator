@@ -5,10 +5,11 @@ using System.Linq;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Security;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
-internal sealed partial class WhitelistTab : UserControl
+internal sealed partial class WhitelistTab : WinForms.UserControl
 {
     private readonly BindingList<string> _hosts = new();
     private SiteConfig? _site;

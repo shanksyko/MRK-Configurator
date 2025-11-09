@@ -6,6 +6,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Mieruka.Core.Contracts;
 using Serilog;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services.Ui;
 

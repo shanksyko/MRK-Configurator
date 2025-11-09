@@ -4,12 +4,14 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Forms.Controls;
 
 internal static class LayoutHelpers
 {
-    public static void ApplyStandardLayout(Control control)
+    public static void ApplyStandardLayout(WinForms.Control control)
     {
         if (control is null)
         {
@@ -18,58 +20,58 @@ internal static class LayoutHelpers
 
         if (control is ContainerControl container)
         {
-            container.AutoScaleMode = AutoScaleMode.Dpi;
-            container.AutoScaleDimensions = new SizeF(96F, 96F);
+            container.AutoScaleMode = WinForms.AutoScaleMode.Dpi;
+            container.AutoScaleDimensions = new Drawing.SizeF(96F, 96F);
         }
 
-        if (control is not Form)
+        if (control is not WinForms.Form)
         {
-            control.Dock = DockStyle.Fill;
+            control.Dock = WinForms.DockStyle.Fill;
         }
 
-        control.Margin = new Padding(8);
+        control.Margin = new WinForms.Padding(8);
     }
 
-    public static TableLayoutPanel CreateStandardTableLayout(int columnCount = 1)
+    public static WinForms.TableLayoutPanel CreateStandardTableLayout(int columnCount = 1)
     {
         if (columnCount <= 0)
         {
             columnCount = 1;
         }
 
-        var table = new TableLayoutPanel
+        var table = new WinForms.TableLayoutPanel
         {
             ColumnCount = columnCount,
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             AutoScroll = true,
-            Padding = new Padding(8),
-            Margin = new Padding(0),
+            Padding = new WinForms.Padding(8),
+            Margin = new WinForms.Padding(0),
         };
 
         if (columnCount == 1)
         {
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            table.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 100F));
         }
         else
         {
             var percent = 100F / columnCount;
             for (var i = 0; i < columnCount; i++)
             {
-                table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, percent));
+                table.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, percent));
             }
         }
 
         return table;
     }
 
-    public static Panel CreateMonitorCard(
+    public static WinForms.Panel CreateMonitorCard(
         MonitorInfo monitor,
         EventHandler selecionarHandler,
         EventHandler pararHandler,
         EventHandler testarHandler,
-        out PictureBox previewBox)
+        out WinForms.PictureBox previewBox)
     {
         ArgumentNullException.ThrowIfNull(monitor);
         ArgumentNullException.ThrowIfNull(selecionarHandler);
@@ -78,79 +80,79 @@ internal static class LayoutHelpers
 
         var card = new MonitorCardPanel
         {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(8),
-            Padding = new Padding(8),
+            Dock = WinForms.DockStyle.Fill,
+            Margin = new WinForms.Padding(8),
+            Padding = new WinForms.Padding(8),
         };
 
-        var baseFont = SystemFonts.CaptionFont ?? Control.DefaultFont;
+        var baseFont = SystemFonts.CaptionFont ?? WinForms.Control.DefaultFont;
         if (baseFont is null)
         {
-            baseFont = new Font(FontFamily.GenericSansSerif, 9F, FontStyle.Regular);
+            baseFont = new Drawing.Font(FontFamily.GenericSansSerif, 9F, FontStyle.Regular);
         }
 
         var desiredStyle = baseFont.Style | FontStyle.Bold;
-        Font titleFont;
+        Drawing.Font titleFont;
         if (desiredStyle == baseFont.Style)
         {
-            titleFont = new Font(baseFont, baseFont.Style);
+            titleFont = new Drawing.Font(baseFont, baseFont.Style);
         }
         else
         {
-            titleFont = new Font(baseFont, desiredStyle);
+            titleFont = new Drawing.Font(baseFont, desiredStyle);
         }
 
-        var title = new Label
+        var title = new WinForms.Label
         {
-            Dock = DockStyle.Top,
+            Dock = WinForms.DockStyle.Top,
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = titleFont,
             Height = 24,
-            Margin = new Padding(0, 0, 0, 8),
+            Margin = new WinForms.Padding(0, 0, 0, 8),
             Text = GetMonitorDisplayName(monitor),
         };
 
-        previewBox = new PictureBox
+        previewBox = new WinForms.PictureBox
         {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 0, 0, 8),
+            Dock = WinForms.DockStyle.Fill,
+            Margin = new WinForms.Padding(0, 0, 0, 8),
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = SystemColors.ControlDark,
         };
 
-        var footer = new FlowLayoutPanel
+        var footer = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Bottom,
+            Dock = WinForms.DockStyle.Bottom,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Margin = new Padding(0),
+            Margin = new WinForms.Padding(0),
         };
 
-        var btnSelecionar = new Button
+        var btnSelecionar = new WinForms.Button
         {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Text = "Selecionar",
-            Margin = new Padding(0, 0, 8, 0),
+            Margin = new WinForms.Padding(0, 0, 8, 0),
         };
 
-        var btnParar = new Button
+        var btnParar = new WinForms.Button
         {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Text = "Parar",
-            Margin = new Padding(0),
+            Margin = new WinForms.Padding(0),
         };
 
-        var btnTestar = new Button
+        var btnTestar = new WinForms.Button
         {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Text = "Testar",
-            Margin = new Padding(0, 0, 8, 0),
+            Margin = new WinForms.Padding(0, 0, 8, 0),
         };
 
         btnSelecionar.Click += selecionarHandler;
@@ -194,7 +196,7 @@ internal static class LayoutHelpers
         return $"{ordinalText}  {friendly}  {resolution} @ {hzText}";
     }
 
-    private static void ApplyClickForwarding(Control card, PictureBox previewBox, Label title, EventHandler selecionarHandler)
+    private static void ApplyClickForwarding(WinForms.Control card, WinForms.PictureBox previewBox, WinForms.Label title, EventHandler selecionarHandler)
     {
         card.Click += selecionarHandler;
         previewBox.Click += selecionarHandler;

@@ -9,23 +9,25 @@ using Mieruka.App.Config;
 using Mieruka.App.Services;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Ui;
 
-internal sealed class AppEditorDialog : Form
+internal sealed class AppEditorDialog : WinForms.Form
 {
     private readonly IReadOnlyList<MonitorInfo> _monitors;
     private readonly IReadOnlyList<ZonePreset> _zonePresets;
     private readonly List<MonitorOption> _monitorOptions = new();
     private readonly List<ZoneOption> _zoneOptions = new();
-    private readonly TextBox _nameBox;
-    private readonly TextBox _titleBox;
-    private readonly TextBox _pathBox;
-    private readonly TextBox _argsBox;
-    private readonly ComboBox _monitorBox;
-    private readonly ComboBox _zoneBox;
-    private readonly CheckBox _topMostCheck;
-    private readonly Button _testButton;
+    private readonly WinForms.TextBox _nameBox;
+    private readonly WinForms.TextBox _titleBox;
+    private readonly WinForms.TextBox _pathBox;
+    private readonly WinForms.TextBox _argsBox;
+    private readonly WinForms.ComboBox _monitorBox;
+    private readonly WinForms.ComboBox _zoneBox;
+    private readonly WinForms.CheckBox _topMostCheck;
+    private readonly WinForms.Button _testButton;
 
     private bool _suppressMonitorEvents;
 
@@ -38,11 +40,11 @@ internal sealed class AppEditorDialog : Form
         _monitors = monitors ?? Array.Empty<MonitorInfo>();
         _zonePresets = zonePresets ?? Array.Empty<ZonePreset>();
 
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96f, 96f);
-        MinimumSize = new Size(900, 600);
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.Sizable;
+        AutoScaleMode = WinForms.AutoScaleMode.Dpi;
+        AutoScaleDimensions = new Drawing.SizeF(96f, 96f);
+        MinimumSize = new Drawing.Size(900, 600);
+        StartPosition = WinForms.FormStartPosition.CenterParent;
+        FormBorderStyle = WinForms.FormBorderStyle.Sizable;
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
@@ -50,33 +52,33 @@ internal sealed class AppEditorDialog : Form
 
         var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
 
-        var layout = new TableLayoutPanel
+        var layout = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
-            Padding = new Padding(16),
+            Padding = new WinForms.Padding(16),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72f));
+        layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 28f));
+        layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 72f));
 
         _nameBox = CreateTextBox(baseFont);
         _titleBox = CreateTextBox(baseFont);
         _pathBox = CreateTextBox(baseFont);
-        _argsBox = new TextBox
+        _argsBox = new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
             Multiline = true,
             Height = 80,
             ScrollBars = ScrollBars.Vertical,
         };
 
-        _monitorBox = new ComboBox
+        _monitorBox = new WinForms.ComboBox
         {
-            Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = WinForms.DockStyle.Fill,
+            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
         _monitorBox.DisplayMember = nameof(MonitorOption.DisplayName);
@@ -84,39 +86,39 @@ internal sealed class AppEditorDialog : Form
         _monitorBox.SelectedIndexChanged += (_, _) => PopulateZones(GetSelectedZoneIdentifier());
         _monitorBox.SelectedValueChanged += OnMonitorSelectionChanged;
 
-        _zoneBox = new ComboBox
+        _zoneBox = new WinForms.ComboBox
         {
-            Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            Dock = WinForms.DockStyle.Fill,
+            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Font = baseFont,
         };
 
-        _topMostCheck = new CheckBox
+        _topMostCheck = new WinForms.CheckBox
         {
             Text = "Sempre no topo",
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
         };
 
         AddRow(layout, "Nome", _nameBox);
         AddRow(layout, "Título da janela", _titleBox);
 
-        var pathPanel = new TableLayoutPanel
+        var pathPanel = new WinForms.TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        pathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        pathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        pathPanel.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 100f));
+        pathPanel.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.AutoSize));
         pathPanel.Controls.Add(_pathBox, 0, 0);
-        var browseButton = new Button
+        var browseButton = new WinForms.Button
         {
             Text = "...",
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(6, 0, 0, 0),
+            Margin = new WinForms.Padding(6, 0, 0, 0),
         };
         browseButton.Click += OnBrowseClicked;
         pathPanel.Controls.Add(browseButton, 1, 0);
@@ -127,33 +129,33 @@ internal sealed class AppEditorDialog : Form
         AddRow(layout, "Zona", _zoneBox);
         AddRow(layout, string.Empty, _topMostCheck);
 
-        var buttonPanel = new FlowLayoutPanel
+        var buttonPanel = new WinForms.FlowLayoutPanel
         {
-            Dock = DockStyle.Bottom,
+            Dock = WinForms.DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(16),
+            Padding = new WinForms.Padding(16),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        var okButton = new Button
+        var okButton = new WinForms.Button
         {
             Text = "Salvar",
-            DialogResult = DialogResult.OK,
+            DialogResult = WinForms.DialogResult.OK,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
         okButton.Click += OnSaveRequested;
 
-        var cancelButton = new Button
+        var cancelButton = new WinForms.Button
         {
             Text = "Cancelar",
-            DialogResult = DialogResult.Cancel,
+            DialogResult = WinForms.DialogResult.Cancel,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        _testButton = new Button
+        _testButton = new WinForms.Button
         {
             Text = "Testar",
             AutoSize = true,
@@ -209,38 +211,38 @@ internal sealed class AppEditorDialog : Form
         }
     }
 
-    private static TextBox CreateTextBox(Font baseFont)
+    private static WinForms.TextBox CreateTextBox(Drawing.Font baseFont)
     {
-        return new TextBox
+        return new WinForms.TextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = WinForms.DockStyle.Fill,
             Font = baseFont,
         };
     }
 
-    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
+    private static void AddRow(WinForms.TableLayoutPanel panel, string caption, WinForms.Control control)
     {
         var row = panel.RowCount++;
-        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
 
         if (!string.IsNullOrEmpty(caption))
         {
-            var label = new Label
+            var label = new WinForms.Label
             {
                 Text = caption,
-                Dock = DockStyle.Fill,
+                Dock = WinForms.DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoSize = true,
-                Margin = new Padding(0, 0, 6, 6),
+                Margin = new WinForms.Padding(0, 0, 6, 6),
             };
             panel.Controls.Add(label, 0, row);
         }
         else
         {
-            panel.Controls.Add(new Label { AutoSize = true }, 0, row);
+            panel.Controls.Add(new WinForms.Label { AutoSize = true }, 0, row);
         }
 
-        control.Margin = new Padding(0, 0, 0, 6);
+        control.Margin = new WinForms.Padding(0, 0, 0, 6);
         panel.Controls.Add(control, 1, row);
     }
 
@@ -399,7 +401,7 @@ internal sealed class AppEditorDialog : Form
     {
         if (!ValidateInputs())
         {
-            DialogResult = DialogResult.None;
+            DialogResult = WinForms.DialogResult.None;
             return;
         }
 
@@ -480,7 +482,7 @@ internal sealed class AppEditorDialog : Form
         };
     }
 
-    private static Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
+    private static Drawing.Rectangle CalculateRelativeRectangle(WindowPlacementHelper.ZoneRect zone, MonitorInfo monitor)
     {
         var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
         var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
@@ -529,18 +531,18 @@ internal sealed class AppEditorDialog : Form
         x = Math.Clamp(x, 0, Math.Max(0, monitorWidth - width));
         y = Math.Clamp(y, 0, Math.Max(0, monitorHeight - height));
 
-        return new Rectangle(x, y, width, height);
+        return new Drawing.Rectangle(x, y, width, height);
     }
 
     private void OnBrowseClicked(object? sender, EventArgs e)
     {
-        using var dialog = new OpenFileDialog
+        using var dialog = new WinForms.OpenFileDialog
         {
             Filter = "Executáveis (*.exe)|*.exe|Todos os arquivos (*.*)|*.*",
             Title = "Selecionar executável",
         };
 
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        if (dialog.ShowDialog(this) == WinForms.DialogResult.OK)
         {
             _pathBox.Text = dialog.FileName;
         }
@@ -550,28 +552,28 @@ internal sealed class AppEditorDialog : Form
     {
         if (string.IsNullOrWhiteSpace(_nameBox.Text))
         {
-            MessageBox.Show(this, "Informe um nome para o aplicativo.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Informe um nome para o aplicativo.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _nameBox.Focus();
             return false;
         }
 
         if (string.IsNullOrWhiteSpace(_pathBox.Text))
         {
-            MessageBox.Show(this, "Informe o caminho do executável.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Informe o caminho do executável.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _pathBox.Focus();
             return false;
         }
 
         if (!File.Exists(_pathBox.Text))
         {
-            var answer = MessageBox.Show(
+            var answer = WinForms.MessageBox.Show(
                 this,
                 "O executável informado não foi encontrado. Deseja continuar assim mesmo?",
                 "Arquivo não encontrado",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
+                WinForms.MessageBoxButtons.YesNo,
+                WinForms.MessageBoxIcon.Question);
 
-            if (answer != DialogResult.Yes)
+            if (answer != WinForms.DialogResult.Yes)
             {
                 _pathBox.Focus();
                 return false;
@@ -580,7 +582,7 @@ internal sealed class AppEditorDialog : Form
 
         if (_zoneBox.Enabled && _zoneBox.SelectedItem is not ZoneOption)
         {
-            MessageBox.Show(this, "Selecione uma zona para posicionar o aplicativo.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Selecione uma zona para posicionar o aplicativo.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _zoneBox.Focus();
             return false;
         }

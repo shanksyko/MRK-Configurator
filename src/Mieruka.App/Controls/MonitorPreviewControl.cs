@@ -3,15 +3,17 @@ using System.Drawing;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Controls;
 
 /// <summary>
 /// Renders a monitor thumbnail and allows applying rectangular selections.
 /// </summary>
-internal sealed class MonitorPreviewControl : UserControl
+internal sealed class MonitorPreviewControl : WinForms.UserControl
 {
-    private readonly Label _titleLabel;
+    private readonly WinForms.Label _titleLabel;
     private readonly MonitorCanvas _canvas;
     private bool _isSelected;
 
@@ -20,24 +22,24 @@ internal sealed class MonitorPreviewControl : UserControl
     /// </summary>
     public MonitorPreviewControl()
     {
-        Padding = new Padding(8);
+        Padding = new WinForms.Padding(8);
         BackColor = SystemColors.ControlLightLight;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
         var captionFont = ResolveFont(SystemFonts.CaptionFont);
 
-        _titleLabel = new Label
+        _titleLabel = new WinForms.Label
         {
-            Dock = DockStyle.Top,
+            Dock = WinForms.DockStyle.Top,
             TextAlign = ContentAlignment.MiddleCenter,
             Height = 28,
-            Font = new Font(captionFont, FontStyle.Bold),
+            Font = new Drawing.Font(captionFont, FontStyle.Bold),
         };
 
         _canvas = new MonitorCanvas
         {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(4),
+            Dock = WinForms.DockStyle.Fill,
+            Margin = new WinForms.Padding(4),
         };
 
         Controls.Add(_canvas);
@@ -68,7 +70,7 @@ internal sealed class MonitorPreviewControl : UserControl
     /// </summary>
     public event EventHandler? MonitorSelected;
 
-    private static Font ResolveFont(Font? prototype)
+    private static Drawing.Font ResolveFont(Drawing.Font? prototype)
     {
         if (prototype is not null)
         {
@@ -80,7 +82,7 @@ internal sealed class MonitorPreviewControl : UserControl
             return defaultFont;
         }
 
-        return Control.DefaultFont;
+        return WinForms.Control.DefaultFont;
     }
 
     /// <summary>
@@ -171,7 +173,7 @@ internal sealed class MonitorPreviewControl : UserControl
         e.Effect = DragDropEffects.Move;
     }
 
-    private void CanvasOnSelectionApplied(object? sender, Rectangle selection)
+    private void CanvasOnSelectionApplied(object? sender, Drawing.Rectangle selection)
     {
         if (Monitor is null)
         {
@@ -181,7 +183,7 @@ internal sealed class MonitorPreviewControl : UserControl
         SelectionApplied?.Invoke(this, new SelectionAppliedEventArgs(Monitor, selection));
     }
 
-    private void CanvasOnMouseClick(object? sender, MouseEventArgs e)
+    private void CanvasOnMouseClick(object? sender, WinForms.MouseEventArgs e)
     {
         if (e.Button == MouseButtons.Left)
         {
@@ -189,17 +191,17 @@ internal sealed class MonitorPreviewControl : UserControl
         }
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnPaint(WinForms.PaintEventArgs e)
     {
         base.OnPaint(e);
 
-        var color = _isSelected ? Color.DodgerBlue : SystemColors.ControlDark;
+        var color = _isSelected ? Drawing.Color.DodgerBlue : SystemColors.ControlDark;
         var thickness = _isSelected ? 2 : 1;
         var rect = ClientRectangle;
         rect.Width -= 1;
         rect.Height -= 1;
 
-        using var pen = new Pen(color, thickness);
+        using var pen = new Drawing.Pen(color, thickness);
         e.Graphics.DrawRectangle(pen, rect);
     }
 
@@ -230,7 +232,7 @@ internal sealed class MonitorPreviewControl : UserControl
     /// </summary>
     public sealed class SelectionAppliedEventArgs : EventArgs
     {
-        internal SelectionAppliedEventArgs(MonitorInfo monitor, Rectangle selection)
+        internal SelectionAppliedEventArgs(MonitorInfo monitor, Drawing.Rectangle selection)
         {
             Monitor = monitor;
             Selection = selection;
@@ -244,10 +246,10 @@ internal sealed class MonitorPreviewControl : UserControl
         /// <summary>
         /// Gets the bounds of the selection in monitor coordinates.
         /// </summary>
-        public Rectangle Selection { get; }
+        public Drawing.Rectangle Selection { get; }
     }
 
-    private sealed class MonitorCanvas : Panel
+    private sealed class MonitorCanvas : WinForms.Panel
     {
         private readonly StringFormat _stringFormat = new()
         {
@@ -255,10 +257,10 @@ internal sealed class MonitorPreviewControl : UserControl
             LineAlignment = StringAlignment.Center,
         };
 
-        private Rectangle? _selection;
-        private RectangleF _currentDrag;
+        private Drawing.Rectangle? _selection;
+        private Drawing.RectangleF _currentDrag;
         private bool _isSelecting;
-        private PointF _dragStart;
+        private Drawing.PointF _dragStart;
         private bool _showDropCue;
 
         public MonitorCanvas()
@@ -266,12 +268,12 @@ internal sealed class MonitorPreviewControl : UserControl
             DoubleBuffered = true;
             AllowDrop = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
-            BackColor = Color.FromArgb(248, 248, 248);
+            BackColor = Drawing.Color.FromArgb(248, 248, 248);
         }
 
         public MonitorInfo? Monitor { get; set; }
 
-        public event EventHandler<Rectangle>? SelectionApplied;
+        public event EventHandler<Drawing.Rectangle>? SelectionApplied;
 
         public void DisplayWindow(WindowConfig? window)
         {
@@ -296,9 +298,9 @@ internal sealed class MonitorPreviewControl : UserControl
                 return;
             }
 
-            var monitorBounds = new Rectangle(0, 0, Monitor.Width, Monitor.Height);
+            var monitorBounds = new Drawing.Rectangle(0, 0, Monitor.Width, Monitor.Height);
 
-            Rectangle selection;
+            Drawing.Rectangle selection;
             if (window.FullScreen)
             {
                 selection = monitorBounds;
@@ -309,7 +311,7 @@ internal sealed class MonitorPreviewControl : UserControl
                 var y = window.Y ?? 0;
                 var width = window.Width ?? monitorBounds.Width;
                 var height = window.Height ?? monitorBounds.Height;
-                selection = Rectangle.Intersect(monitorBounds, new Rectangle(x, y, width, height));
+                selection = Drawing.Rectangle.Intersect(monitorBounds, new Drawing.Rectangle(x, y, width, height));
                 if (selection.Width <= 0 || selection.Height <= 0)
                 {
                     selection = monitorBounds;
@@ -331,7 +333,7 @@ internal sealed class MonitorPreviewControl : UserControl
             Invalidate();
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        protected override void OnPaint(WinForms.PaintEventArgs e)
         {
             base.OnPaint(e);
 
@@ -354,13 +356,13 @@ internal sealed class MonitorPreviewControl : UserControl
                 return;
             }
 
-            using var monitorBrush = new SolidBrush(Color.FromArgb(234, 240, 246));
-            using var monitorPen = new Pen(Color.SteelBlue, _showDropCue ? 4f : 2f);
+            using var monitorBrush = new SolidBrush(Drawing.Color.FromArgb(234, 240, 246));
+            using var monitorPen = new Drawing.Pen(Drawing.Color.SteelBlue, _showDropCue ? 4f : 2f);
 
             e.Graphics.FillRectangle(monitorBrush, surface);
             e.Graphics.DrawRectangle(monitorPen, surface.X, surface.Y, surface.Width, surface.Height);
 
-            RectangleF selectionRect;
+            Drawing.RectangleF selectionRect;
 
             if (_isSelecting)
             {
@@ -368,7 +370,7 @@ internal sealed class MonitorPreviewControl : UserControl
             }
             else if (_selection is { } selection)
             {
-                selectionRect = new RectangleF(
+                selectionRect = new Drawing.RectangleF(
                     surface.Left + (selection.X * scale),
                     surface.Top + (selection.Y * scale),
                     selection.Width * scale,
@@ -376,13 +378,13 @@ internal sealed class MonitorPreviewControl : UserControl
             }
             else
             {
-                selectionRect = RectangleF.Empty;
+                selectionRect = Drawing.RectangleF.Empty;
             }
 
             if (selectionRect.Width > 0f && selectionRect.Height > 0f)
             {
-                using var overlay = new SolidBrush(Color.FromArgb(80, Color.DeepSkyBlue));
-                using var outline = new Pen(Color.DeepSkyBlue, 2f);
+                using var overlay = new SolidBrush(Drawing.Color.FromArgb(80, Drawing.Color.DeepSkyBlue));
+                using var outline = new Drawing.Pen(Drawing.Color.DeepSkyBlue, 2f);
                 e.Graphics.FillRectangle(overlay, selectionRect);
                 e.Graphics.DrawRectangle(outline, selectionRect.X, selectionRect.Y, selectionRect.Width, selectionRect.Height);
             }
@@ -391,13 +393,13 @@ internal sealed class MonitorPreviewControl : UserControl
             var caption = Monitor.DeviceName;
             if (!string.IsNullOrWhiteSpace(caption))
             {
-                var captionBounds = new RectangleF(surface.Left, surface.Bottom + 6f, surface.Width, displayFont.Height + 6f);
+                var captionBounds = new Drawing.RectangleF(surface.Left, surface.Bottom + 6f, surface.Width, displayFont.Height + 6f);
                 var messageFont = ResolveFont(SystemFonts.MessageBoxFont ?? Font);
                 e.Graphics.DrawString(caption, messageFont, captionBrush, captionBounds, _stringFormat);
             }
         }
 
-        protected override void OnMouseDown(MouseEventArgs e)
+        protected override void OnMouseDown(WinForms.MouseEventArgs e)
         {
             base.OnMouseDown(e);
 
@@ -414,11 +416,11 @@ internal sealed class MonitorPreviewControl : UserControl
             Focus();
             Capture = true;
             _isSelecting = true;
-            _currentDrag = RectangleF.Empty;
+            _currentDrag = Drawing.RectangleF.Empty;
             _dragStart = ClampToSurface(e.Location, surface);
         }
 
-        protected override void OnMouseMove(MouseEventArgs e)
+        protected override void OnMouseMove(WinForms.MouseEventArgs e)
         {
             base.OnMouseMove(e);
 
@@ -433,11 +435,11 @@ internal sealed class MonitorPreviewControl : UserControl
             }
 
             var current = ClampToSurface(e.Location, surface);
-            _currentDrag = RectangleF.FromLTRB(_dragStart.X, _dragStart.Y, current.X, current.Y);
+            _currentDrag = Drawing.RectangleF.FromLTRB(_dragStart.X, _dragStart.Y, current.X, current.Y);
             Invalidate();
         }
 
-        protected override void OnMouseUp(MouseEventArgs e)
+        protected override void OnMouseUp(WinForms.MouseEventArgs e)
         {
             base.OnMouseUp(e);
 
@@ -460,14 +462,14 @@ internal sealed class MonitorPreviewControl : UserControl
             }
 
             var endPoint = ClampToSurface(e.Location, surface);
-            var dragRect = Normalize(RectangleF.FromLTRB(_dragStart.X, _dragStart.Y, endPoint.X, endPoint.Y));
+            var dragRect = Normalize(Drawing.RectangleF.FromLTRB(_dragStart.X, _dragStart.Y, endPoint.X, endPoint.Y));
 
             if (dragRect.Width < 4f || dragRect.Height < 4f)
             {
                 dragRect = surface;
             }
 
-            var selection = new Rectangle(
+            var selection = new Drawing.Rectangle(
                 x: (int)Math.Round((dragRect.Left - surface.Left) / scale),
                 y: (int)Math.Round((dragRect.Top - surface.Top) / scale),
                 width: (int)Math.Round(dragRect.Width / scale),
@@ -477,7 +479,7 @@ internal sealed class MonitorPreviewControl : UserControl
             selection.Height = Math.Max(1, Math.Min(Monitor.Height - selection.Y, selection.Height));
 
             _selection = selection;
-            _currentDrag = RectangleF.Empty;
+            _currentDrag = Drawing.RectangleF.Empty;
             Invalidate();
 
             SelectionApplied?.Invoke(this, selection);
@@ -493,9 +495,9 @@ internal sealed class MonitorPreviewControl : UserControl
             base.Dispose(disposing);
         }
 
-        private bool TryGetMonitorSurface(out RectangleF surface, out float scale)
+        private bool TryGetMonitorSurface(out Drawing.RectangleF surface, out float scale)
         {
-            surface = RectangleF.Empty;
+            surface = Drawing.RectangleF.Empty;
             scale = 1f;
 
             if (Monitor is null || Monitor.Width <= 0 || Monitor.Height <= 0)
@@ -515,11 +517,11 @@ internal sealed class MonitorPreviewControl : UserControl
             var left = (ClientSize.Width - width) / 2f;
             var top = (ClientSize.Height - height) / 2f;
 
-            surface = new RectangleF(left, top, width, height);
+            surface = new Drawing.RectangleF(left, top, width, height);
             return true;
         }
 
-        private static RectangleF Normalize(RectangleF rectangle)
+        private static Drawing.RectangleF Normalize(Drawing.RectangleF rectangle)
         {
             if (rectangle.Width >= 0f && rectangle.Height >= 0f)
             {
@@ -530,14 +532,14 @@ internal sealed class MonitorPreviewControl : UserControl
             var top = Math.Min(rectangle.Top, rectangle.Bottom);
             var right = Math.Max(rectangle.Left, rectangle.Right);
             var bottom = Math.Max(rectangle.Top, rectangle.Bottom);
-            return RectangleF.FromLTRB(left, top, right, bottom);
+            return Drawing.RectangleF.FromLTRB(left, top, right, bottom);
         }
 
-        private static PointF ClampToSurface(Point point, RectangleF surface)
+        private static Drawing.PointF ClampToSurface(Drawing.Point point, Drawing.RectangleF surface)
         {
             var x = Math.Max(surface.Left, Math.Min(surface.Right, point.X));
             var y = Math.Max(surface.Top, Math.Min(surface.Bottom, point.Y));
-            return new PointF(x, y);
+            return new Drawing.PointF(x, y);
         }
 
         private static bool KeysEqual(MonitorKey left, MonitorKey right)

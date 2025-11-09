@@ -615,7 +615,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
                 (pictureBox.ClientSize.Height - imageHeight) / 2f,
                 imageWidth,
                 imageHeight),
-            WinForms.PictureBoxSizeMode.Zoom => CalculateZoomRectangle(pictureBox, image, imageWidth, imageHeight),
+            WinForms.PictureBoxSizeMode.Zoom => CalculateZoomRectangle(pictureBox, image!, imageWidth, imageHeight),
             _ => new Drawing.RectangleF(0, 0, pictureBox.ClientSize.Width, pictureBox.ClientSize.Height),
         };
     }
@@ -641,8 +641,15 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         return new Drawing.RectangleF(x, y, width, height);
     }
 
-    private static bool TryGetImageSize(Drawing.Image image, out int width, out int height)
+    private static bool TryGetImageSize(Drawing.Image? image, out int width, out int height)
     {
+        if (image is null)
+        {
+            width = 0;
+            height = 0;
+            return false;
+        }
+
         try
         {
             width = image.Width;
