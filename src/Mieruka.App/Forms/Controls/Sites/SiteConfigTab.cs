@@ -5,10 +5,11 @@ using System.Linq;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
 using Mieruka.Core.Security;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
-internal sealed partial class SiteConfigTab : UserControl
+internal sealed partial class SiteConfigTab : WinForms.UserControl
 {
     private readonly BindingList<string> _hosts = new();
     private SiteConfig? _site;
@@ -92,28 +93,28 @@ internal sealed partial class SiteConfigTab : UserControl
     {
         if (!Uri.TryCreate(txtUrl.Text.Trim(), UriKind.Absolute, out var uri))
         {
-            MessageBox.Show(this, "URL inválida.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "URL inválida.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return;
         }
 
         if (!TryNormalizeHost(uri.Host, out var sanitized))
         {
-            MessageBox.Show(this, "Host não pôde ser normalizado.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Host não pôde ser normalizado.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
-        MessageBox.Show(this, $"URL válida para host '{sanitized}'.", "Validação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        WinForms.MessageBox.Show(this, $"URL válida para host '{sanitized}'.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
     }
 
     private void btnTestarSessao_Click(object? sender, EventArgs e)
     {
         if (_site is null)
         {
-            MessageBox.Show(this, "Selecione um site antes de testar.", "Sessão", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Selecione um site antes de testar.", "Sessão", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
-        MessageBox.Show(this, "Teste de sessão não está disponível nesta versão.", "Sessão", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        WinForms.MessageBox.Show(this, "Teste de sessão não está disponível nesta versão.", "Sessão", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
     }
 
     private void ValidateUrlInput(CancelEventArgs e)

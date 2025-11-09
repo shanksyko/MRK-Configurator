@@ -2,6 +2,7 @@ using System;
 using System.Security;
 using System.Windows.Forms;
 using Mieruka.Core.Security;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services;
 
@@ -14,7 +15,7 @@ public sealed class UiSecretsBridge
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
     }
 
-    public void Save(string siteId, TextBoxBase? usernameBox, TextBoxBase? passwordBox, TextBoxBase? totpBox)
+    public void Save(string siteId, WinForms.TextBoxBase? usernameBox, WinForms.TextBoxBase? passwordBox, WinForms.TextBoxBase? totpBox)
     {
         using var username = Extract(usernameBox);
         using var password = Extract(passwordBox);
@@ -38,7 +39,7 @@ public sealed class UiSecretsBridge
         _provider.Delete(siteId);
     }
 
-    private static SecureString? Extract(TextBoxBase? textBox)
+    private static SecureString? Extract(WinForms.TextBoxBase? textBox)
     {
         if (textBox is null)
         {

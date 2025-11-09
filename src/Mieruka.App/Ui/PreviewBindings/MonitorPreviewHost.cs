@@ -1255,7 +1255,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            ImageAnimator.StopAnimate(image, _frameAnimationHandler);
+            Drawing.ImageAnimator.StopAnimate(image, _frameAnimationHandler);
             return true;
         }
         catch
@@ -1273,7 +1273,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            ImageAnimator.Animate(image, _frameAnimationHandler);
+            Drawing.ImageAnimator.Animate(image, _frameAnimationHandler);
         }
         catch
         {
@@ -1285,7 +1285,7 @@ public sealed class MonitorPreviewHost : IDisposable
     {
         try
         {
-            return ImageAnimator.CanAnimate(image);
+            return Drawing.ImageAnimator.CanAnimate(image);
         }
         catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
         {
@@ -1895,9 +1895,9 @@ public sealed class MonitorPreviewHost : IDisposable
             var safeFont = font ?? WinForms.Control.DefaultFont;
             var safeText = text ?? string.Empty;
             var measured = graphics.MeasureString(safeText, safeFont);
-            var rect = new RectangleF(4, 4, measured.Width + 8, measured.Height + 4);
+            var rect = new Drawing.RectangleF(4, 4, measured.Width + 8, measured.Height + 4);
             graphics.FillRectangle(background, rect);
-            graphics.DrawString(safeText, safeFont, foreground, new PointF(rect.Left + 4, rect.Top + 2));
+            graphics.DrawString(safeText, safeFont, foreground, new Drawing.PointF(rect.Left + 4, rect.Top + 2));
         }
         catch
         {

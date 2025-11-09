@@ -14,6 +14,7 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
 using Mieruka.Core.Services;
 using Serilog;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Services;
 
@@ -35,7 +36,7 @@ internal static class WindowPlacementHelper
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint SwpNoActivate = 0x0010;
     private const int MinVisiblePixels = 32;
-    private static readonly Size DefaultFallbackSize = new(1280, 720);
+    private static readonly Drawing.Size DefaultFallbackSize = new(1280, 720);
     private static readonly TimeSpan ForegroundActivationCooldown = TimeSpan.FromSeconds(2);
     private static readonly object ForegroundActivationLock = new();
     private static IntPtr s_lastForegroundHandle;
@@ -127,7 +128,7 @@ internal static class WindowPlacementHelper
     /// <param name="window">Window configuration to apply.</param>
     /// <param name="monitor">Monitor that should host the window.</param>
     /// <returns>Absolute screen coordinates used for the window placement.</returns>
-    public static Rectangle ResolveBounds(WindowConfig window, MonitorInfo monitor)
+    public static Drawing.Rectangle ResolveBounds(WindowConfig window, MonitorInfo monitor)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(monitor);
@@ -137,11 +138,11 @@ internal static class WindowPlacementHelper
         return ValidateAndClamp(desired, monitor, useWorkArea: false);
     }
 
-    public static Rectangle ValidateAndClamp(Rectangle desired, MonitorInfo? monitor, bool useWorkArea)
+    public static Drawing.Rectangle ValidateAndClamp(Drawing.Rectangle desired, MonitorInfo? monitor, bool useWorkArea)
     {
         var original = desired;
-        Rectangle monitorBounds = Rectangle.Empty;
-        Rectangle workArea = Rectangle.Empty;
+        Drawing.Rectangle monitorBounds = Drawing.Rectangle.Empty;
+        Drawing.Rectangle workArea = Drawing.Rectangle.Empty;
 
         if (monitor is not null)
         {
@@ -152,7 +153,7 @@ internal static class WindowPlacementHelper
 
                 if ((monitorBounds.Width <= 0 || monitorBounds.Height <= 0) && monitor.Width > 0 && monitor.Height > 0)
                 {
-                    monitorBounds = new Rectangle(monitorBounds.Left, monitorBounds.Top, monitor.Width, monitor.Height);
+                    monitorBounds = new Drawing.Rectangle(monitorBounds.Left, monitorBounds.Top, monitor.Width, monitor.Height);
                 }
 
                 if (workArea.Width <= 0 || workArea.Height <= 0)
@@ -162,7 +163,7 @@ internal static class WindowPlacementHelper
             }
         }
 
-        Rectangle usableArea = useWorkArea ? workArea : monitorBounds;
+        Drawing.Rectangle usableArea = useWorkArea ? workArea : monitorBounds;
 
         if (usableArea.Width <= 0 || usableArea.Height <= 0)
         {
@@ -176,7 +177,7 @@ internal static class WindowPlacementHelper
                 {
                     if (descriptor.Width > 0 && descriptor.Height > 0)
                     {
-                        monitorBounds = new Rectangle(
+                        monitorBounds = new Drawing.Rectangle(
                             monitorBounds.Left,
                             monitorBounds.Top,
                             descriptor.Width,
@@ -184,7 +185,7 @@ internal static class WindowPlacementHelper
                     }
                     else
                     {
-                        monitorBounds = new Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
+                        monitorBounds = new Drawing.Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
                     }
                 }
 
@@ -202,7 +203,7 @@ internal static class WindowPlacementHelper
             }
             catch (InvalidOperationException ex)
             {
-                var fallback = new Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
+                var fallback = new Drawing.Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
                 Logger.Warning(
                     ex,
                     "MonitorFallback: No monitors detected, using default bounds {FallbackBounds}.",
@@ -213,7 +214,7 @@ internal static class WindowPlacementHelper
 
         if (usableArea.Width <= 0 || usableArea.Height <= 0)
         {
-            var fallback = new Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
+            var fallback = new Drawing.Rectangle(0, 0, DefaultFallbackSize.Width, DefaultFallbackSize.Height);
             Logger.Warning(
                 "InvalidBoundsDetected: Monitor area invalid, using default bounds {FallbackBounds}.",
                 fallback);
@@ -269,7 +270,7 @@ internal static class WindowPlacementHelper
             y = Math.Max(usableArea.Top, usableArea.Bottom - height);
         }
 
-        var clamped = new Rectangle(x, y, width, height);
+        var clamped = new Drawing.Rectangle(x, y, width, height);
         if (clamped != preClamp)
         {
             Logger.Information(
@@ -287,13 +288,13 @@ internal static class WindowPlacementHelper
     /// </summary>
     /// <param name="monitor">Monitor that should be inspected.</param>
     /// <returns>Absolute bounds of the monitor.</returns>
-    public static Rectangle GetMonitorBounds(MonitorInfo monitor)
+    public static Drawing.Rectangle GetMonitorBounds(MonitorInfo monitor)
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
         if (!OperatingSystem.IsWindows())
         {
-            return new Rectangle(0, 0, monitor.Width, monitor.Height);
+            return new Drawing.Rectangle(0, 0, monitor.Width, monitor.Height);
         }
 
         if (!string.IsNullOrWhiteSpace(monitor.DeviceName) &&
@@ -308,7 +309,7 @@ internal static class WindowPlacementHelper
             return bounds;
         }
 
-        return new Rectangle(0, 0, monitor.Width, monitor.Height);
+        return new Drawing.Rectangle(0, 0, monitor.Width, monitor.Height);
     }
 
     /// <summary>
@@ -500,7 +501,7 @@ internal static class WindowPlacementHelper
     /// <summary>
     /// Calculates device coordinates for the supplied zone.
     /// </summary>
-    public static Rectangle CalculateZoneBounds(MonitorInfo monitor, ZoneRect zone)
+    public static Drawing.Rectangle CalculateZoneBounds(MonitorInfo monitor, ZoneRect zone)
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
@@ -583,7 +584,7 @@ internal static class WindowPlacementHelper
 
         var bounds = CalculateZoneBounds(monitor, zone);
         var (normalizedX, normalizedY, normalizedWidth, normalizedHeight) = NormalizeBounds(bounds);
-        var normalizedBounds = new Rectangle(normalizedX, normalizedY, normalizedWidth, normalizedHeight);
+        var normalizedBounds = new Drawing.Rectangle(normalizedX, normalizedY, normalizedWidth, normalizedHeight);
         var effectiveTimeout = timeout ?? DefaultPlacementTimeout;
         var stopwatch = Stopwatch.StartNew();
         var handle = (IntPtr)hWnd;
@@ -614,7 +615,7 @@ internal static class WindowPlacementHelper
         return false;
     }
 
-    private static Rectangle CalculateBounds(WindowConfig window, MonitorInfo monitor, Rectangle monitorBounds)
+    private static Drawing.Rectangle CalculateBounds(WindowConfig window, MonitorInfo monitor, Drawing.Rectangle monitorBounds)
     {
         if (window.FullScreen)
         {
@@ -652,10 +653,10 @@ internal static class WindowPlacementHelper
             height = monitorBounds.Height;
         }
 
-        return NormalizeBounds(new Rectangle(left, top, width, height), monitor);
+        return NormalizeBounds(new Drawing.Rectangle(left, top, width, height), monitor);
     }
 
-    private static Rectangle CalculateZoneRectangle(ZoneRect zone, Rectangle monitorBounds)
+    private static Drawing.Rectangle CalculateZoneRectangle(ZoneRect zone, Drawing.Rectangle monitorBounds)
     {
         var width = Math.Max(1, (int)Math.Round(monitorBounds.Width * (zone.WidthPercentage / 100d), MidpointRounding.AwayFromZero));
         var height = Math.Max(1, (int)Math.Round(monitorBounds.Height * (zone.HeightPercentage / 100d), MidpointRounding.AwayFromZero));
@@ -697,10 +698,10 @@ internal static class WindowPlacementHelper
                 break;
         }
 
-        return new Rectangle(x, y, width, height);
+        return new Drawing.Rectangle(x, y, width, height);
     }
 
-    private static Rectangle ComputeTargetRect(MonitorInfo monitor, ZoneRect zone)
+    private static Drawing.Rectangle ComputeTargetRect(MonitorInfo monitor, ZoneRect zone)
     {
         if (!TryGetMonitorAreas(monitor, out var monitorBounds, out _))
         {
@@ -804,10 +805,10 @@ internal static class WindowPlacementHelper
         RecordForegroundActivation(handle);
     }
 
-    private static bool TryGetMonitorAreas(MonitorInfo monitor, out Rectangle bounds, out Rectangle workArea)
+    private static bool TryGetMonitorAreas(MonitorInfo monitor, out Drawing.Rectangle bounds, out Drawing.Rectangle workArea)
     {
-        bounds = Rectangle.Empty;
-        workArea = Rectangle.Empty;
+        bounds = Drawing.Rectangle.Empty;
+        workArea = Drawing.Rectangle.Empty;
 
         if (!OperatingSystem.IsWindows())
         {
@@ -843,8 +844,8 @@ internal static class WindowPlacementHelper
             return false;
         }
 
-        bounds = Rectangle.FromLTRB(info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom);
-        workArea = Rectangle.FromLTRB(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom);
+        bounds = Drawing.Rectangle.FromLTRB(info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom);
+        workArea = Drawing.Rectangle.FromLTRB(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom);
         return true;
     }
 
@@ -871,7 +872,7 @@ internal static class WindowPlacementHelper
             && left.TargetId == right.TargetId;
     }
 
-    private static Rectangle NormalizeBounds(Rectangle bounds, MonitorInfo monitor)
+    private static Drawing.Rectangle NormalizeBounds(Drawing.Rectangle bounds, MonitorInfo monitor)
     {
         var monitorBounds = GetMonitorBounds(monitor);
         var fallbackWidth = monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width;
@@ -883,10 +884,10 @@ internal static class WindowPlacementHelper
         width = Math.Max(1, width);
         height = Math.Max(1, height);
 
-        return new Rectangle(bounds.Left, bounds.Top, width, height);
+        return new Drawing.Rectangle(bounds.Left, bounds.Top, width, height);
     }
 
-    private static (int x, int y, int w, int h) NormalizeBounds(Rectangle bounds)
+    private static (int x, int y, int w, int h) NormalizeBounds(Drawing.Rectangle bounds)
     {
         var width = Math.Max(1, bounds.Width);
         var height = Math.Max(1, bounds.Height);
@@ -911,9 +912,9 @@ internal static class WindowPlacementHelper
     private static string? NormalizeStableId(string? stableId)
         => string.IsNullOrWhiteSpace(stableId) ? null : stableId.Trim();
 
-    private static bool TryGetDeviceBounds(string deviceName, out Rectangle bounds)
+    private static bool TryGetDeviceBounds(string deviceName, out Drawing.Rectangle bounds)
     {
-        bounds = Rectangle.Empty;
+        bounds = Drawing.Rectangle.Empty;
 
         if (!OperatingSystem.IsWindows())
         {
@@ -932,7 +933,7 @@ internal static class WindowPlacementHelper
 
         var width = ClampToInt(devMode.dmPelsWidth);
         var height = ClampToInt(devMode.dmPelsHeight);
-        bounds = new Rectangle(devMode.dmPositionX, devMode.dmPositionY, width, height);
+        bounds = new Drawing.Rectangle(devMode.dmPositionX, devMode.dmPositionY, width, height);
         return width > 0 && height > 0;
     }
 

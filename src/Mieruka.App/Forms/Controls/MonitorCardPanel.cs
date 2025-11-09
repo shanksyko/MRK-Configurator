@@ -1,9 +1,11 @@
 using System.Drawing;
 using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Forms.Controls;
 
-internal sealed class MonitorCardPanel : Panel
+internal sealed class MonitorCardPanel : WinForms.Panel
 {
     private bool _selected;
 
@@ -30,7 +32,7 @@ internal sealed class MonitorCardPanel : Panel
         }
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnPaint(WinForms.PaintEventArgs e)
     {
         base.OnPaint(e);
 
@@ -42,7 +44,7 @@ internal sealed class MonitorCardPanel : Panel
         rect.Width -= 1;
         rect.Height -= 1;
 
-        using var pen = new Pen(borderColor, 2f);
+        using var pen = new Drawing.Pen(borderColor, 2f);
         e.Graphics.DrawRectangle(pen, rect);
     }
 }

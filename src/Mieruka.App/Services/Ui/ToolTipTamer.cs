@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services.Ui;
 
@@ -20,9 +21,9 @@ public static class ToolTipTamer
     /// </summary>
     /// <param name="container">Optional container used to manage the component lifetime.</param>
     /// <returns>The configured tooltip instance.</returns>
-    public static ToolTip Create(IContainer? container = null)
+    public static WinForms.ToolTip Create(IContainer? container = null)
     {
-        var toolTip = container is null ? new ToolTip() : new ToolTip(container);
+        var toolTip = container is null ? new WinForms.ToolTip() : new WinForms.ToolTip(container);
         return Configure(toolTip);
     }
 
@@ -31,7 +32,7 @@ public static class ToolTipTamer
     /// </summary>
     /// <param name="toolTip">Tooltip to configure.</param>
     /// <returns>The configured tooltip for chaining.</returns>
-    public static ToolTip Configure(ToolTip toolTip)
+    public static WinForms.ToolTip Configure(WinForms.ToolTip toolTip)
     {
         ArgumentNullException.ThrowIfNull(toolTip);
 
@@ -57,7 +58,7 @@ public static class ToolTipTamer
             return;
         }
 
-        foreach (var toolTip in container.Components.OfType<ToolTip>())
+        foreach (var toolTip in container.Components.OfType<WinForms.ToolTip>())
         {
             Configure(toolTip);
         }
@@ -69,7 +70,7 @@ public static class ToolTipTamer
     /// </summary>
     /// <param name="root">Root control whose descendants should be inspected.</param>
     /// <param name="container">Container associated with the control tree.</param>
-    public static void Tame(Control root, IContainer? container)
+    public static void Tame(WinForms.Control root, IContainer? container)
     {
         ArgumentNullException.ThrowIfNull(root);
 
@@ -79,7 +80,7 @@ public static class ToolTipTamer
 
     private static void ToolTipOnPopup(object? sender, PopupEventArgs e)
     {
-        if (sender is not ToolTip toolTip)
+        if (sender is not WinForms.ToolTip toolTip)
         {
             return;
         }
@@ -96,30 +97,30 @@ public static class ToolTipTamer
         }
     }
 
-    private static bool IsFlickerProne(Control? control)
+    private static bool IsFlickerProne(WinForms.Control? control)
     {
-        return control is ListView or DataGridView;
+        return control is WinForms.ListView or DataGridView;
     }
 
-    private static void DisableHotTracking(Control root)
+    private static void DisableHotTracking(WinForms.Control root)
     {
         foreach (var control in EnumerateSelfAndChildren(root))
         {
             switch (control)
             {
-                case ListView listView when listView.HotTracking:
+                case WinForms.ListView listView when listView.HotTracking:
                     listView.HotTracking = false;
                     break;
-                case ListView listView when listView.HoverSelection:
+                case WinForms.ListView listView when listView.HoverSelection:
                     listView.HoverSelection = false;
                     break;
             }
         }
     }
 
-    private static IEnumerable<Control> EnumerateSelfAndChildren(Control root)
+    private static IEnumerable<WinForms.Control> EnumerateSelfAndChildren(WinForms.Control root)
     {
-        var stack = new Stack<Control>();
+        var stack = new Stack<WinForms.Control>();
         stack.Push(root);
 
         while (stack.Count > 0)
@@ -127,7 +128,7 @@ public static class ToolTipTamer
             var current = stack.Pop();
             yield return current;
 
-            foreach (Control child in current.Controls)
+            foreach (WinForms.Control child in current.Controls)
             {
                 stack.Push(child);
             }

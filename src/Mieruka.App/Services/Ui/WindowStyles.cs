@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services.Ui;
 
@@ -59,15 +60,15 @@ internal static class WindowStyles
 
 internal static class DoubleBufferingHelper
 {
-    private static readonly MethodInfo? SetStyleMethod = typeof(Control).GetMethod(
+    private static readonly MethodInfo? SetStyleMethod = typeof(WinForms.Control).GetMethod(
         "SetStyle",
         BindingFlags.Instance | BindingFlags.NonPublic);
 
-    private static readonly PropertyInfo? DoubleBufferedProperty = typeof(Control).GetProperty(
+    private static readonly PropertyInfo? DoubleBufferedProperty = typeof(WinForms.Control).GetProperty(
         "DoubleBuffered",
         BindingFlags.Instance | BindingFlags.NonPublic);
 
-    public static void EnableOptimizedDoubleBuffering(Control control)
+    public static void EnableOptimizedDoubleBuffering(WinForms.Control control)
     {
         if (control is null)
         {
@@ -75,13 +76,13 @@ internal static class DoubleBufferingHelper
         }
 
         Apply(control);
-        foreach (Control child in control.Controls)
+        foreach (WinForms.Control child in control.Controls)
         {
             EnableOptimizedDoubleBuffering(child);
         }
     }
 
-    private static void Apply(Control control)
+    private static void Apply(WinForms.Control control)
     {
         const ControlStyles styles = ControlStyles.AllPaintingInWmPaint |
                                      ControlStyles.OptimizedDoubleBuffer |

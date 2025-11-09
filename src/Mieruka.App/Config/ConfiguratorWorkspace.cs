@@ -7,6 +7,7 @@ using System.Linq;
 using Mieruka.App.Services;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Config;
 
@@ -126,7 +127,7 @@ internal sealed class ConfiguratorWorkspace
     /// <param name="monitor">Target monitor.</param>
     /// <param name="bounds">Optional bounds relative to the monitor.</param>
     /// <returns><c>true</c> when the entry was updated; otherwise, <c>false</c>.</returns>
-    public bool TryAssignEntryToMonitor(EntryReference entry, MonitorInfo monitor, Rectangle? bounds = null)
+    public bool TryAssignEntryToMonitor(EntryReference entry, MonitorInfo monitor, Drawing.Rectangle? bounds = null)
     {
         return entry.Kind switch
         {
@@ -143,7 +144,7 @@ internal sealed class ConfiguratorWorkspace
     /// <param name="monitor">Monitor that received the selection.</param>
     /// <param name="selection">Bounds of the selected area.</param>
     /// <returns><c>true</c> when the entry was updated; otherwise, <c>false</c>.</returns>
-    public bool TryApplySelection(EntryReference entry, MonitorInfo monitor, Rectangle selection)
+    public bool TryApplySelection(EntryReference entry, MonitorInfo monitor, Drawing.Rectangle selection)
     {
         var normalized = NormalizeSelection(selection, monitor);
         return TryAssignEntryToMonitor(entry, monitor, normalized);
@@ -155,7 +156,7 @@ internal sealed class ConfiguratorWorkspace
     /// <param name="window">Window configuration.</param>
     /// <param name="monitor">Monitor that owns the window.</param>
     /// <returns>Rectangle representing the configured area.</returns>
-    public Rectangle GetSelectionRectangle(WindowConfig window, MonitorInfo monitor)
+    public Drawing.Rectangle GetSelectionRectangle(WindowConfig window, MonitorInfo monitor)
     {
         var monitorBounds = CreateMonitorRelativeBounds(monitor);
         var monitorWidth = monitorBounds.Width;
@@ -170,8 +171,8 @@ internal sealed class ConfiguratorWorkspace
         var y = window.Y ?? 0;
         var width = window.Width ?? monitorWidth;
         var height = window.Height ?? monitorHeight;
-        var candidate = new Rectangle(x, y, width, height);
-        var intersection = Rectangle.Intersect(monitorBounds, candidate);
+        var candidate = new Drawing.Rectangle(x, y, width, height);
+        var intersection = Drawing.Rectangle.Intersect(monitorBounds, candidate);
         return intersection.Width > 0 && intersection.Height > 0 ? intersection : monitorBounds;
     }
 
@@ -255,7 +256,7 @@ internal sealed class ConfiguratorWorkspace
         return null;
     }
 
-    private static WindowConfig ApplyWindow(WindowConfig source, MonitorInfo monitor, Rectangle? bounds)
+    private static WindowConfig ApplyWindow(WindowConfig source, MonitorInfo monitor, Drawing.Rectangle? bounds)
     {
         var monitorBounds = CreateMonitorRelativeBounds(monitor);
 
@@ -285,19 +286,19 @@ internal sealed class ConfiguratorWorkspace
         };
     }
 
-    private static Rectangle NormalizeSelection(Rectangle selection, MonitorInfo monitor)
+    private static Drawing.Rectangle NormalizeSelection(Drawing.Rectangle selection, MonitorInfo monitor)
     {
         var monitorBounds = CreateMonitorRelativeBounds(monitor);
-        var intersection = Rectangle.Intersect(monitorBounds, selection);
+        var intersection = Drawing.Rectangle.Intersect(monitorBounds, selection);
         return intersection.Width <= 0 || intersection.Height <= 0 ? monitorBounds : intersection;
     }
 
-    private static Rectangle CreateMonitorRelativeBounds(MonitorInfo monitor)
+    private static Drawing.Rectangle CreateMonitorRelativeBounds(MonitorInfo monitor)
     {
         var bounds = WindowPlacementHelper.GetMonitorBounds(monitor);
         var width = Math.Max(1, bounds.Width > 0 ? bounds.Width : monitor.Width);
         var height = Math.Max(1, bounds.Height > 0 ? bounds.Height : monitor.Height);
-        return new Rectangle(0, 0, width, height);
+        return new Drawing.Rectangle(0, 0, width, height);
     }
 
     private static bool MonitorKeysEqual(MonitorKey left, MonitorKey right)

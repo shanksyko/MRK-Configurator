@@ -4,10 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.Core.Models;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
-internal sealed partial class ArgsTab : UserControl
+internal sealed partial class ArgsTab : WinForms.UserControl
 {
     private SiteConfig? _site;
 

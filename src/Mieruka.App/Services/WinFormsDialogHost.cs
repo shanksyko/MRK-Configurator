@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Services;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services;
 
@@ -11,9 +12,9 @@ namespace Mieruka.App.Services;
 /// </summary>
 public sealed class WinFormsDialogHost : IDialogHost
 {
-    private readonly Control _owner;
+    private readonly WinForms.Control _owner;
 
-    public WinFormsDialogHost(Control owner)
+    public WinFormsDialogHost(WinForms.Control owner)
     {
         _owner = owner ?? throw new ArgumentNullException(nameof(owner));
     }
@@ -60,14 +61,14 @@ public sealed class WinFormsDialogHost : IDialogHost
 
             try
             {
-                var result = MessageBox.Show(
+                var result = WinForms.MessageBox.Show(
                     _owner,
                     message,
                     title,
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
+                    WinForms.MessageBoxButtons.YesNo,
+                    WinForms.MessageBoxIcon.Question);
 
-                tcs.TrySetResult(result == DialogResult.Yes);
+                tcs.TrySetResult(result == WinForms.DialogResult.Yes);
             }
             catch (Exception ex)
             {

@@ -23,10 +23,12 @@ using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
 using Serilog;
 using ProgramaConfig = Mieruka.Core.Models.AppConfig;
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Mieruka.App.Forms;
 
-public partial class MainForm : Form
+public partial class MainForm : WinForms.Form
 {
     private readonly BindingList<ProgramaConfig> _programas = new();
     private readonly ITelemetry _telemetry = new UiTelemetry();
@@ -44,11 +46,11 @@ public partial class MainForm : Form
     private readonly ProfileStore _profileStore = new();
     private readonly JsonStore<PreviewGraphicsOptions> _graphicsOptionsStore;
     private PreviewGraphicsOptions _graphicsOptions;
-    private ToolStrip? _toolStrip;
-    private ToolStripDropDownButton? _graphicsDropDown;
-    private ToolStripMenuItem? _graphicsAutoItem;
-    private ToolStripMenuItem? _graphicsGpuItem;
-    private ToolStripMenuItem? _graphicsGdiItem;
+    private WinForms.ToolStrip? _toolStrip;
+    private WinForms.ToolStripDropDownButton? _graphicsDropDown;
+    private WinForms.ToolStripMenuItem? _graphicsAutoItem;
+    private WinForms.ToolStripMenuItem? _graphicsGpuItem;
+    private WinForms.ToolStripMenuItem? _graphicsGdiItem;
     private ProfileExecutor? _profileExecutor;
     private CancellationTokenSource? _profileExecutionCts;
     private Task? _profileExecutionTask;
@@ -106,14 +108,14 @@ public partial class MainForm : Form
 
     private void EnsureToolbarWithOptionsButton()
     {
-        _toolStrip = Controls.OfType<ToolStrip>().FirstOrDefault();
+        _toolStrip = Controls.OfType<WinForms.ToolStrip>().FirstOrDefault();
         if (_toolStrip == null)
         {
-            _toolStrip = new ToolStrip
+            _toolStrip = new WinForms.ToolStrip
             {
-                GripStyle = ToolStripGripStyle.Hidden,
+                GripStyle = WinForms.ToolStripGripStyle.Hidden,
                 RenderMode = ToolStripRenderMode.System,
-                Dock = DockStyle.Top
+                Dock = WinForms.DockStyle.Top
             };
             Controls.Add(_toolStrip);
             _toolStrip.BringToFront();
@@ -121,12 +123,12 @@ public partial class MainForm : Form
 
         const string dropDownName = "previewGraphicsDropDown";
         _graphicsDropDown = _toolStrip.Items
-            .OfType<ToolStripDropDownButton>()
+            .OfType<WinForms.ToolStripDropDownButton>()
             .FirstOrDefault(b => string.Equals(b.Name, dropDownName, StringComparison.Ordinal));
 
         if (_graphicsDropDown is null)
         {
-            _graphicsDropDown = new ToolStripDropDownButton
+            _graphicsDropDown = new WinForms.ToolStripDropDownButton
             {
                 Name = dropDownName,
                 Text = "Prévia",
@@ -144,7 +146,7 @@ public partial class MainForm : Form
         _graphicsGpuItem = CreateGraphicsMenuItem("Ativada (GPU)", PreviewGraphicsMode.Gpu, "Força o uso de GPU sempre que possível");
         _graphicsGdiItem = CreateGraphicsMenuItem("Desativada (GDI)", PreviewGraphicsMode.Gdi, "Força o modo GDI para o preview");
 
-        _graphicsDropDown.DropDownItems.AddRange(new ToolStripItem[]
+        _graphicsDropDown.DropDownItems.AddRange(new WinForms.ToolStripItem[]
         {
             _graphicsAutoItem,
             _graphicsGpuItem,
@@ -155,12 +157,12 @@ public partial class MainForm : Form
 
         const string openLogsButtonName = "openLogsButton";
         var openLogsButton = _toolStrip.Items
-            .OfType<ToolStripButton>()
+            .OfType<WinForms.ToolStripButton>()
             .FirstOrDefault(b => string.Equals(b.Name, openLogsButtonName, StringComparison.Ordinal));
 
         if (openLogsButton is null)
         {
-            openLogsButton = new ToolStripButton
+            openLogsButton = new WinForms.ToolStripButton
             {
                 Name = openLogsButtonName,
                 Text = "Abrir logs",
@@ -194,9 +196,9 @@ public partial class MainForm : Form
         }
     }
 
-    private ToolStripMenuItem CreateGraphicsMenuItem(string text, PreviewGraphicsMode mode, string toolTip)
+    private WinForms.ToolStripMenuItem CreateGraphicsMenuItem(string text, PreviewGraphicsMode mode, string toolTip)
     {
-        var item = new ToolStripMenuItem
+        var item = new WinForms.ToolStripMenuItem
         {
             Text = text,
             ToolTipText = toolTip,
@@ -209,7 +211,7 @@ public partial class MainForm : Form
 
     private void OnGraphicsModeMenuItemClick(object? sender, EventArgs e)
     {
-        if (sender is not ToolStripMenuItem item || item.Tag is not PreviewGraphicsMode mode)
+        if (sender is not WinForms.ToolStripMenuItem item || item.Tag is not PreviewGraphicsMode mode)
         {
             return;
         }
@@ -232,7 +234,7 @@ public partial class MainForm : Form
             var shouldRestart = wasRunning
                 || (_previewsRequested
                     && !_manuallyStoppedMonitors.Contains(context.MonitorId)
-                    && WindowState != FormWindowState.Minimized);
+                    && WindowState != WinForms.FormWindowState.Minimized);
 
             if (!shouldRestart)
             {
@@ -242,7 +244,7 @@ public partial class MainForm : Form
             context.Host.Stop();
 
             if (_manuallyStoppedMonitors.Contains(context.MonitorId)
-                || WindowState == FormWindowState.Minimized)
+                || WindowState == WinForms.FormWindowState.Minimized)
             {
                 continue;
             }
@@ -416,7 +418,7 @@ public partial class MainForm : Form
 
     private void MainForm_Resize(object? sender, EventArgs e)
     {
-        if (WindowState == FormWindowState.Minimized)
+        if (WindowState == WinForms.FormWindowState.Minimized)
         {
             PausePreviews();
             return;
@@ -428,7 +430,7 @@ public partial class MainForm : Form
         }
     }
 
-    private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
+    private void MainForm_FormClosing(object? sender, WinForms.FormClosingEventArgs e)
     {
         StopAutomaticPreviews(clearManualState: true);
         DisposeMonitorCards();
@@ -489,7 +491,7 @@ public partial class MainForm : Form
         var expectedIds = new HashSet<string>(cardSources.Select(ResolveMonitorId), StringComparer.OrdinalIgnoreCase);
         _manuallyStoppedMonitors.RemoveWhere(id => !expectedIds.Contains(id));
 
-        var shouldRestart = _previewsRequested && WindowState != FormWindowState.Minimized;
+        var shouldRestart = _previewsRequested && WindowState != WinForms.FormWindowState.Minimized;
 
         DisposeMonitorCards();
 
@@ -720,7 +722,7 @@ public partial class MainForm : Form
 
     private static IReadOnlyList<MonitorInfo> CreateFallbackMonitors()
     {
-        var screens = Screen.AllScreens;
+        var screens = WinForms.Screen.AllScreens;
         if (screens is null || screens.Length == 0)
         {
             return Array.Empty<MonitorInfo>();
@@ -780,7 +782,7 @@ public partial class MainForm : Form
         var percent = 100F / desiredColumns;
         for (var i = 0; i < desiredColumns; i++)
         {
-            tlpMonitores.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, percent));
+            tlpMonitores.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, percent));
         }
 
         tlpMonitores.ResumeLayout(true);
@@ -812,7 +814,7 @@ public partial class MainForm : Form
 
             if (tlpMonitores.RowStyles.Count <= row)
             {
-                tlpMonitores.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                tlpMonitores.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
             }
 
             tlpMonitores.Controls.Add(context.Card, column, row);
@@ -824,10 +826,10 @@ public partial class MainForm : Form
         UpdateMonitorSelectionVisuals();
     }
 
-    private static void ApplyMonitorId(Control control, string monitorId)
+    private static void ApplyMonitorId(WinForms.Control control, string monitorId)
     {
         control.Tag = monitorId;
-        foreach (Control child in control.Controls)
+        foreach (WinForms.Control child in control.Controls)
         {
             ApplyMonitorId(child, monitorId);
         }
@@ -835,7 +837,7 @@ public partial class MainForm : Form
 
     private void OnMonitorCardSelected(object? sender, EventArgs e)
     {
-        if (sender is not Control control || control.Tag is not string monitorId)
+        if (sender is not WinForms.Control control || control.Tag is not string monitorId)
         {
             return;
         }
@@ -848,7 +850,7 @@ public partial class MainForm : Form
 
     private void OnMonitorCardStopRequested(object? sender, EventArgs e)
     {
-        if (sender is not Control control || control.Tag is not string monitorId)
+        if (sender is not WinForms.Control control || control.Tag is not string monitorId)
         {
             return;
         }
@@ -864,7 +866,7 @@ public partial class MainForm : Form
 
     private void OnMonitorCardTestRequested(object? sender, EventArgs e)
     {
-        if (sender is not Control control || control.Tag is not string monitorId)
+        if (sender is not WinForms.Control control || control.Tag is not string monitorId)
         {
             return;
         }
@@ -883,12 +885,12 @@ public partial class MainForm : Form
             {
                 if (!context.Host.Start(preferGpu: ShouldPreferGpu()))
                 {
-                    MessageBox.Show(
+                    WinForms.MessageBox.Show(
                         this,
                         "Não foi possível iniciar o preview para este monitor.",
                         "Preview",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
+                        WinForms.MessageBoxButtons.OK,
+                        WinForms.MessageBoxIcon.Warning);
                     return;
                 }
             }
@@ -897,12 +899,12 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível abrir o preview: {ex.Message}",
                 "Preview",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -925,15 +927,15 @@ public partial class MainForm : Form
         window.UpdateMonitorName(displayName);
         window.Bounds = bounds;
 
-        if (window.WindowState == FormWindowState.Minimized)
+        if (window.WindowState == WinForms.FormWindowState.Minimized)
         {
-            window.WindowState = FormWindowState.Normal;
+            window.WindowState = WinForms.FormWindowState.Normal;
         }
 
         window.Activate();
     }
 
-    private Rectangle ResolveMonitorTestArea(MonitorCardContext context)
+    private Drawing.Rectangle ResolveMonitorTestArea(MonitorCardContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -969,27 +971,27 @@ public partial class MainForm : Form
             }
         }
 
-        var fallbackLocation = Screen.PrimaryScreen?.WorkingArea.Location ?? new Point(100, 100);
+        var fallbackLocation = WinForms.Screen.PrimaryScreen?.WorkingArea.Location ?? new Drawing.Point(100, 100);
         const int fallbackWidth = 800;
         const int fallbackHeight = 600;
-        return new Rectangle(fallbackLocation, new Size(fallbackWidth, fallbackHeight));
+        return new Drawing.Rectangle(fallbackLocation, new Drawing.Size(fallbackWidth, fallbackHeight));
     }
 
-    private static Rectangle NormalizeRectangle(Rectangle rectangle)
+    private static Drawing.Rectangle NormalizeRectangle(Drawing.Rectangle rectangle)
     {
         if (rectangle.Width <= 0 || rectangle.Height <= 0)
         {
-            return Rectangle.Empty;
+            return Drawing.Rectangle.Empty;
         }
 
         return rectangle;
     }
 
-    private static Screen? FindScreenForMonitor(MonitorCardContext context)
+    private static WinForms.Screen? FindScreenForMonitor(MonitorCardContext context)
     {
         if (!string.IsNullOrWhiteSpace(context.Monitor.DeviceName))
         {
-            var byDevice = Screen.AllScreens.FirstOrDefault(screen =>
+            var byDevice = WinForms.Screen.AllScreens.FirstOrDefault(screen =>
                 string.Equals(screen.DeviceName, context.Monitor.DeviceName, StringComparison.OrdinalIgnoreCase));
             if (byDevice is not null)
             {
@@ -997,7 +999,7 @@ public partial class MainForm : Form
             }
         }
 
-        foreach (var screen in Screen.AllScreens)
+        foreach (var screen in WinForms.Screen.AllScreens)
         {
             if (screen.Bounds == context.Monitor.Bounds || screen.WorkingArea == context.Monitor.WorkArea)
             {
@@ -1005,7 +1007,7 @@ public partial class MainForm : Form
             }
         }
 
-        return Screen.AllScreens.FirstOrDefault();
+        return WinForms.Screen.AllScreens.FirstOrDefault();
     }
 
     private void UpdateSelectedMonitor(string? monitorId, bool notify = true)
@@ -1036,7 +1038,7 @@ public partial class MainForm : Form
             var isSelected = SelectedMonitorId is not null &&
                 string.Equals(context.MonitorId, SelectedMonitorId, StringComparison.OrdinalIgnoreCase);
 
-            if (context.Card is Forms.Controls.MonitorCardPanel monitorCard)
+            if (context.Card is Controls.MonitorCardPanel monitorCard)
             {
                 monitorCard.Selected = isSelected;
             }
@@ -1053,7 +1055,7 @@ public partial class MainForm : Form
     {
         _previewsRequested = true;
 
-        if (WindowState == FormWindowState.Minimized)
+        if (WindowState == WinForms.FormWindowState.Minimized)
         {
             return;
         }
@@ -1133,9 +1135,9 @@ public partial class MainForm : Form
         }
     }
 
-    private void dgvProgramas_KeyDown(object? sender, KeyEventArgs e)
+    private void dgvProgramas_KeyDown(object? sender, WinForms.KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Delete)
+        if (e.KeyCode == WinForms.Keys.Delete)
         {
             btnExcluir_Click(sender, EventArgs.Empty);
             e.Handled = true;
@@ -1151,7 +1153,7 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Preview", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Preview", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -1193,14 +1195,14 @@ public partial class MainForm : Form
             return;
         }
 
-        var confirmacao = MessageBox.Show(
+        var confirmacao = WinForms.MessageBox.Show(
             this,
             $"Deseja remover o programa '{selecionado.Id}'?",
             "Excluir Programa",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
+            WinForms.MessageBoxButtons.YesNo,
+            WinForms.MessageBoxIcon.Question);
 
-        if (confirmacao != DialogResult.Yes)
+        if (confirmacao != WinForms.DialogResult.Yes)
         {
             return;
         }
@@ -1235,7 +1237,7 @@ public partial class MainForm : Form
         catch (Exception ex)
         {
             _telemetry.Error("Falha ao iniciar o orchestrator.", ex);
-            MessageBox.Show(this, $"Erro ao iniciar: {ex.Message}", "Orchestrator", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Erro ao iniciar: {ex.Message}", "Orchestrator", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -1261,7 +1263,7 @@ public partial class MainForm : Form
         catch (Exception ex)
         {
             _telemetry.Warn("Falha ao parar o orchestrator.", ex);
-            MessageBox.Show(this, $"Erro ao parar: {ex.Message}", "Orchestrator", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Erro ao parar: {ex.Message}", "Orchestrator", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -1290,7 +1292,7 @@ public partial class MainForm : Form
         var selecionado = ObterProgramaSelecionado();
         if (selecionado is null)
         {
-            MessageBox.Show(this, "Selecione um item para testar.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Selecione um item para testar.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -1325,7 +1327,7 @@ public partial class MainForm : Form
             var profiles = _profileStore.ListAll();
             if (profiles.Count == 0)
             {
-                MessageBox.Show(this, "Nenhum perfil salvo foi encontrado.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                WinForms.MessageBox.Show(this, "Nenhum perfil salvo foi encontrado.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
                 return;
             }
 
@@ -1346,7 +1348,7 @@ public partial class MainForm : Form
             var profile = profiles.FirstOrDefault(p => string.Equals(p.Id, selectedId.Trim(), StringComparison.OrdinalIgnoreCase));
             if (profile is null)
             {
-                MessageBox.Show(this, $"O perfil '{selectedId}' não foi encontrado.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                WinForms.MessageBox.Show(this, $"O perfil '{selectedId}' não foi encontrado.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
                 return;
             }
 
@@ -1356,7 +1358,7 @@ public partial class MainForm : Form
         catch (Exception ex)
         {
             _telemetry.Warn("Falha ao carregar perfis.", ex);
-            MessageBox.Show(this, $"Erro ao carregar perfis: {ex.Message}", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Erro ao carregar perfis: {ex.Message}", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -1369,7 +1371,7 @@ public partial class MainForm : Form
 
         try
         {
-            BeginInvoke(new MethodInvoker(UpdateButtonStates));
+            BeginInvoke(new WinForms.MethodInvoker(UpdateButtonStates));
         }
         catch (ObjectDisposedException)
         {
@@ -1381,7 +1383,7 @@ public partial class MainForm : Form
     {
         if (InvokeRequired)
         {
-            BeginInvoke(new MethodInvoker(UpdateButtonStates));
+            BeginInvoke(new WinForms.MethodInvoker(UpdateButtonStates));
             return;
         }
 
@@ -1430,7 +1432,7 @@ public partial class MainForm : Form
     {
         if (InvokeRequired)
         {
-            BeginInvoke(new MethodInvoker(UpdateProfileUiState));
+            BeginInvoke(new WinForms.MethodInvoker(UpdateProfileUiState));
             return;
         }
 
@@ -1575,7 +1577,7 @@ public partial class MainForm : Form
         id = NormalizeProfileId(id);
         if (string.IsNullOrWhiteSpace(id))
         {
-            MessageBox.Show(this, "Informe um identificador válido.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WinForms.MessageBox.Show(this, "Informe um identificador válido.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             return false;
         }
 
@@ -1615,48 +1617,48 @@ public partial class MainForm : Form
 
     private static string? PromptText(IWin32Window owner, string title, string message, string? defaultValue)
     {
-        using var prompt = new Form
+        using var prompt = new WinForms.Form
         {
             Text = title,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = WinForms.FormBorderStyle.FixedDialog,
+            StartPosition = WinForms.FormStartPosition.CenterParent,
             MinimizeBox = false,
             MaximizeBox = false,
             ShowInTaskbar = false,
-            ClientSize = new Size(360, 140),
+            ClientSize = new Drawing.Size(360, 140),
         };
 
-        var label = new Label
+        var label = new WinForms.Label
         {
             AutoSize = true,
             Text = message,
-            Location = new Point(12, 12),
+            Location = new Drawing.Point(12, 12),
         };
 
-        var textBox = new TextBox
+        var textBox = new WinForms.TextBox
         {
-            Location = new Point(12, label.Bottom + 8),
+            Location = new Drawing.Point(12, label.Bottom + 8),
             Width = prompt.ClientSize.Width - 24,
             Text = defaultValue ?? string.Empty,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            Anchor = WinForms.AnchorStyles.Top | WinForms.AnchorStyles.Left | WinForms.AnchorStyles.Right,
         };
 
-        var okButton = new Button
+        var okButton = new WinForms.Button
         {
             Text = "OK",
-            DialogResult = DialogResult.OK,
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-            Location = new Point(prompt.ClientSize.Width - 180, prompt.ClientSize.Height - 40),
-            Size = new Size(80, 27),
+            DialogResult = WinForms.DialogResult.OK,
+            Anchor = WinForms.AnchorStyles.Bottom | WinForms.AnchorStyles.Right,
+            Location = new Drawing.Point(prompt.ClientSize.Width - 180, prompt.ClientSize.Height - 40),
+            Size = new Drawing.Size(80, 27),
         };
 
-        var cancelButton = new Button
+        var cancelButton = new WinForms.Button
         {
             Text = "Cancelar",
-            DialogResult = DialogResult.Cancel,
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-            Location = new Point(prompt.ClientSize.Width - 92, prompt.ClientSize.Height - 40),
-            Size = new Size(80, 27),
+            DialogResult = WinForms.DialogResult.Cancel,
+            Anchor = WinForms.AnchorStyles.Bottom | WinForms.AnchorStyles.Right,
+            Location = new Drawing.Point(prompt.ClientSize.Width - 92, prompt.ClientSize.Height - 40),
+            Size = new Drawing.Size(80, 27),
         };
 
         prompt.Controls.Add(label);
@@ -1666,7 +1668,7 @@ public partial class MainForm : Form
         prompt.AcceptButton = okButton;
         prompt.CancelButton = cancelButton;
 
-        return prompt.ShowDialog(owner) == DialogResult.OK ? textBox.Text : null;
+        return prompt.ShowDialog(owner) == WinForms.DialogResult.OK ? textBox.Text : null;
     }
 
     private void LoadProfileFromStore()
@@ -1740,13 +1742,13 @@ public partial class MainForm : Form
 
         if (!OperatingSystem.IsWindows())
         {
-            MessageBox.Show(this, "A execução de perfis está disponível apenas no Windows.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "A execução de perfis está disponível apenas no Windows.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
         if (profile.Applications.Count == 0)
         {
-            MessageBox.Show(this, "Adicione ao menos um aplicativo ao perfil antes de executar.", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            WinForms.MessageBox.Show(this, "Adicione ao menos um aplicativo ao perfil antes de executar.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
             return;
         }
 
@@ -1767,7 +1769,7 @@ public partial class MainForm : Form
         catch (Exception ex)
         {
             _telemetry.Error("Falha durante a execução do perfil.", ex);
-            MessageBox.Show(this, $"Erro ao executar o perfil: {ex.Message}", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Erro ao executar o perfil: {ex.Message}", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -1821,7 +1823,7 @@ public partial class MainForm : Form
         catch (Exception ex)
         {
             _telemetry.Error("Falha ao salvar perfil.", ex);
-            MessageBox.Show(this, $"Erro ao salvar perfil: {ex.Message}", "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            WinForms.MessageBox.Show(this, $"Erro ao salvar perfil: {ex.Message}", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
         finally
         {
@@ -1882,7 +1884,7 @@ public partial class MainForm : Form
         var target = e.Application?.Id ?? e.Window?.Title ?? e.Profile.Name;
         var message = $"Falha ao posicionar '{target}': {e.Exception.Message}";
         UpdateStatusText(message);
-        MessageBox.Show(this, message, "Perfis", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        WinForms.MessageBox.Show(this, message, "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
     }
 
     private string GerarIdentificadorUnico(string baseId)
@@ -1905,7 +1907,7 @@ public partial class MainForm : Form
 
         using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId, _appRunner, _programas);
         var resultado = editor.ShowDialog(this);
-        if (resultado != DialogResult.OK)
+        if (resultado != WinForms.DialogResult.OK)
         {
             return;
         }
@@ -2038,7 +2040,7 @@ public partial class MainForm : Form
 
     private sealed class MonitorCardContext
     {
-        public MonitorCardContext(string monitorId, MonitorInfo monitor, Panel card, MonitorPreviewHost host)
+        public MonitorCardContext(string monitorId, MonitorInfo monitor, WinForms.Panel card, MonitorPreviewHost host)
         {
             MonitorId = monitorId ?? throw new ArgumentNullException(nameof(monitorId));
             Monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
@@ -2050,7 +2052,7 @@ public partial class MainForm : Form
 
         public MonitorInfo Monitor { get; }
 
-        public Panel Card { get; }
+        public WinForms.Panel Card { get; }
 
         public MonitorPreviewHost Host { get; }
 
@@ -2100,7 +2102,7 @@ public partial class MainForm : Form
             }
         }
 
-        private void OnTestWindowClosed(object? sender, FormClosedEventArgs e)
+        private void OnTestWindowClosed(object? sender, WinForms.FormClosedEventArgs e)
         {
             if (sender is not MonitorTestForm window)
             {

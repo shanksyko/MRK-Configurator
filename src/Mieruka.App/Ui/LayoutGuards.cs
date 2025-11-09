@@ -1,12 +1,13 @@
 using System;
 using System.Windows.Forms;
 using Serilog;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Ui;
 
 internal static class LayoutGuards
 {
-    public static void SafeApplySplitter(SplitContainer container, int? desired = null)
+    public static void SafeApplySplitter(WinForms.SplitContainer container, int? desired = null)
     {
         if (container is null || container.IsDisposed)
         {
@@ -122,7 +123,7 @@ internal static class LayoutGuards
         }
     }
 
-    public static void SetSafeMinSizes(SplitContainer? container, int panel1Min, int panel2Min)
+    public static void SetSafeMinSizes(WinForms.SplitContainer? container, int panel1Min, int panel2Min)
     {
         if (container is null || container.IsDisposed)
         {
@@ -161,7 +162,7 @@ internal static class LayoutGuards
         SafeApplySplitter(container, desired);
     }
 
-    public static void WireSplitterGuards(SplitContainer container, int? desired = null)
+    public static void WireSplitterGuards(WinForms.SplitContainer container, int? desired = null)
     {
         if (container is null)
         {
@@ -185,7 +186,7 @@ internal static class LayoutGuards
         container.SplitterMoved += (_, _) => ApplyClampOnly();
         container.SizeChanged += (_, _) => ApplySafeSplitter();
 
-        Form? trackedForm = null;
+        WinForms.Form? trackedForm = null;
         EventHandler formCreatedHandler = (_, _) => ApplySafeSplitter();
         EventHandler formSizedHandler = (_, _) => ApplySafeSplitter();
         DpiChangedEventHandler? dpiHandler = null;
@@ -253,7 +254,7 @@ internal static class LayoutGuards
         }
     }
 
-    private static string GetContext(SplitContainer container)
+    private static string GetContext(WinForms.SplitContainer container)
     {
         if (!string.IsNullOrWhiteSpace(container.Name))
         {

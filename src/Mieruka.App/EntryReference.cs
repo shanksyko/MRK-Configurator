@@ -1,6 +1,6 @@
 using System;
 using System.Linq;
-using System.Windows.Forms;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App;
 
@@ -60,26 +60,26 @@ internal sealed record class EntryReference
     }
 
     /// <summary>
-    /// Creates a <see cref="DataObject"/> suitable for drag-and-drop operations.
+    /// Creates a <see cref="WinForms.DataObject"/> suitable for drag-and-drop operations.
     /// </summary>
     /// <param name="entry">Entry that should be serialized.</param>
     /// <returns>Data object containing the entry payload.</returns>
-    public static DataObject CreateDataObject(EntryReference entry)
+    public static WinForms.DataObject CreateDataObject(EntryReference entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        var data = new DataObject();
+        var data = new WinForms.DataObject();
         data.SetData(DataFormat, false, entry);
         return data;
     }
 
     /// <summary>
-    /// Attempts to materialize an entry reference from the provided <see cref="IDataObject"/>.
+    /// Attempts to materialize an entry reference from the provided <see cref="WinForms.IDataObject"/>.
     /// </summary>
     /// <param name="dataObject">Drag-and-drop data source.</param>
     /// <param name="entry">Resulting entry reference, when available.</param>
     /// <returns><c>true</c> when the entry could be extracted; otherwise, <c>false</c>.</returns>
-    public static bool TryGet(IDataObject? dataObject, out EntryReference? entry)
+    public static bool TryGet(WinForms.IDataObject? dataObject, out EntryReference? entry)
     {
         entry = null;
 
@@ -118,18 +118,18 @@ internal sealed record class EntryReference
         => HashCode.Combine(Kind, StringComparer.OrdinalIgnoreCase.GetHashCode(Id));
 
     /// <summary>
-    /// Searches for an entry in the provided <see cref="ListView"/>.
+    /// Searches for an entry in the provided <see cref="WinForms.ListView"/>.
     /// </summary>
     /// <param name="listView">List view that contains the entry.</param>
     /// <param name="entry">Entry reference that should be located.</param>
-    /// <returns>The <see cref="ListViewItem"/> when present; otherwise, <c>null</c>.</returns>
-    public static ListViewItem? FindItem(ListView listView, EntryReference entry)
+    /// <returns>The <see cref="WinForms.ListViewItem"/> when present; otherwise, <c>null</c>.</returns>
+    public static WinForms.ListViewItem? FindItem(WinForms.ListView listView, EntryReference entry)
     {
         ArgumentNullException.ThrowIfNull(listView);
         ArgumentNullException.ThrowIfNull(entry);
 
         return listView.Items
-            .Cast<ListViewItem>()
+            .Cast<WinForms.ListViewItem>()
             .FirstOrDefault(item => item.Tag is EntryReference candidate && entry.Equals(candidate));
     }
 }

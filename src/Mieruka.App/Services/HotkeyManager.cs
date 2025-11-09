@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Services;
+using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Services;
 
@@ -284,9 +285,9 @@ public sealed class HotkeyManager : IDisposable
 
         private static bool TryParseKey(string token, out uint key)
         {
-            if (Enum.TryParse(token, true, out Keys parsed) && parsed != Keys.None)
+            if (Enum.TryParse(token, true, out WinForms.Keys parsed) && parsed != WinForms.Keys.None)
             {
-                key = (uint)(parsed & Keys.KeyCode);
+                key = (uint)(parsed & WinForms.Keys.KeyCode);
                 return key != 0;
             }
 
@@ -300,7 +301,7 @@ public sealed class HotkeyManager : IDisposable
                 int.TryParse(token.AsSpan(1), out var functionKey) &&
                 functionKey is >= 1 and <= 24)
             {
-                key = (uint)(Keys.F1 + functionKey - 1);
+                key = (uint)(WinForms.Keys.F1 + functionKey - 1);
                 return true;
             }
 
@@ -391,7 +392,7 @@ public sealed class HotkeyManager : IDisposable
             _context.Post(_ =>
             {
                 _window?.Dispose();
-                Application.ExitThread();
+                WinForms.Application.ExitThread();
             }, null);
 
             _threadExited.Wait();
@@ -409,7 +410,7 @@ public sealed class HotkeyManager : IDisposable
             _window = window;
             _windowReady.Set();
 
-            Application.Run();
+            WinForms.Application.Run();
 
             _window = null;
             _threadExited.Set();
