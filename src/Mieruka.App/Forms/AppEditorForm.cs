@@ -22,6 +22,7 @@ using Mieruka.App.Services;
 using Mieruka.App.Services.Ui;
 using Mieruka.App.Simulation;
 using Mieruka.App.Ui.PreviewBindings;
+using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Contracts;
@@ -202,6 +203,9 @@ public partial class AppEditorForm : WinForms.Form
 
             UpdateCycleButtons();
         };
+
+        var gpuEnabled = GpuCaptureGuard.CanUseGpu();
+        Logger.Information("UI: GPU status when opening editor: {GpuOn}", gpuEnabled);
 
         RefreshMonitorSnapshot();
 

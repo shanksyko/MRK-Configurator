@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Serilog;
 using Serilog.Events;
@@ -25,6 +26,14 @@ namespace Mieruka.Preview
             if (!OperatingSystem.IsWindows())
             {
                 throw new PlatformNotSupportedException("Monitor preview is only supported on Windows.");
+            }
+
+            if (!GpuCaptureGuard.CanUseGpu())
+            {
+                _logger?.Information(
+                    "GPU guard disabled WGC; falling back to GDI for {MonitorId}.",
+                    monitorId);
+                throw new GraphicsCaptureUnavailableException("GPU disabled by guard.", isPermanent: true);
             }
 
             EnsureGpuEnvironmentCompatible(monitorId);
@@ -79,13 +88,14 @@ namespace Mieruka.Preview
                     LogGpuBackoff(monitor.Id, monitor.DeviceName);
                     WarnRateLimited(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI. reason={Reason}", monitor.DeviceName, ex.Message);
                 }
+                GpuCaptureGuard.DisableGpuPermanently("ArgumentException:E_INVALIDARG");
                 throw;
             }
             catch (GraphicsCaptureUnavailableException ex)
             {
                 var duration = ex.IsPermanent ? Timeout.InfiniteTimeSpan : (TimeSpan?)null;
                 var appliedBackoff = GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id, duration);
-                var disabledNow = ex.IsPermanent && GraphicsCaptureProvider.DisableGpuGlobally();
+                var disabledNow = ex.IsPermanent && GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailableException");
 
                 MarkMonitorUnavailable(monitor.Id);
 
@@ -107,6 +117,7 @@ namespace Mieruka.Preview
                     LogGpuBackoff(monitor.Id, monitor.DeviceName);
                     WarnRateLimited(ex, "Windows Graphics Capture não suportado neste host. Caindo para GDI. monitor={Monitor} reason={Reason}", monitor.DeviceName ?? monitor.Id ?? "?", ex.Message);
                 }
+                GpuCaptureGuard.DisableGpuPermanently("NotSupportedException");
                 throw;
             }
         }
@@ -130,6 +141,7 @@ namespace Mieruka.Preview
                 _logger?.Information(
                     "Sessão remota detectada; captura GPU será ignorada para {MonitorId}.",
                     monitorId);
+                GpuCaptureGuard.DisableGpuPermanently("RemoteSession");
                 throw new NotSupportedException("Windows Graphics Capture indisponível em sessões remotas.");
             }
 
@@ -138,6 +150,7 @@ namespace Mieruka.Preview
                 _logger?.Information(
                     "Ambiente headless detectado; captura GPU será ignorada para {MonitorId}.",
                     monitorId);
+                GpuCaptureGuard.DisableGpuPermanently("HeadlessEnvironment");
                 throw new NotSupportedException("Windows Graphics Capture indisponível em ambiente headless.");
             }
 
@@ -146,6 +159,7 @@ namespace Mieruka.Preview
                 _logger?.Information(
                     "Windows Graphics Capture não está disponível nesta instalação; usando fallback para {MonitorId}.",
                     monitorId);
+                GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailable");
                 throw new NotSupportedException("Windows Graphics Capture não está disponível neste host.");
             }
         }

@@ -6,6 +6,7 @@ using System.Threading;
 using Mieruka.App.Config;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
+using Mieruka.Core.Config;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Preview;
 using Serilog;
@@ -38,7 +39,8 @@ internal static class Program
         {
             Log.Information("Iniciando Mieruka Configurator.");
 
-            EnsurePreviewRunsOnGdi();
+            var graphicsOptions = LoadPreviewGraphicsOptions();
+            InitializeGpuCapture(graphicsOptions);
 
             var mainForm = new MainForm();
             TabLayoutGuard.Attach(mainForm);
@@ -59,6 +61,11 @@ internal static class Program
     {
         if (e.Exception is not null)
         {
+            if (e.Exception is StackOverflowException)
+            {
+                GpuCaptureGuard.DisableGpuPermanently("StackOverflow in UI thread");
+            }
+
             Log.Error(e.Exception, "ThreadException");
         }
     }
@@ -132,45 +139,10 @@ internal static class Program
         Log.Logger = configuration.CreateLogger();
     }
 
-    private static void EnsurePreviewRunsOnGdi()
-    {
-        try
-        {
-            if (GraphicsCaptureProvider.DisableGpuGlobally())
-            {
-                Log.Information("GPU capture globally disabled; forcing GDI preview.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Falha ao desabilitar captura GPU globalmente.");
-        }
-
-        try
-        {
-            var options = LoadPreviewGraphicsOptions();
-            if (options.Mode != PreviewGraphicsMode.Gdi)
-            {
-                var sanitized = options with { Mode = PreviewGraphicsMode.Gdi };
-                SavePreviewGraphicsOptions(sanitized);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Falha ao forçar modo GDI nas preferências de preview.");
-        }
-    }
-
     private static PreviewGraphicsOptions LoadPreviewGraphicsOptions()
     {
         var store = new JsonStore<PreviewGraphicsOptions>(ResolvePreviewOptionsPath());
         return store.LoadAsync().GetAwaiter().GetResult() ?? new PreviewGraphicsOptions();
-    }
-
-    private static void SavePreviewGraphicsOptions(PreviewGraphicsOptions options)
-    {
-        var store = new JsonStore<PreviewGraphicsOptions>(ResolvePreviewOptionsPath());
-        store.SaveAsync(options.Normalize()).GetAwaiter().GetResult();
     }
 
     private static string ResolvePreviewOptionsPath()
@@ -184,6 +156,125 @@ internal static class Program
         var directory = Path.Combine(localAppData, "Mieruka", "Configurator");
         Directory.CreateDirectory(directory);
         return Path.Combine(directory, "preview-options.json");
+    }
+
+    private static void InitializeGpuCapture(PreviewGraphicsOptions graphicsOptions)
+    {
+        var configurationAllowsGpu = graphicsOptions.Mode != PreviewGraphicsMode.Gdi;
+
+        GpuCaptureGuard.Initialize(
+            configurationAllowsGpu,
+            EvaluateGpuEnvironment,
+            reason => TryDisableGraphicsCaptureProvider(reason));
+
+        if (!GpuCaptureGuard.CanUseGpu())
+        {
+            TryDisableGraphicsCaptureProvider(GpuCaptureGuard.GetDisabledReason() ?? "GuardInitialization");
+        }
+        else
+        {
+            Log.Information("GPU guard: GPU capture enabled at startup.");
+        }
+    }
+
+    private static bool EvaluateGpuEnvironment()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Log.Information("GPU guard: environment not compatible (non-Windows).");
+            return false;
+        }
+
+        if (IsRemoteSession())
+        {
+            Log.Information("GPU guard: environment not compatible (remote session detected).");
+            return false;
+        }
+
+        if (!Environment.UserInteractive)
+        {
+            Log.Information("GPU guard: environment not compatible (non-interactive session).");
+            return false;
+        }
+
+        if (!IsDwmCompositionEnabled())
+        {
+            Log.Information("GPU guard: environment not compatible (DWM composition disabled).");
+            return false;
+        }
+
+        try
+        {
+            if (!GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
+            {
+                Log.Information("GPU guard: environment not compatible (GraphicsCapture unavailable).");
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "GPU guard: failed to query GraphicsCapture availability.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void TryDisableGraphicsCaptureProvider(string reason)
+    {
+        try
+        {
+            if (GraphicsCaptureProvider.DisableGpuGlobally())
+            {
+                Log.Warning("GPU guard: GraphicsCaptureProvider disabled. Reason={Reason}", reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "GPU guard: failed to disable GraphicsCaptureProvider. Reason={Reason}", reason);
+        }
+    }
+
+    private static bool IsDwmCompositionEnabled()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            var hr = NativeMethods.DwmIsCompositionEnabled(out var enabled);
+            if (hr < 0)
+            {
+                Marshal.ThrowExceptionForHR(hr);
+            }
+
+            return enabled;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "GPU guard: failed to query DWM state.");
+            return false;
+        }
+    }
+
+    private static bool IsRemoteSession()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            return NativeMethods.GetSystemMetrics(0x1000) != 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "GPU guard: failed to query remote session state.");
+            return false;
+        }
     }
 
     private static void WriteCrashDump()
@@ -307,5 +398,11 @@ internal static class Program
 
         [DllImport("kernel32.dll", SetLastError = false, CallingConvention = CallingConvention.Winapi)]
         public static extern uint GetCurrentProcessId();
+
+        [DllImport("dwmapi.dll", SetLastError = true)]
+        public static extern int DwmIsCompositionEnabled(out bool enabled);
+
+        [DllImport("user32.dll", SetLastError = false)]
+        public static extern int GetSystemMetrics(int nIndex);
     }
 }
