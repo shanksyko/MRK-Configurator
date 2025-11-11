@@ -241,7 +241,7 @@ public partial class MainForm : WinForms.Form
                 continue;
             }
 
-            context.Host.Stop();
+            context.Host.StopSafe();
 
             if (_manuallyStoppedMonitors.Contains(context.MonitorId)
                 || WindowState == WinForms.FormWindowState.Minimized)
@@ -251,7 +251,7 @@ public partial class MainForm : WinForms.Form
 
             try
             {
-                if (!context.Host.Start(preferGpu))
+                if (!context.Host.StartSafe(preferGpu))
                 {
                     _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
                 }
@@ -857,7 +857,7 @@ public partial class MainForm : WinForms.Form
 
         if (_monitorCards.TryGetValue(monitorId, out var context))
         {
-            context.Host.Stop();
+            context.Host.StopSafe();
             context.CloseTestWindow();
         }
 
@@ -883,7 +883,7 @@ public partial class MainForm : WinForms.Form
             context.Host.PreviewSafeModeEnabled = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
             if (context.Host.Capture is null)
             {
-                if (!context.Host.Start(preferGpu: ShouldPreferGpu()))
+                if (!context.Host.StartSafe(preferGpu: ShouldPreferGpu()))
                 {
                     WinForms.MessageBox.Show(
                         this,
@@ -1072,7 +1072,7 @@ public partial class MainForm : WinForms.Form
 
             context.Host.PreviewSafeModeEnabled = safeMode;
 
-            if (!context.Host.Start(preferGpu))
+            if (!context.Host.StartSafe(preferGpu))
             {
                 _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
             }
@@ -1083,7 +1083,7 @@ public partial class MainForm : WinForms.Form
     {
         foreach (var context in _monitorCardOrder)
         {
-            context.Host.Stop();
+            context.Host.StopSafe();
         }
     }
 

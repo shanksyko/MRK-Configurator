@@ -45,6 +45,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             | WinForms.ControlStyles.AllPaintingInWmPaint
             | WinForms.ControlStyles.UserPaint,
             true);
+        DoubleBuffered = true;
+        UpdateStyles();
 
         SuspendLayout();
 
@@ -66,6 +68,17 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         _pictureBox.Paint += PictureBoxOnPaint;
 
         ResumeLayout(false);
+    }
+
+    /// <inheritdoc />
+    protected override WinForms.CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
+            return cp;
+        }
     }
 
     /// <summary>
@@ -145,7 +158,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
 
         // The editor always prefers the BitBlt path to avoid GPU capture glitches in nested previews.
-        var started = host.Start(preferGpu: false);
+        var started = host.StartSafe(preferGpu: false);
         _host = host;
 
         if (!started)
@@ -183,7 +196,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         try
         {
-            host.Stop();
+            host.StopSafe();
         }
         catch
         {

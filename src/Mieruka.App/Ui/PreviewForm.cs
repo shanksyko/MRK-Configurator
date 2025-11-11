@@ -21,6 +21,14 @@ internal sealed partial class PreviewForm : WinForms.Form
 
     public PreviewForm()
     {
+        SetStyle(
+            WinForms.ControlStyles.AllPaintingInWmPaint
+            | WinForms.ControlStyles.OptimizedDoubleBuffer
+            | WinForms.ControlStyles.UserPaint,
+            true);
+        DoubleBuffered = true;
+        UpdateStyles();
+
         InitializeComponent();
         _captureFactory = () => new GdiMonitorCaptureProvider();
         CarregarMonitores();
@@ -38,6 +46,16 @@ internal sealed partial class PreviewForm : WinForms.Form
         base.OnFormClosing(e);
         StopCaptureAsync().GetAwaiter().GetResult();
         LiberarFrameAtual();
+    }
+
+    protected override WinForms.CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
+            return cp;
+        }
     }
 
     private void CarregarMonitores()
@@ -236,7 +254,22 @@ internal sealed partial class PreviewForm : WinForms.Form
             return;
         }
 
-        BeginInvoke(new Action(() => ExibirFrame(frame)));
+        try
+        {
+            if (!IsDisposed)
+            {
+                BeginInvoke(new Action(() => ExibirFrame(frame)));
+                return;
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        frame.Dispose();
     }
 
     private void ExibirFrame(Drawing.Bitmap frame)

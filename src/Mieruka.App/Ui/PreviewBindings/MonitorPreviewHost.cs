@@ -60,6 +60,11 @@ public sealed class MonitorPreviewHost : IDisposable
         Disposing,
     }
 
+    private const int LifecycleStopped = 0;
+    private const int LifecycleStarting = 1;
+    private const int LifecycleRunning = 2;
+    private const int LifecycleStopping = 3;
+
     private readonly WinForms.PictureBox _target;
     private readonly ILogger _logger;
     private readonly object _gate = new();
@@ -93,6 +98,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private readonly ReentrancyGate _lifecycleGate = new();
     private long _reentrancyBlockedCount;
     private DateTime _lastGateReportUtc = DateTime.UtcNow;
+    private int _lifecycleState = LifecycleStopped;
 
     private PreviewState State
     {
@@ -305,6 +311,8 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             _lifecycleGate.Exit();
         }
+
+        Volatile.Write(ref _lifecycleState, LifecycleStopped);
     }
 
     /// <summary>
@@ -352,6 +360,47 @@ public sealed class MonitorPreviewHost : IDisposable
         finally
         {
             _lifecycleGate.Exit();
+        }
+    }
+
+    /// <summary>
+    /// Stops the current preview session while preventing overlapping lifecycle transitions.
+    /// </summary>
+    public void StopSafe()
+    {
+        var spinner = new SpinWait();
+
+        while (true)
+        {
+            var state = Volatile.Read(ref _lifecycleState);
+
+            if (state == LifecycleStopped)
+            {
+                return;
+            }
+
+            if (state is LifecycleStarting or LifecycleStopping)
+            {
+                spinner.SpinOnce();
+                continue;
+            }
+
+            if (Interlocked.CompareExchange(ref _lifecycleState, LifecycleStopping, state) != state)
+            {
+                spinner.SpinOnce();
+                continue;
+            }
+
+            try
+            {
+                Stop();
+            }
+            finally
+            {
+                Volatile.Write(ref _lifecycleState, LifecycleStopped);
+            }
+
+            return;
         }
     }
 
@@ -837,6 +886,7 @@ public sealed class MonitorPreviewHost : IDisposable
             }
 
             StopCore(clearFrame: false, resetPaused: false);
+            Volatile.Write(ref _lifecycleState, LifecycleStopped);
             return false;
         }
 
@@ -848,6 +898,7 @@ public sealed class MonitorPreviewHost : IDisposable
             var current = ReadState();
             if (current is PreviewState.Running or PreviewState.Starting)
             {
+                Volatile.Write(ref _lifecycleState, LifecycleRunning);
                 return true;
             }
 
@@ -890,10 +941,13 @@ public sealed class MonitorPreviewHost : IDisposable
             {
                 lock (_gate)
                 {
-                    return Capture is not null;
+                    var running = Capture is not null;
+                    Volatile.Write(ref _lifecycleState, running ? LifecycleRunning : LifecycleStopped);
+                    return running;
                 }
             }
 
+            Volatile.Write(ref _lifecycleState, LifecycleRunning);
             return true;
         }
 
@@ -903,13 +957,57 @@ public sealed class MonitorPreviewHost : IDisposable
             if (started)
             {
                 SetState(PreviewState.Running);
+                Volatile.Write(ref _lifecycleState, LifecycleRunning);
             }
             else
             {
                 SetState(previousState);
+                Volatile.Write(ref _lifecycleState, LifecycleStopped);
             }
 
             return started;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to start the preview while preventing concurrent lifecycle operations.
+    /// </summary>
+    public bool StartSafe(bool preferGpu)
+    {
+        var spinner = new SpinWait();
+
+        while (true)
+        {
+            var state = Volatile.Read(ref _lifecycleState);
+
+            if (state == LifecycleRunning)
+            {
+                return true;
+            }
+
+            if (state is LifecycleStarting or LifecycleStopping)
+            {
+                spinner.SpinOnce();
+                continue;
+            }
+
+            if (Interlocked.CompareExchange(ref _lifecycleState, LifecycleStarting, state) != state)
+            {
+                spinner.SpinOnce();
+                continue;
+            }
+
+            var started = false;
+
+            try
+            {
+                started = Start(preferGpu);
+                return started;
+            }
+            finally
+            {
+                Volatile.Write(ref _lifecycleState, started ? LifecycleRunning : LifecycleStopped);
+            }
         }
     }
 
@@ -1520,6 +1618,8 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             ResetFrameThrottle();
         }
+
+        Volatile.Write(ref _lifecycleState, LifecycleStopped);
     }
 
     private bool DisposeCaptureRetainingFrame(bool resetPaused)
