@@ -7,6 +7,7 @@ using Drawing = System.Drawing;
 using Drawing2D = System.Drawing.Drawing2D;
 using WinForms = System.Windows.Forms;
 using Mieruka.App.Services.Ui;
+using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
 using Serilog;
 
@@ -118,6 +119,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// <param name="cadence">Optional frame cadence.</param>
     public void Bind(MonitorInfo monitor, TimeSpan? cadence = null)
     {
+        using var guard = new StackGuard(nameof(Bind));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         ArgumentNullException.ThrowIfNull(monitor);
 
         Unbind();
@@ -157,6 +164,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public void Unbind()
     {
+        using var guard = new StackGuard(nameof(Unbind));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         var host = _host;
         _host = null;
         _monitor = null;
@@ -188,6 +201,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public void SuspendCapture()
     {
+        using var guard = new StackGuard(nameof(SuspendCapture));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         _host?.SuspendCapture();
     }
 
@@ -196,6 +215,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public void ResumeCapture()
     {
+        using var guard = new StackGuard(nameof(ResumeCapture));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         _host?.ResumeCapture();
     }
 
@@ -204,6 +229,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public void Pause()
     {
+        using var guard = new StackGuard(nameof(Pause));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         _host?.Pause();
     }
 
@@ -212,6 +243,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public void Resume()
     {
+        using var guard = new StackGuard(nameof(Resume));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         _host?.Resume();
     }
 
@@ -237,6 +274,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// <param name="rectangles">Rectangles to display.</param>
     public void SetSimulationRects(IEnumerable<SimRect>? rectangles)
     {
+        using var guard = new StackGuard(nameof(SetSimulationRects));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         var next = NormalizeRectangles(rectangles);
 
         if (AreEquivalent(_simRects, next))
@@ -330,6 +373,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     private void PictureBoxOnMouseMove(object? sender, WinForms.MouseEventArgs e)
     {
+        using var guard = new StackGuard(nameof(PictureBoxOnMouseMove));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         UpdateGlyphTooltip(e.Location);
 
         var monitor = _monitor;
@@ -362,12 +411,24 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     private void PictureBoxOnMouseLeave(object? sender, EventArgs e)
     {
+        using var guard = new StackGuard(nameof(PictureBoxOnMouseLeave));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         ClearGlyphTooltip();
         MonitorMouseLeft?.Invoke(this, EventArgs.Empty);
     }
 
     private void PictureBoxOnPaint(object? sender, WinForms.PaintEventArgs e)
     {
+        using var guard = new StackGuard(nameof(PictureBoxOnPaint));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         try
         {
             if (!string.IsNullOrEmpty(_placeholderMessage))

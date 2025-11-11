@@ -73,8 +73,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
     /// <inheritdoc />
     [SupportedOSPlatform("windows10.0.17763")]
-        public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
+    public Task StartAsync(MonitorInfo monitor, CancellationToken cancellationToken = default)
     {
+        using var guard = new StackGuard(nameof(StartAsync));
+        if (!guard.Entered)
+        {
+            return Task.CompletedTask;
+        }
+
         ArgumentNullException.ThrowIfNull(monitor);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -307,6 +313,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     [SupportedOSPlatform("windows10.0.17763")]
     public ValueTask StopAsync()
     {
+        using var guard = new StackGuard(nameof(StopAsync));
+        if (!guard.Entered)
+        {
+            return ValueTask.CompletedTask;
+        }
+
         lock (_gate)
         {
             CleanupAfterFailure();
@@ -319,12 +331,24 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     [SupportedOSPlatform("windows10.0.17763")]
     public async ValueTask DisposeAsync()
     {
+        using var guard = new StackGuard(nameof(DisposeAsync));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         await StopAsync().ConfigureAwait(false);
     }
 
     [SupportedOSPlatform("windows10.0.17763")]
     private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
+        using var guard = new StackGuard(nameof(OnFrameArrived));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         Direct3D11CaptureFrame? frame = null;
 
         try

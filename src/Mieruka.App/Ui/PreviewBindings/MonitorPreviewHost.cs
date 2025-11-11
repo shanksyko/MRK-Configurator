@@ -270,6 +270,12 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public bool Start(bool preferGpu)
     {
+        using var guard = new StackGuard(nameof(Start));
+        if (!guard.Entered)
+        {
+            return false;
+        }
+
         if (!_lifecycleGate.TryEnter())
         {
             LogReentrancyBlocked(nameof(Start));
@@ -306,6 +312,12 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public void Stop()
     {
+        using var guard = new StackGuard(nameof(Stop));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (!_lifecycleGate.TryEnter())
         {
             LogReentrancyBlocked(nameof(Stop));
@@ -348,6 +360,12 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public void SuspendCapture()
     {
+        using var guard = new StackGuard(nameof(SuspendCapture));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (_disposed)
         {
             return;
@@ -390,6 +408,12 @@ public sealed class MonitorPreviewHost : IDisposable
     /// </summary>
     public void ResumeCapture()
     {
+        using var guard = new StackGuard(nameof(ResumeCapture));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (_disposed)
         {
             return;
@@ -780,6 +804,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private bool StartCore(bool preferGpu)
     {
+        using var guard = new StackGuard(nameof(StartCore));
+        if (!guard.Entered)
+        {
+            return false;
+        }
+
         if (_disposed)
         {
             return false;
@@ -885,6 +915,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private bool StartCoreUnsafe(bool preferGpu)
     {
+        using var guard = new StackGuard(nameof(StartCoreUnsafe));
+        if (!guard.Entered)
+        {
+            return false;
+        }
+
         if (_disposed)
         {
             return false;
@@ -1015,6 +1051,13 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
+        using var guard = new StackGuard(nameof(OnFrameArrived));
+        if (!guard.Entered)
+        {
+            e.Dispose();
+            return;
+        }
+
         if (_suppressEvents)
         {
             e.Dispose();
@@ -1146,6 +1189,14 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void UpdateTarget(Drawing.Bitmap frame)
     {
+        using var guard = new StackGuard(nameof(UpdateTarget));
+        if (!guard.Entered)
+        {
+            UnregisterPendingFrame(frame);
+            frame.Dispose();
+            return;
+        }
+
         if (_suppressEvents)
         {
             UnregisterPendingFrame(frame);
@@ -1330,6 +1381,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void ClearFrame()
     {
+        using var guard = new StackGuard(nameof(ClearFrame));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (_target.IsDisposed)
         {
             if (_currentFrame is not null)
@@ -1372,6 +1429,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void StopCore(bool clearFrame, bool resetPaused = true)
     {
+        using var guard = new StackGuard(nameof(StopCore));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (ReadState() == PreviewState.Disposing)
         {
             return;
@@ -1419,6 +1482,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void StopCoreUnsafe(bool clearFrame, bool resetPaused = true)
     {
+        using var guard = new StackGuard(nameof(StopCoreUnsafe));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         IMonitorCapture? capture;
         lock (_gate)
         {
@@ -1477,6 +1546,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void PostStart(bool preferGpu)
     {
+        using var guard = new StackGuard(nameof(PostStart));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (_suppressEvents || _disposed || _target.IsDisposed)
         {
             return;
@@ -1508,6 +1583,12 @@ public sealed class MonitorPreviewHost : IDisposable
 
     private void PostStop(bool clearFrame, bool resetPaused)
     {
+        using var guard = new StackGuard(nameof(PostStop));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (_suppressEvents || _target.IsDisposed)
         {
             return;
