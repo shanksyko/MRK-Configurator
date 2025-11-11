@@ -311,8 +311,6 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             _lifecycleGate.Exit();
         }
-
-        Volatile.Write(ref _lifecycleState, LifecycleStopped);
     }
 
     /// <summary>
