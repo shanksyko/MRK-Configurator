@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Mieruka.Core.Config;
+using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
 using Serilog;
 using Serilog.Events;
@@ -23,6 +24,14 @@ namespace Mieruka.Preview
 
         public static IMonitorCapture Create(string monitorId)
         {
+            using var guard = new StackGuard(nameof(Create));
+            if (!guard.Entered)
+            {
+                throw new GraphicsCaptureUnavailableException(
+                    "Stack guard bloqueou criação de captura WGC.",
+                    isPermanent: false);
+            }
+
             if (!OperatingSystem.IsWindows())
             {
                 throw new PlatformNotSupportedException("Monitor preview is only supported on Windows.");
@@ -73,6 +82,14 @@ namespace Mieruka.Preview
 
         private static void StartCapture(IMonitorCapture capture, MonitorInfo monitor)
         {
+            using var guard = new StackGuard(nameof(StartCapture));
+            if (!guard.Entered)
+            {
+                throw new GraphicsCaptureUnavailableException(
+                    "Stack guard bloqueou inicialização de captura WGC.",
+                    isPermanent: false);
+            }
+
             try
             {
                 var task = capture.StartAsync(monitor);
@@ -124,6 +141,14 @@ namespace Mieruka.Preview
 
         private static void EnsureGpuEnvironmentCompatible(string monitorId)
         {
+            using var guard = new StackGuard(nameof(EnsureGpuEnvironmentCompatible));
+            if (!guard.Entered)
+            {
+                throw new GraphicsCaptureUnavailableException(
+                    "Stack guard bloqueou validação de ambiente GPU.",
+                    isPermanent: false);
+            }
+
             if (GraphicsCaptureProvider.IsGpuInBackoff(monitorId))
             {
                 LogGpuBackoff(monitorId, monitorId);

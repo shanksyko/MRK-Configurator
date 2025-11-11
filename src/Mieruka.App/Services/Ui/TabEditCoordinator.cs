@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Threading;
 using Mieruka.Core.Contracts;
+using Mieruka.Core.Diagnostics;
 using Serilog;
 
 using WinForms = System.Windows.Forms;
@@ -84,6 +85,12 @@ internal sealed class TabEditCoordinator
     /// </summary>
     public EditScope BeginEditScope(string? context = null)
     {
+        using var guard = new StackGuard(nameof(BeginEditScope));
+        if (!guard.Entered)
+        {
+            return new EditScope(null, context, false);
+        }
+
         CancelPendingResume();
 
         if (Interlocked.Exchange(ref _applying, 1) == 1)
@@ -119,6 +126,12 @@ internal sealed class TabEditCoordinator
 
     private void EndEditScope(string? context)
     {
+        using var guard = new StackGuard(nameof(EndEditScope));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         try
         {
             _bindingScope?.Dispose();
@@ -168,6 +181,12 @@ internal sealed class TabEditCoordinator
 
     private void ScheduleResume(string? context)
     {
+        using var guard = new StackGuard(nameof(ScheduleResume));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         lock (_debounceGate)
         {
             if (_debounceTimerDisposed)
@@ -186,6 +205,12 @@ internal sealed class TabEditCoordinator
 
     private void ResumeDebounceTimerOnTick(object? sender, EventArgs e)
     {
+        using var guard = new StackGuard(nameof(ResumeDebounceTimerOnTick));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         string? context;
 
         lock (_debounceGate)
@@ -265,21 +290,45 @@ internal sealed class TabEditCoordinator
 
     private void OnRootEnter(object? sender, EventArgs e)
     {
+        using var guard = new StackGuard(nameof(OnRootEnter));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         ScheduleApplyAppTypeUi();
     }
 
     private void OnRootLeave(object? sender, EventArgs e)
     {
+        using var guard = new StackGuard(nameof(OnRootLeave));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         ScheduleApplyAppTypeUi();
     }
 
     private void OnRootSizeChanged(object? sender, EventArgs e)
     {
+        using var guard = new StackGuard(nameof(OnRootSizeChanged));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         ScheduleApplyAppTypeUi();
     }
 
     private void ScheduleApplyAppTypeUi()
     {
+        using var guard = new StackGuard(nameof(ScheduleApplyAppTypeUi));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         if (_applyAppTypeUiMethod is null)
         {
             return;
@@ -299,6 +348,12 @@ internal sealed class TabEditCoordinator
 
     private void OnUiEventDebounceTimerTick(object? sender, EventArgs e)
     {
+        using var guard = new StackGuard(nameof(OnUiEventDebounceTimerTick));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
         MethodInfo? applyMethod;
 
         lock (_uiEventDebounceGate)
