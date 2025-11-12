@@ -41,11 +41,11 @@ internal sealed partial class PreviewForm : WinForms.Form
         CarregarMonitores(monitors);
     }
 
-    protected override void OnFormClosing(WinForms.FormClosingEventArgs e)
+    protected override async void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
-        base.OnFormClosing(e);
-        StopCaptureAsync().GetAwaiter().GetResult();
+        await StopCaptureAsync();
         LiberarFrameAtual();
+        base.OnFormClosing(e);
     }
 
     protected override WinForms.CreateParams CreateParams
