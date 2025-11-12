@@ -25,6 +25,7 @@ public sealed class MonitorPreviewHost : IDisposable
     private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
     private static readonly TimeSpan SafeModeFrameThrottle = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan SafeModeStartDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan GpuFallbackLogInterval = TimeSpan.FromSeconds(10);
     private static long _lastGpuFallbackLogTicks;
 
@@ -95,6 +96,8 @@ public sealed class MonitorPreviewHost : IDisposable
     private bool _suppressEvents;
     private int _disposeRetryScheduled;
     private bool _safeModeEnabled;
+    private long _safeModeResumeTicks;
+    private int _safeModeDelayScheduled;
     private readonly ReentrancyGate _lifecycleGate = new();
     private long _reentrancyBlockedCount;
     private DateTime _lastGateReportUtc = DateTime.UtcNow;
@@ -883,6 +886,18 @@ public sealed class MonitorPreviewHost : IDisposable
         if (PreviewSafeModeEnabled)
         {
             preferGpu = false;
+
+            if (ShouldDelayStartForSafeMode(out var remainingDelay))
+            {
+                ScheduleSafeModeStartRetry(remainingDelay);
+                return false;
+            }
+
+            Interlocked.Exchange(ref _safeModeResumeTicks, 0);
+        }
+        else
+        {
+            Interlocked.Exchange(ref _safeModeResumeTicks, 0);
         }
 
         if (ReadState() == PreviewState.Disposing)
@@ -1028,6 +1043,108 @@ public sealed class MonitorPreviewHost : IDisposable
                 Volatile.Write(ref _lifecycleState, started ? LifecycleRunning : LifecycleStopped);
             }
         }
+    }
+
+    private bool ShouldDelayStartForSafeMode(out TimeSpan remainingDelay)
+    {
+        remainingDelay = TimeSpan.Zero;
+
+        if (!PreviewSafeModeEnabled)
+        {
+            Interlocked.Exchange(ref _safeModeResumeTicks, 0);
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        var resumeTicks = Volatile.Read(ref _safeModeResumeTicks);
+
+        if (resumeTicks == 0)
+        {
+            var resumeAt = now.Add(SafeModeStartDelay).Ticks;
+            var previous = Interlocked.CompareExchange(ref _safeModeResumeTicks, resumeAt, 0);
+            resumeTicks = previous == 0 ? resumeAt : previous;
+        }
+
+        var resumeAtUtc = new DateTime(resumeTicks, DateTimeKind.Utc);
+
+        if (now < resumeAtUtc)
+        {
+            remainingDelay = resumeAtUtc - now;
+            return true;
+        }
+
+        Interlocked.Exchange(ref _safeModeResumeTicks, 0);
+        return false;
+    }
+
+    private void ScheduleSafeModeStartRetry(TimeSpan delay)
+    {
+        if (delay < TimeSpan.Zero)
+        {
+            delay = TimeSpan.Zero;
+        }
+
+        if (Interlocked.CompareExchange(ref _safeModeDelayScheduled, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Task.Yield();
+                }
+            }
+            catch (TaskCanceledException)
+            {
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _safeModeDelayScheduled, 0);
+            }
+
+            if (_disposed || _suppressEvents)
+            {
+                return;
+            }
+
+            if (_target.IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                _target.BeginInvoke(new Action(() =>
+                {
+                    if (_suppressEvents || _disposed || _target.IsDisposed)
+                    {
+                        return;
+                    }
+
+                    var state = ReadState();
+                    if (state is PreviewState.Disposing or PreviewState.Running or PreviewState.Starting)
+                    {
+                        return;
+                    }
+
+                    StartSafe(preferGpu: false);
+                }));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        });
     }
 
     private bool StartCoreUnsafe(bool preferGpu)
