@@ -126,6 +126,14 @@ public sealed class MonitorPreviewHost : IDisposable
         return false;
     }
 
+    private static Task<IMonitorCapture> CreateCaptureAsync(
+        Func<IMonitorCapture> factory,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        return Task.Run(factory, cancellationToken);
+    }
+
     private void SetState(PreviewState state)
     {
         State = state;
@@ -275,8 +283,11 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Starts the preview using GPU capture when available.
     /// </summary>
     public bool Start(bool preferGpu)
+        => StartAsync(preferGpu).GetAwaiter().GetResult();
+
+    public async Task<bool> StartAsync(bool preferGpu, CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(Start));
+        using var guard = new StackGuard(nameof(StartAsync));
         if (!guard.Entered)
         {
             return false;
@@ -300,7 +311,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
             try
             {
-                return StartCore(preferGpuAdjusted);
+                return await StartCoreAsync(preferGpuAdjusted, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -495,7 +506,7 @@ public sealed class MonitorPreviewHost : IDisposable
             scope.Dispose();
         }
 
-        void ResumeCore()
+        async void ResumeCore()
         {
             if (!TryEnterBusy(out var resumeScope))
             {
@@ -525,7 +536,7 @@ public sealed class MonitorPreviewHost : IDisposable
                     return;
                 }
 
-                StartCore(useGpu);
+                await StartCoreAsync(useGpu, cancellationToken: CancellationToken.None).ConfigureAwait(true);
             }
             finally
             {
@@ -579,6 +590,9 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
     public void Resume()
+        => ResumeAsync().GetAwaiter().GetResult();
+
+    public async Task ResumeAsync()
     {
         if (_disposed)
         {
@@ -603,7 +617,8 @@ public sealed class MonitorPreviewHost : IDisposable
                 useGpu = _isGpuActive;
             }
 
-            if (StartCore(useGpu))
+            var resumed = await StartCoreAsync(useGpu, CancellationToken.None).ConfigureAwait(false);
+            if (resumed)
             {
                 _logger.Information("PreviewResumed");
             }
@@ -850,8 +865,11 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
     private bool StartCore(bool preferGpu)
+        => StartCoreAsync(preferGpu, CancellationToken.None).GetAwaiter().GetResult();
+
+    private async Task<bool> StartCoreAsync(bool preferGpu, CancellationToken cancellationToken)
     {
-        using var guard = new StackGuard(nameof(StartCore));
+        using var guard = new StackGuard(nameof(StartCoreAsync));
         if (!guard.Entered)
         {
             return false;
@@ -951,7 +969,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         using (scope)
         {
-            var started = StartCoreUnsafe(preferGpu);
+            var started = await StartCoreUnsafeAsync(preferGpu, cancellationToken).ConfigureAwait(false);
             if (started)
             {
                 SetState(PreviewState.Running);
@@ -971,6 +989,9 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Attempts to start the preview while preventing concurrent lifecycle operations.
     /// </summary>
     public bool StartSafe(bool preferGpu)
+        => StartSafeAsync(preferGpu).GetAwaiter().GetResult();
+
+    public async Task<bool> StartSafeAsync(bool preferGpu, CancellationToken cancellationToken = default)
     {
         var spinner = new SpinWait();
 
@@ -999,7 +1020,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
             try
             {
-                started = Start(preferGpu);
+                started = await StartAsync(preferGpu, cancellationToken).ConfigureAwait(false);
                 return started;
             }
             finally
@@ -1010,8 +1031,11 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
     private bool StartCoreUnsafe(bool preferGpu)
+        => StartCoreUnsafeAsync(preferGpu, CancellationToken.None).GetAwaiter().GetResult();
+
+    private async Task<bool> StartCoreUnsafeAsync(bool preferGpu, CancellationToken cancellationToken)
     {
-        using var guard = new StackGuard(nameof(StartCoreUnsafe));
+        using var guard = new StackGuard(nameof(StartCoreUnsafeAsync));
         if (!guard.Entered)
         {
             return false;
@@ -1027,10 +1051,14 @@ public sealed class MonitorPreviewHost : IDisposable
             preferGpu = false;
             try
             {
-                Thread.Sleep(250);
+                await Task.Delay(250, cancellationToken).ConfigureAwait(false);
             }
             catch (ThreadInterruptedException)
             {
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
             }
         }
 
@@ -1058,7 +1086,7 @@ public sealed class MonitorPreviewHost : IDisposable
             IMonitorCapture? capture = null;
             try
             {
-                capture = factory();
+                capture = await CreateCaptureAsync(factory, cancellationToken).ConfigureAwait(false);
                 capture.FrameArrived += OnFrameArrived;
 
                 UpdateFrameThrottleForCapture(capture);
@@ -1077,6 +1105,16 @@ public sealed class MonitorPreviewHost : IDisposable
                 }
 
                 return true;
+            }
+            catch (OperationCanceledException)
+            {
+                if (capture is not null)
+                {
+                    capture.FrameArrived -= OnFrameArrived;
+                    SafeDispose(capture);
+                }
+
+                return false;
             }
             catch (Exception ex)
             {
@@ -1108,6 +1146,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 {
                     EvaluateGpuDisable(ex);
                 }
+
                 if (capture is not null)
                 {
                     capture.FrameArrived -= OnFrameArrived;
@@ -1657,11 +1696,11 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            _target.BeginInvoke(new Action(() =>
+            _target.BeginInvoke(new Action(async () =>
             {
                 try
                 {
-                    StartCore(preferGpu);
+                    await StartCoreAsync(preferGpu, CancellationToken.None).ConfigureAwait(true);
                 }
                 catch (ObjectDisposedException)
                 {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Mieruka.Core.Config;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
@@ -22,9 +23,9 @@ namespace Mieruka.Preview
         private static readonly object WarnGate = new();
         private static DateTime _lastWarnUtc;
 
-        public static IMonitorCapture Create(string monitorId)
+        public static async Task<IMonitorCapture> CreateAsync(string monitorId, CancellationToken cancellationToken = default)
         {
-            using var guard = new StackGuard(nameof(Create));
+            using var guard = new StackGuard(nameof(CreateAsync));
             if (!guard.Entered)
             {
                 throw new GraphicsCaptureUnavailableException(
@@ -70,19 +71,22 @@ namespace Mieruka.Preview
                     throw new PlatformNotSupportedException("Captura por GPU não suportada neste sistema.");
                 }
 
-                StartCapture(capture, monitor);
+                await StartCaptureAsync(capture, monitor, cancellationToken).ConfigureAwait(false);
                 return capture;
             }
             catch
             {
-                SafeDispose(capture);
+                await SafeDisposeAsync(capture).ConfigureAwait(false);
                 throw;
             }
         }
 
-        private static void StartCapture(IMonitorCapture capture, MonitorInfo monitor)
+        private static async Task StartCaptureAsync(
+            IMonitorCapture capture,
+            MonitorInfo monitor,
+            CancellationToken cancellationToken)
         {
-            using var guard = new StackGuard(nameof(StartCapture));
+            using var guard = new StackGuard(nameof(StartCaptureAsync));
             if (!guard.Entered)
             {
                 throw new GraphicsCaptureUnavailableException(
@@ -92,11 +96,7 @@ namespace Mieruka.Preview
 
             try
             {
-                var task = capture.StartAsync(monitor);
-                if (!task.IsCompleted)
-                {
-                    task.GetAwaiter().GetResult();
-                }
+                await capture.StartAsync(monitor, cancellationToken).ConfigureAwait(false);
             }
             catch (ArgumentException ex)
             {
@@ -233,11 +233,11 @@ namespace Mieruka.Preview
             _logger.Warning(exception, messageTemplate, propertyValues);
         }
 
-        private static void SafeDispose(IMonitorCapture capture)
+        private static async ValueTask SafeDisposeAsync(IMonitorCapture capture)
         {
             try
             {
-                capture.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                await capture.DisposeAsync().ConfigureAwait(false);
             }
             catch
             {
