@@ -1,0 +1,7 @@
+src/Mieruka.App/Forms/AppEditorForm.BackCompat.cs:12:private void SuspendPreviewCapture()
+src/Mieruka.App/Forms/AppEditorForm.cs:2816:SuspendPreviewCapture();
+src/Mieruka.App/Forms/AppEditorForm.cs:2977:SuspendPreviewCapture();
+src/Mieruka.App/Forms/MainForm.BackCompat.cs:14:private void CloseTestWindow()
+src/Mieruka.App/Forms/MainForm.cs:2076:CloseTestWindow();
+src/Mieruka.App/Ui/PreviewBindings/MonitorPreviewHost.BackCompat.cs:13:private void StopCoreUnsafe(bool clearFrame, bool resetPaused)
+src/Mieruka.App/Ui/PreviewBindings/MonitorPreviewHost.cs:725:StopCoreUnsafe(clearFrame: true, resetPaused: true);
