@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Drawing = System.Drawing;
 using Drawing2D = System.Drawing.Drawing2D;
 using WinForms = System.Windows.Forms;
@@ -130,7 +131,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     /// <param name="monitor">Monitor to display.</param>
     /// <param name="cadence">Optional frame cadence.</param>
-    public void Bind(MonitorInfo monitor, TimeSpan? cadence = null)
+    public async void Bind(MonitorInfo monitor, TimeSpan? cadence = null)
     {
         using var guard = new StackGuard(nameof(Bind));
         if (!guard.Entered)
@@ -158,7 +159,17 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
 
         // The editor always prefers the BitBlt path to avoid GPU capture glitches in nested previews.
-        var started = host.StartSafe(preferGpu: false);
+        var started = false;
+        try
+        {
+            started = await host.StartSafeAsync(preferGpu: false).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning(ex, "MonitorPreviewDisplay.Bind: failed to start preview host for {MonitorId}", monitorId);
+            started = false;
+        }
+
         _host = host;
 
         if (!started)

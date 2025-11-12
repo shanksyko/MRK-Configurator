@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace Mieruka.Preview;
 
 /// <summary>
@@ -5,8 +8,8 @@ namespace Mieruka.Preview;
 /// </summary>
 public static class Preview
 {
-    public static IMonitorCapture CreateForMonitor(string monitorId)
+    public static Task<IMonitorCapture> CreateForMonitorAsync(string monitorId, CancellationToken cancellationToken = default)
     {
-        return CaptureFactory.Gpu(monitorId);
+        return CaptureFactory.GpuAsync(monitorId, cancellationToken);
     }
 }

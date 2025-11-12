@@ -209,17 +209,17 @@ public partial class MainForm : WinForms.Form
         return item;
     }
 
-    private void OnGraphicsModeMenuItemClick(object? sender, EventArgs e)
+    private async void OnGraphicsModeMenuItemClick(object? sender, EventArgs e)
     {
         if (sender is not WinForms.ToolStripMenuItem item || item.Tag is not PreviewGraphicsMode mode)
         {
             return;
         }
 
-        SetGraphicsMode(mode);
+        await SetGraphicsModeAsync(mode).ConfigureAwait(true);
     }
 
-    private void ApplyGraphicsOptions()
+    private async Task ApplyGraphicsOptionsAsync()
     {
         UpdateGraphicsMenuSelection(_graphicsOptions.Mode);
 
@@ -251,7 +251,8 @@ public partial class MainForm : WinForms.Form
 
             try
             {
-                if (!context.Host.StartSafe(preferGpu))
+                var started = await context.Host.StartSafeAsync(preferGpu).ConfigureAwait(true);
+                if (!started)
                 {
                     _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
                 }
@@ -295,7 +296,7 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void SetGraphicsMode(PreviewGraphicsMode mode)
+    private async Task SetGraphicsModeAsync(PreviewGraphicsMode mode)
     {
         if (_graphicsOptions.Mode == mode)
         {
@@ -305,7 +306,7 @@ public partial class MainForm : WinForms.Form
 
         _graphicsOptions = _graphicsOptions with { Mode = mode };
         Log.Information("UserSetHardwareAcceleration: {Mode}", mode);
-        ApplyGraphicsOptions();
+        await ApplyGraphicsOptionsAsync().ConfigureAwait(true);
     }
 
     private bool ShouldPreferGpu()
@@ -398,7 +399,7 @@ public partial class MainForm : WinForms.Form
 
         try
         {
-            BeginInvoke(new Action(RefreshMonitorCards));
+            BeginInvoke(new Action(async () => await RefreshMonitorCardsAsync().ConfigureAwait(true)));
         }
         catch (ObjectDisposedException)
         {
@@ -410,13 +411,13 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void MainForm_Shown(object? sender, EventArgs e)
+    private async void MainForm_Shown(object? sender, EventArgs e)
     {
-        RefreshMonitorCards();
-        StartAutomaticPreviews();
+        await RefreshMonitorCardsAsync().ConfigureAwait(true);
+        await StartAutomaticPreviewsAsync().ConfigureAwait(true);
     }
 
-    private void MainForm_Resize(object? sender, EventArgs e)
+    private async void MainForm_Resize(object? sender, EventArgs e)
     {
         if (WindowState == WinForms.FormWindowState.Minimized)
         {
@@ -426,7 +427,7 @@ public partial class MainForm : WinForms.Form
 
         if (_previewsRequested)
         {
-            StartAutomaticPreviews();
+            await StartAutomaticPreviewsAsync().ConfigureAwait(true);
         }
     }
 
@@ -468,7 +469,7 @@ public partial class MainForm : WinForms.Form
         UpdateMonitorColumns();
     }
 
-    private void RefreshMonitorCards()
+    private async Task RefreshMonitorCardsAsync()
     {
         if (tlpMonitores is null)
         {
@@ -539,7 +540,8 @@ public partial class MainForm : WinForms.Form
             {
                 try
                 {
-                    if (!host.Start(preferGpu))
+                    var started = await host.StartAsync(preferGpu).ConfigureAwait(true);
+                    if (!started)
                     {
                         _telemetry.Warn($"Pré-visualização do monitor '{monitorId}' não pôde ser iniciada.");
                     }
@@ -864,7 +866,7 @@ public partial class MainForm : WinForms.Form
         _manuallyStoppedMonitors.Add(monitorId);
     }
 
-    private void OnMonitorCardTestRequested(object? sender, EventArgs e)
+    private async void OnMonitorCardTestRequested(object? sender, EventArgs e)
     {
         if (sender is not WinForms.Control control || control.Tag is not string monitorId)
         {
@@ -883,7 +885,8 @@ public partial class MainForm : WinForms.Form
             context.Host.PreviewSafeModeEnabled = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
             if (context.Host.Capture is null)
             {
-                if (!context.Host.StartSafe(preferGpu: ShouldPreferGpu()))
+                var started = await context.Host.StartSafeAsync(preferGpu: ShouldPreferGpu()).ConfigureAwait(true);
+                if (!started)
                 {
                     WinForms.MessageBox.Show(
                         this,
@@ -1051,7 +1054,7 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void StartAutomaticPreviews()
+    private async Task StartAutomaticPreviewsAsync()
     {
         _previewsRequested = true;
 
@@ -1072,7 +1075,8 @@ public partial class MainForm : WinForms.Form
 
             context.Host.PreviewSafeModeEnabled = safeMode;
 
-            if (!context.Host.StartSafe(preferGpu))
+            var started = await context.Host.StartSafeAsync(preferGpu).ConfigureAwait(true);
+            if (!started)
             {
                 _telemetry.Warn($"Pré-visualização do monitor '{context.MonitorId}' não pôde ser iniciada.");
             }
@@ -2136,7 +2140,7 @@ public partial class MainForm : WinForms.Form
             }
         }
 
-        private void ResumeHostFromTestWindow()
+        private async void ResumeHostFromTestWindow()
         {
             if (!_pausedForTestWindow)
             {
@@ -2147,7 +2151,7 @@ public partial class MainForm : WinForms.Form
 
             try
             {
-                Host.Resume();
+                await Host.ResumeAsync().ConfigureAwait(true);
             }
             catch
             {

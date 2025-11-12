@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Mieruka.Core.Config;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
@@ -14,7 +16,7 @@ namespace Mieruka.Preview
         private static readonly ILogger Logger = Log.ForContext("Component", "CaptureFactory");
 
         /// <summary>Cria captura GPU (Windows.Graphics.Capture / DXGI) para o monitor informado.</summary>
-        public static IMonitorCapture Gpu(string monitorId)
+        public static async Task<IMonitorCapture> GpuAsync(string monitorId, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
 
@@ -30,7 +32,7 @@ namespace Mieruka.Preview
 
             try
             {
-                var capture = WgcMonitorCapture.Create(monitorId);
+                var capture = await WgcMonitorCapture.CreateAsync(monitorId, cancellationToken).ConfigureAwait(false);
                 log.Information("CaptureFactory: GPU capture ready for {MonitorId}", monitorId);
                 return capture;
             }
@@ -49,6 +51,12 @@ namespace Mieruka.Preview
                 GpuCaptureGuard.DisableGpuPermanently($"{ex.GetType().Name}: {ex.Message}");
                 throw new GraphicsCaptureUnavailableException("Falha ao inicializar captura GPU.", isPermanent: true, ex);
             }
+        }
+
+        /// <summary>Cria captura GPU (Windows.Graphics.Capture / DXGI) de forma síncrona.</summary>
+        public static IMonitorCapture Gpu(string monitorId)
+        {
+            return GpuAsync(monitorId).GetAwaiter().GetResult();
         }
 
         /// <summary>Cria captura GDI (fallback) para o monitor informado.</summary>
