@@ -20,7 +20,7 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// <summary>
 /// Hosts a monitor preview session and binds frames to a <see cref="WinForms.PictureBox"/>.
 /// </summary>
-public sealed class MonitorPreviewHost : IDisposable
+public sealed partial class MonitorPreviewHost : IDisposable
 {
     private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);

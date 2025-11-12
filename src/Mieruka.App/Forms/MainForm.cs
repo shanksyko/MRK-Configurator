@@ -2042,7 +2042,7 @@ public partial class MainForm : WinForms.Form
         public MonitorDescriptor? Descriptor { get; }
     }
 
-    private sealed class MonitorCardContext
+    private sealed partial class MonitorCardContext
     {
         public MonitorCardContext(string monitorId, MonitorInfo monitor, WinForms.Panel card, MonitorPreviewHost host)
         {
