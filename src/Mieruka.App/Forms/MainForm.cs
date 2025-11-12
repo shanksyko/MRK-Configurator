@@ -241,7 +241,7 @@ public partial class MainForm : WinForms.Form
                 continue;
             }
 
-            context.Host.StopSafe();
+            await context.Host.StopSafeAsync().ConfigureAwait(true);
 
             if (_manuallyStoppedMonitors.Contains(context.MonitorId)
                 || WindowState == WinForms.FormWindowState.Minimized)
@@ -421,7 +421,7 @@ public partial class MainForm : WinForms.Form
     {
         if (WindowState == WinForms.FormWindowState.Minimized)
         {
-            PausePreviews();
+            await PausePreviewsAsync().ConfigureAwait(true);
             return;
         }
 
@@ -850,7 +850,7 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void OnMonitorCardStopRequested(object? sender, EventArgs e)
+    private async void OnMonitorCardStopRequested(object? sender, EventArgs e)
     {
         if (sender is not WinForms.Control control || control.Tag is not string monitorId)
         {
@@ -859,8 +859,8 @@ public partial class MainForm : WinForms.Form
 
         if (_monitorCards.TryGetValue(monitorId, out var context))
         {
-            context.Host.StopSafe();
-            context.CloseTestWindow();
+            await context.Host.StopSafeAsync().ConfigureAwait(true);
+            await context.CloseTestWindowAsync().ConfigureAwait(true);
         }
 
         _manuallyStoppedMonitors.Add(monitorId);
@@ -898,7 +898,7 @@ public partial class MainForm : WinForms.Form
                 }
             }
 
-            ShowMonitorTestWindow(context);
+            await ShowMonitorTestWindowAsync(context).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -911,7 +911,7 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void ShowMonitorTestWindow(MonitorCardContext context)
+    private async Task ShowMonitorTestWindowAsync(MonitorCardContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -921,7 +921,7 @@ public partial class MainForm : WinForms.Form
         if (context.TestWindow is not MonitorTestForm window || window.IsDisposed)
         {
             window = new MonitorTestForm(displayName);
-            context.SetTestWindow(window);
+            await context.SetTestWindowAsync(window).ConfigureAwait(true);
             window.Bounds = bounds;
             window.Show(this);
             return;
@@ -1083,18 +1083,18 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void PausePreviews()
+    private async Task PausePreviewsAsync()
     {
         foreach (var context in _monitorCardOrder)
         {
-            context.Host.StopSafe();
+            await context.Host.StopSafeAsync().ConfigureAwait(true);
         }
     }
 
     private void StopAutomaticPreviews(bool clearManualState)
     {
         _previewsRequested = false;
-        PausePreviews();
+        PausePreviewsAsync().GetAwaiter().GetResult();
 
         if (clearManualState)
         {
@@ -1106,7 +1106,7 @@ public partial class MainForm : WinForms.Form
     {
         foreach (var context in _monitorCardOrder)
         {
-            context.CloseTestWindow();
+            context.CloseTestWindowAsync().GetAwaiter().GetResult();
         }
 
         foreach (var host in _monitorHosts)
@@ -1943,9 +1943,9 @@ public partial class MainForm : WinForms.Form
         }
     }
 
-    private void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
+    private async void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
     {
-        SuspendMonitorPreviews();
+        await SuspendMonitorPreviewsAsync().ConfigureAwait(true);
     }
 
     private void AppRunnerOnAfterMoveWindow(object? sender, EventArgs e)
@@ -1953,13 +1953,13 @@ public partial class MainForm : WinForms.Form
         ScheduleMonitorPreviewResume();
     }
 
-    private void SuspendMonitorPreviews()
+    private async Task SuspendMonitorPreviewsAsync()
     {
         foreach (var host in _monitorHosts.ToArray())
         {
             try
             {
-                host.SuspendCapture();
+                await host.SuspendCaptureAsync().ConfigureAwait(true);
             }
             catch
             {
@@ -2005,16 +2005,16 @@ public partial class MainForm : WinForms.Form
             return;
         }
 
-        ResumeMonitorPreviews();
+        await ResumeMonitorPreviewsAsync().ConfigureAwait(true);
     }
 
-    private void ResumeMonitorPreviews()
+    private async Task ResumeMonitorPreviewsAsync()
     {
         foreach (var host in _monitorHosts.ToArray())
         {
             try
             {
-                host.ResumeCapture();
+                await Task.Run(() => host.ResumeCapture()).ConfigureAwait(true);
             }
             catch
             {
@@ -2064,7 +2064,7 @@ public partial class MainForm : WinForms.Form
 
         private bool _pausedForTestWindow;
 
-        public void SetTestWindow(MonitorTestForm window)
+        public async Task SetTestWindowAsync(MonitorTestForm window)
         {
             ArgumentNullException.ThrowIfNull(window);
 
@@ -2077,15 +2077,15 @@ public partial class MainForm : WinForms.Form
 
             TestWindow = window;
             TestWindow.FormClosed += OnTestWindowClosed;
-            PauseHostForTestWindow();
+            await PauseHostForTestWindowAsync().ConfigureAwait(true);
         }
 
-        public void CloseTestWindow()
+        public async Task CloseTestWindowAsync()
         {
             if (TestWindow is not { IsDisposed: false } window)
             {
                 TestWindow = null;
-                ResumeHostFromTestWindow();
+                await ResumeHostFromTestWindowAsync().ConfigureAwait(true);
                 return;
             }
 
@@ -2102,11 +2102,11 @@ public partial class MainForm : WinForms.Form
             }
             finally
             {
-                ResumeHostFromTestWindow();
+                await ResumeHostFromTestWindowAsync().ConfigureAwait(true);
             }
         }
 
-        private void OnTestWindowClosed(object? sender, WinForms.FormClosedEventArgs e)
+        private async void OnTestWindowClosed(object? sender, WinForms.FormClosedEventArgs e)
         {
             if (sender is not MonitorTestForm window)
             {
@@ -2119,10 +2119,10 @@ public partial class MainForm : WinForms.Form
                 TestWindow = null;
             }
 
-            ResumeHostFromTestWindow();
+            await ResumeHostFromTestWindowAsync().ConfigureAwait(true);
         }
 
-        private void PauseHostForTestWindow()
+        private async Task PauseHostForTestWindowAsync()
         {
             if (_pausedForTestWindow)
             {
@@ -2131,7 +2131,7 @@ public partial class MainForm : WinForms.Form
 
             try
             {
-                Host.Pause();
+                await Host.PauseAsync().ConfigureAwait(true);
                 _pausedForTestWindow = true;
             }
             catch
@@ -2140,7 +2140,7 @@ public partial class MainForm : WinForms.Form
             }
         }
 
-        private async void ResumeHostFromTestWindow()
+        private async Task ResumeHostFromTestWindowAsync()
         {
             if (!_pausedForTestWindow)
             {

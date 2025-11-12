@@ -292,7 +292,7 @@ public partial class AppEditorForm : WinForms.Form
         {
             chkAutoStart.Checked = true;
             chkJanelaTelaCheia.Checked = true;
-            UpdateMonitorPreview();
+            _ = UpdateMonitorPreviewAsync();
         }
 
         appsTab.ExecutablePath = txtExecutavel.Text;
@@ -416,7 +416,7 @@ public partial class AppEditorForm : WinForms.Form
         appsTabControl.Arguments = programa.Arguments ?? string.Empty;
 
         UpdateWindowInputsState();
-        UpdateMonitorPreview();
+        _ = UpdateMonitorPreviewAsync();
     }
 
     private static decimal AjustarRange(WinForms.NumericUpDown control, int value)
@@ -1611,7 +1611,7 @@ public partial class AppEditorForm : WinForms.Form
             _suppressMonitorComboEvents = false;
         }
 
-        UpdateMonitorPreview();
+        _ = UpdateMonitorPreviewAsync();
     }
 
     private bool SelectMonitorById(string? identifier)
@@ -1638,17 +1638,17 @@ public partial class AppEditorForm : WinForms.Form
         return false;
     }
 
-    private void cboMonitores_SelectedIndexChanged(object? sender, EventArgs e)
+    private async void cboMonitores_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_suppressMonitorComboEvents)
         {
             return;
         }
 
-        UpdateMonitorPreview();
+        await UpdateMonitorPreviewAsync().ConfigureAwait(true);
     }
 
-    private void UpdateMonitorPreview()
+    private async Task UpdateMonitorPreviewAsync()
     {
         var previousMonitor = _selectedMonitorInfo;
         var previousMonitorId = _selectedMonitorId;
@@ -1659,7 +1659,10 @@ public partial class AppEditorForm : WinForms.Form
 
         if (cboMonitores?.SelectedItem is not MonitorOption option || option.Monitor is null || option.MonitorId is null)
         {
-            monitorPreviewDisplay?.Unbind();
+            if (monitorPreviewDisplay is not null)
+            {
+                await monitorPreviewDisplay.UnbindAsync().ConfigureAwait(true);
+            }
             UpdateMonitorCoordinateLabel(null);
             monitorPreviewDisplay?.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
             return;
@@ -3004,9 +3007,9 @@ public partial class AppEditorForm : WinForms.Form
         }
     }
 
-    private void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
+    private async void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
     {
-        SuspendPreviewCapture();
+        await SuspendPreviewCaptureAsync().ConfigureAwait(true);
     }
 
     private void AppRunnerOnAfterMoveWindow(object? sender, EventArgs e)
@@ -3014,9 +3017,14 @@ public partial class AppEditorForm : WinForms.Form
         SchedulePreviewResume();
     }
 
-    private void SuspendPreviewCapture()
+    private async Task SuspendPreviewCaptureAsync()
     {
-        monitorPreviewDisplay?.SuspendCapture();
+        if (monitorPreviewDisplay is null)
+        {
+            return;
+        }
+
+        await monitorPreviewDisplay.SuspendCaptureAsync().ConfigureAwait(true);
     }
 
     private void SchedulePreviewResume()
@@ -3056,12 +3064,17 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
-        ResumePreviewCapture();
+        await ResumePreviewCaptureAsync().ConfigureAwait(true);
     }
 
-    private void ResumePreviewCapture()
+    private async Task ResumePreviewCaptureAsync()
     {
-        monitorPreviewDisplay?.ResumeCapture();
+        if (monitorPreviewDisplay is null)
+        {
+            return;
+        }
+
+        await monitorPreviewDisplay.ResumeCaptureAsync().ConfigureAwait(true);
     }
 
     private void AppEditorForm_Disposed(object? sender, EventArgs e)
