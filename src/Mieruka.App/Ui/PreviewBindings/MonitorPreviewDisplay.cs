@@ -141,7 +141,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         ArgumentNullException.ThrowIfNull(monitor);
 
-        Unbind();
+        await UnbindAsync().ConfigureAwait(true);
         _monitor = monitor;
 
         var monitorId = MonitorIdentifier.Create(monitor);
@@ -187,8 +187,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// Stops the preview and releases any held resources.
     /// </summary>
     public void Unbind()
+        => UnbindAsync().GetAwaiter().GetResult();
+
+    public async Task UnbindAsync(CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(Unbind));
+        using var guard = new StackGuard(nameof(UnbindAsync));
         if (!guard.Entered)
         {
             return;
@@ -207,7 +210,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         try
         {
-            host.StopSafe();
+            await host.StopSafeAsync(cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch
         {
@@ -224,56 +230,80 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// Temporarily suspends the active preview capture, if any.
     /// </summary>
     public void SuspendCapture()
+        => SuspendCaptureAsync().GetAwaiter().GetResult();
+
+    public async Task SuspendCaptureAsync(CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(SuspendCapture));
+        using var guard = new StackGuard(nameof(SuspendCaptureAsync));
         if (!guard.Entered)
         {
             return;
         }
 
-        _host?.SuspendCapture();
+        if (_host is { } host)
+        {
+            await host.SuspendCaptureAsync(cancellationToken).ConfigureAwait(true);
+        }
     }
 
     /// <summary>
     /// Resumes a previously suspended preview capture, if any.
     /// </summary>
     public void ResumeCapture()
+        => ResumeCaptureAsync().GetAwaiter().GetResult();
+
+    public async Task ResumeCaptureAsync(CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(ResumeCapture));
+        using var guard = new StackGuard(nameof(ResumeCaptureAsync));
         if (!guard.Entered)
         {
             return;
         }
 
-        _host?.ResumeCapture();
+        if (_host is { } host)
+        {
+            await Task.Run(() => host.ResumeCapture(), cancellationToken).ConfigureAwait(true);
+        }
     }
 
     /// <summary>
     /// Pauses frame processing while keeping the current frame visible.
     /// </summary>
     public void Pause()
+        => PauseAsync().GetAwaiter().GetResult();
+
+    public async Task PauseAsync(CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(Pause));
+        using var guard = new StackGuard(nameof(PauseAsync));
         if (!guard.Entered)
         {
             return;
         }
 
-        _host?.Pause();
+        if (_host is { } host)
+        {
+            await host.PauseAsync(cancellationToken).ConfigureAwait(true);
+        }
     }
 
     /// <summary>
     /// Resumes frame processing after a pause.
     /// </summary>
     public void Resume()
+        => ResumeAsync().GetAwaiter().GetResult();
+
+    public async Task ResumeAsync()
     {
-        using var guard = new StackGuard(nameof(Resume));
+        using var guard = new StackGuard(nameof(ResumeAsync));
         if (!guard.Entered)
         {
             return;
         }
 
-        _host?.Resume();
+        if (_host is { } host)
+        {
+            await host.ResumeAsync().ConfigureAwait(true);
+        }
     }
 
     /// <inheritdoc />

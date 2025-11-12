@@ -331,8 +331,14 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Stops the current preview session.
     /// </summary>
     public void Stop()
+        => StopAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Stops the current preview session.
+    /// </summary>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(Stop));
+        using var guard = new StackGuard(nameof(StopAsync));
         if (!guard.Entered)
         {
             return;
@@ -340,7 +346,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         if (!_lifecycleGate.TryEnter())
         {
-            LogReentrancyBlocked(nameof(Stop));
+            LogReentrancyBlocked(nameof(StopAsync));
             return;
         }
 
@@ -348,7 +354,7 @@ public sealed class MonitorPreviewHost : IDisposable
         {
             if (!TryEnterBusy(out var scope))
             {
-                LogReentrancyBlocked(nameof(Stop));
+                LogReentrancyBlocked(nameof(StopAsync));
                 return;
             }
 
@@ -362,7 +368,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 }
 
                 Interlocked.Exchange(ref _paused, 0);
-                StopCore(clearFrame: true);
+                await StopCoreAsync(clearFrame: true, resetPaused: true, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -379,11 +385,19 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Stops the current preview session while preventing overlapping lifecycle transitions.
     /// </summary>
     public void StopSafe()
+        => StopSafeAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Stops the current preview session while preventing overlapping lifecycle transitions.
+    /// </summary>
+    public async Task StopSafeAsync(CancellationToken cancellationToken = default)
     {
         var spinner = new SpinWait();
 
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var state = Volatile.Read(ref _lifecycleState);
 
             if (state == LifecycleStopped)
@@ -405,7 +419,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
             try
             {
-                Stop();
+                await StopAsync(cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -420,8 +434,11 @@ public sealed class MonitorPreviewHost : IDisposable
     /// Temporarily suspends the capture pipeline while keeping the current frame.
     /// </summary>
     public void SuspendCapture()
+        => SuspendCaptureAsync().GetAwaiter().GetResult();
+
+    public async Task SuspendCaptureAsync(CancellationToken cancellationToken = default)
     {
-        using var guard = new StackGuard(nameof(SuspendCapture));
+        using var guard = new StackGuard(nameof(SuspendCaptureAsync));
         if (!guard.Entered)
         {
             return;
@@ -434,7 +451,7 @@ public sealed class MonitorPreviewHost : IDisposable
 
         if (!TryEnterBusy(out var scope))
         {
-            LogReentrancyBlocked(nameof(SuspendCapture));
+            LogReentrancyBlocked(nameof(SuspendCaptureAsync));
             return;
         }
 
@@ -456,7 +473,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            StopCore(clearFrame: false);
+            await StopCoreAsync(clearFrame: false, resetPaused: true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -565,6 +582,9 @@ public sealed class MonitorPreviewHost : IDisposable
     }
 
     public void Pause()
+        => PauseAsync().GetAwaiter().GetResult();
+
+    public async Task PauseAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed)
         {
@@ -579,7 +599,8 @@ public sealed class MonitorPreviewHost : IDisposable
         try
         {
             var wasPaused = Interlocked.Exchange(ref _paused, 1) == 1;
-            var detached = DisposeCaptureRetainingFrame(resetPaused: false);
+            var detached = await DisposeCaptureRetainingFrameAsync(resetPaused: false, cancellationToken)
+                .ConfigureAwait(false);
 
             if (!wasPaused || detached)
             {
@@ -916,7 +937,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 _isSuspended = false;
             }
 
-            StopCore(clearFrame: false, resetPaused: false);
+            await StopCoreAsync(clearFrame: false, resetPaused: false, cancellationToken).ConfigureAwait(false);
             Volatile.Write(ref _lifecycleState, LifecycleStopped);
             return false;
         }
@@ -1228,7 +1249,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 if (capture is not null)
                 {
                     capture.FrameArrived -= OnFrameArrived;
-                    SafeDispose(capture);
+                    await SafeDisposeAsync(capture, cancellationToken).ConfigureAwait(false);
                 }
 
                 return false;
@@ -1267,7 +1288,7 @@ public sealed class MonitorPreviewHost : IDisposable
                 if (capture is not null)
                 {
                     capture.FrameArrived -= OnFrameArrived;
-                    SafeDispose(capture);
+                    await SafeDisposeAsync(capture, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -1679,9 +1700,9 @@ public sealed class MonitorPreviewHost : IDisposable
         ResetFrameThrottle();
     }
 
-    private void StopCore(bool clearFrame, bool resetPaused = true)
+    private async Task StopCoreAsync(bool clearFrame, bool resetPaused, CancellationToken cancellationToken)
     {
-        using var guard = new StackGuard(nameof(StopCore));
+        using var guard = new StackGuard(nameof(StopCoreAsync));
         if (!guard.Entered)
         {
             return;
@@ -1719,7 +1740,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (!TryEnterStartStop(nameof(Stop), () => PostStop(clearFrame, resetPaused), out var scope))
+        if (!TryEnterStartStop(nameof(StopAsync), () => PostStop(clearFrame, resetPaused), out var scope))
         {
             SetState(previousState);
             return;
@@ -1727,14 +1748,14 @@ public sealed class MonitorPreviewHost : IDisposable
 
         using (scope)
         {
-            StopCoreUnsafe(clearFrame, resetPaused);
+            await StopCoreUnsafeAsync(clearFrame, resetPaused, cancellationToken).ConfigureAwait(false);
             SetState(targetState);
         }
     }
 
-    private void StopCoreUnsafe(bool clearFrame, bool resetPaused = true)
+    private async Task StopCoreUnsafeAsync(bool clearFrame, bool resetPaused, CancellationToken cancellationToken)
     {
-        using var guard = new StackGuard(nameof(StopCoreUnsafe));
+        using var guard = new StackGuard(nameof(StopCoreUnsafeAsync));
         if (!guard.Entered)
         {
             return;
@@ -1750,7 +1771,7 @@ public sealed class MonitorPreviewHost : IDisposable
         if (capture is not null)
         {
             capture.FrameArrived -= OnFrameArrived;
-            SafeDispose(capture);
+            await SafeDisposeAsync(capture, cancellationToken).ConfigureAwait(false);
             if (!_suppressEvents)
             {
                 _logger.Information("CaptureDisposed");
@@ -1776,7 +1797,7 @@ public sealed class MonitorPreviewHost : IDisposable
         Volatile.Write(ref _lifecycleState, LifecycleStopped);
     }
 
-    private bool DisposeCaptureRetainingFrame(bool resetPaused)
+    private async Task<bool> DisposeCaptureRetainingFrameAsync(bool resetPaused, CancellationToken cancellationToken)
     {
         bool hasCapture;
         lock (_gate)
@@ -1794,7 +1815,7 @@ public sealed class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        StopCore(clearFrame: false, resetPaused: resetPaused);
+        await StopCoreAsync(clearFrame: false, resetPaused: resetPaused, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -1850,11 +1871,14 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            _target.BeginInvoke(new Action(() =>
+            _target.BeginInvoke(new Action(async () =>
             {
                 try
                 {
-                    StopCore(clearFrame, resetPaused);
+                    await StopCoreAsync(clearFrame, resetPaused, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
                 }
                 catch (ObjectDisposedException)
                 {
@@ -1992,11 +2016,23 @@ public sealed class MonitorPreviewHost : IDisposable
         }
     }
 
-    private static void SafeDispose(IMonitorCapture capture)
+    private static async ValueTask SafeDisposeAsync(IMonitorCapture capture, CancellationToken cancellationToken)
     {
         try
         {
-            capture.StopAsync().GetAwaiter().GetResult();
+            var stopTask = capture.StopAsync();
+            if (!stopTask.IsCompletedSuccessfully)
+            {
+                await stopTask.AsTask().WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                stopTask.GetAwaiter().GetResult();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -2005,7 +2041,19 @@ public sealed class MonitorPreviewHost : IDisposable
 
         try
         {
-            capture.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            var disposeTask = capture.DisposeAsync().AsTask();
+            if (!disposeTask.IsCompletedSuccessfully)
+            {
+                await disposeTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await disposeTask.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
