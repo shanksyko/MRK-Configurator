@@ -837,15 +837,17 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
     {
-        var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
+        var monitorKey = MonitorIdentifier.Normalize(MonitorId);
+        var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(monitorKey);
         var hostSupportsGpu = false;
+        string? monitorFriendlyName = null;
 
         if (!gpuInBackoff)
         {
             MonitorInfo? monitor = null;
             try
             {
-                monitor = MonitorLocator.Find(MonitorId);
+                monitor = MonitorLocator.Find(monitorKey);
             }
             catch
             {
@@ -854,17 +856,19 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (monitor is not null)
             {
+                monitorFriendlyName = GetMonitorFriendlyName(monitor);
                 hostSupportsGpu = CaptureFactory.IsHostSuitableForWgc(monitor);
                 if (!hostSupportsGpu)
                 {
-                    gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(MonitorId);
+                    gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(monitorKey);
                 }
             }
         }
 
         if (gpuInBackoff)
         {
-            LogGpuFallback();
+            monitorFriendlyName ??= MonitorId;
+            LogGpuFallback(monitorKey, monitorFriendlyName);
         }
 
         if (PreviewSafeModeEnabled)
@@ -2098,7 +2102,22 @@ public sealed partial class MonitorPreviewHost : IDisposable
         ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
     }
 
-    private void LogGpuFallback()
+    private static string GetMonitorFriendlyName(MonitorInfo monitor)
+    {
+        if (!string.IsNullOrWhiteSpace(monitor.Name))
+        {
+            return monitor.Name;
+        }
+
+        if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+        {
+            return monitor.DeviceName;
+        }
+
+        return MonitorIdentifier.Create(monitor);
+    }
+
+    private void LogGpuFallback(string monitorKey, string monitorFriendlyName)
     {
         if (_suppressEvents)
         {
@@ -2117,7 +2136,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
 
         Interlocked.Exchange(ref _lastGpuFallbackLogTicks, nowTicks);
-        _logger.Information("GpuCaptureFallbackAtivado");
+        _logger.Information(
+            "GpuCaptureFallbackAtivado monitor={MonitorFriendly} key={MonitorKey}",
+            monitorFriendlyName,
+            monitorKey);
     }
 
     private void EnsurePictureBoxSizeMode()

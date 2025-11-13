@@ -46,22 +46,13 @@ namespace Mieruka.Preview
                 throw new GraphicsCaptureUnavailableException("GPU disabled by guard.", isPermanent: true);
             }
 
-            EnsureGpuEnvironmentCompatible(monitorId);
-
             var monitor = MonitorLocator.Find(monitorId)
                 ?? throw new InvalidOperationException($"Monitor '{monitorId}' não foi encontrado.");
 
-            if (_gpuUnavailableMonitors.ContainsKey(monitor.Id))
-            {
-                LogGpuBackoff(monitor.Id, monitor.DeviceName);
-                throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
-            }
+            var monitorKey = GetMonitorBackoffKey(monitor);
+            var monitorFriendlyName = GetMonitorFriendlyName(monitor);
 
-            if (GraphicsCaptureProvider.IsGpuInBackoff(monitor.Id))
-            {
-                LogGpuBackoff(monitor.Id, monitor.DeviceName);
-                throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
-            }
+            EnsureGpuEnvironmentCompatible(monitorKey, monitorFriendlyName);
 
             var capture = new GraphicsCaptureProvider();
             try
@@ -71,7 +62,8 @@ namespace Mieruka.Preview
                     throw new PlatformNotSupportedException("Captura por GPU não suportada neste sistema.");
                 }
 
-                await StartCaptureAsync(capture, monitor, cancellationToken).ConfigureAwait(false);
+                await StartCaptureAsync(capture, monitor, monitorKey, monitorFriendlyName, cancellationToken)
+                    .ConfigureAwait(false);
                 return capture;
             }
             catch
@@ -84,6 +76,8 @@ namespace Mieruka.Preview
         private static async Task StartCaptureAsync(
             IMonitorCapture capture,
             MonitorInfo monitor,
+            string monitorKey,
+            string monitorFriendlyName,
             CancellationToken cancellationToken)
         {
             using var guard = new StackGuard(nameof(StartCaptureAsync));
@@ -100,10 +94,15 @@ namespace Mieruka.Preview
             }
             catch (ArgumentException ex)
             {
-                if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
+                if (GraphicsCaptureProvider.MarkGpuBackoff(monitorKey))
                 {
-                    LogGpuBackoff(monitor.Id, monitor.DeviceName);
-                    WarnRateLimited(ex, "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff e caindo para GDI. reason={Reason}", monitor.DeviceName, ex.Message);
+                    LogGpuBackoff(monitorKey, monitorFriendlyName);
+                    WarnRateLimited(
+                        ex,
+                        "Windows Graphics Capture indisponível para {MonitorFriendly} (key={MonitorKey}). Aplicando backoff e caindo para GDI. reason={Reason}",
+                        monitorFriendlyName,
+                        monitorKey,
+                        ex.Message);
                 }
                 GpuCaptureGuard.DisableGpuPermanently("ArgumentException:E_INVALIDARG");
                 throw;
@@ -111,35 +110,40 @@ namespace Mieruka.Preview
             catch (GraphicsCaptureUnavailableException ex)
             {
                 var duration = ex.IsPermanent ? Timeout.InfiniteTimeSpan : (TimeSpan?)null;
-                var appliedBackoff = GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id, duration);
+                var appliedBackoff = GraphicsCaptureProvider.MarkGpuBackoff(monitorKey, duration);
                 var disabledNow = ex.IsPermanent && GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailableException");
 
-                MarkMonitorUnavailable(monitor.Id);
+                MarkMonitorUnavailable(monitorKey);
 
                 if (appliedBackoff || disabledNow)
                 {
-                    LogGpuBackoff(monitor.Id, monitor.DeviceName);
+                    LogGpuBackoff(monitorKey, monitorFriendlyName);
                     var template = ex.IsPermanent
-                        ? "Windows Graphics Capture indisponível para {Monitor}. Aplicando backoff indefinido e caindo para GDI. reason={Reason}"
-                        : "Windows Graphics Capture indisponível temporariamente para {Monitor}. Aplicando backoff e caindo para GDI. reason={Reason}";
-                    WarnRateLimited(ex, template, monitor.DeviceName, ex.Message);
+                        ? "Windows Graphics Capture indisponível para {MonitorFriendly} (key={MonitorKey}). Aplicando backoff indefinido e caindo para GDI. reason={Reason}"
+                        : "Windows Graphics Capture indisponível temporariamente para {MonitorFriendly} (key={MonitorKey}). Aplicando backoff e caindo para GDI. reason={Reason}";
+                    WarnRateLimited(ex, template, monitorFriendlyName, monitorKey, ex.Message);
                 }
 
                 throw;
             }
             catch (NotSupportedException ex)
             {
-                if (GraphicsCaptureProvider.MarkGpuBackoff(monitor.Id))
+                if (GraphicsCaptureProvider.MarkGpuBackoff(monitorKey))
                 {
-                    LogGpuBackoff(monitor.Id, monitor.DeviceName);
-                    WarnRateLimited(ex, "Windows Graphics Capture não suportado neste host. Caindo para GDI. monitor={Monitor} reason={Reason}", monitor.DeviceName ?? monitor.Id ?? "?", ex.Message);
+                    LogGpuBackoff(monitorKey, monitorFriendlyName);
+                    WarnRateLimited(
+                        ex,
+                        "Windows Graphics Capture não suportado neste host. monitor={MonitorFriendly} key={MonitorKey} reason={Reason}",
+                        monitorFriendlyName,
+                        monitorKey,
+                        ex.Message);
                 }
                 GpuCaptureGuard.DisableGpuPermanently("NotSupportedException");
                 throw;
             }
         }
 
-        private static void EnsureGpuEnvironmentCompatible(string monitorId)
+        private static void EnsureGpuEnvironmentCompatible(string monitorKey, string monitorFriendlyName)
         {
             using var guard = new StackGuard(nameof(EnsureGpuEnvironmentCompatible));
             if (!guard.Entered)
@@ -149,23 +153,24 @@ namespace Mieruka.Preview
                     isPermanent: false);
             }
 
-            if (GraphicsCaptureProvider.IsGpuInBackoff(monitorId))
+            if (GraphicsCaptureProvider.IsGpuInBackoff(monitorKey))
             {
-                LogGpuBackoff(monitorId, monitorId);
+                LogGpuBackoff(monitorKey, monitorFriendlyName);
                 throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
             }
 
-            if (_gpuUnavailableMonitors.ContainsKey(monitorId))
+            if (_gpuUnavailableMonitors.ContainsKey(monitorKey))
             {
-                LogGpuBackoff(monitorId, monitorId);
+                LogGpuBackoff(monitorKey, monitorFriendlyName);
                 throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
             }
 
             if (WgcEnvironment.IsRemoteSession())
             {
                 _logger?.Information(
-                    "Sessão remota detectada; captura GPU será ignorada para {MonitorId}.",
-                    monitorId);
+                    "Sessão remota detectada; captura GPU será ignorada para {MonitorFriendly}. key={MonitorKey}",
+                    monitorFriendlyName,
+                    monitorKey);
                 GpuCaptureGuard.DisableGpuPermanently("RemoteSession");
                 throw new NotSupportedException("Windows Graphics Capture indisponível em sessões remotas.");
             }
@@ -173,8 +178,9 @@ namespace Mieruka.Preview
             if (!Environment.UserInteractive)
             {
                 _logger?.Information(
-                    "Ambiente headless detectado; captura GPU será ignorada para {MonitorId}.",
-                    monitorId);
+                    "Ambiente headless detectado; captura GPU será ignorada para {MonitorFriendly}. key={MonitorKey}",
+                    monitorFriendlyName,
+                    monitorKey);
                 GpuCaptureGuard.DisableGpuPermanently("HeadlessEnvironment");
                 throw new NotSupportedException("Windows Graphics Capture indisponível em ambiente headless.");
             }
@@ -182,30 +188,78 @@ namespace Mieruka.Preview
             if (!GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
             {
                 _logger?.Information(
-                    "Windows Graphics Capture não está disponível nesta instalação; usando fallback para {MonitorId}.",
-                    monitorId);
+                    "Windows Graphics Capture não está disponível nesta instalação; usando fallback para {MonitorFriendly}. key={MonitorKey}",
+                    monitorFriendlyName,
+                    monitorKey);
                 GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailable");
                 throw new NotSupportedException("Windows Graphics Capture não está disponível neste host.");
             }
         }
 
-        private static void LogGpuBackoff(string monitorId, string? monitorName)
+        private static void LogGpuBackoff(string monitorKey, string monitorFriendlyName)
         {
             if (_logger is null)
             {
                 return;
             }
 
-            var key = monitorId ?? string.Empty;
+            var key = string.IsNullOrWhiteSpace(monitorKey) ? "<unknown>" : monitorKey;
             if (!_gpuBackoffLogged.TryAdd(key, 0))
             {
                 return;
             }
 
-            var descriptor = string.IsNullOrWhiteSpace(monitorName) ? key : monitorName;
+            var descriptor = string.IsNullOrWhiteSpace(monitorFriendlyName) ? key : monitorFriendlyName;
             _logger.Information(
-                "Windows Graphics Capture indisponível para {Monitor}. Mantendo fallback GDI nesta sessão.",
-                descriptor);
+                "Windows Graphics Capture indisponível para {MonitorFriendly}. Mantendo fallback GDI nesta sessão. key={MonitorKey}",
+                descriptor,
+                key);
+        }
+
+        private static string GetMonitorBackoffKey(MonitorInfo monitor)
+        {
+            var key = MonitorIdentifier.Create(monitor);
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                return key;
+            }
+
+            if (!string.IsNullOrWhiteSpace(monitor.Id))
+            {
+                return monitor.Id;
+            }
+
+            if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+            {
+                return monitor.DeviceName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(monitor.Name))
+            {
+                return monitor.Name;
+            }
+
+            return "<unknown>";
+        }
+
+        private static string GetMonitorFriendlyName(MonitorInfo monitor)
+        {
+            if (!string.IsNullOrWhiteSpace(monitor.Name))
+            {
+                return monitor.Name;
+            }
+
+            if (!string.IsNullOrWhiteSpace(monitor.DeviceName))
+            {
+                return monitor.DeviceName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(monitor.Id))
+            {
+                return monitor.Id;
+            }
+
+            return "<unknown>";
         }
 
         private static bool ShouldLogWarning()
@@ -245,26 +299,28 @@ namespace Mieruka.Preview
             }
         }
 
-        private static void MarkMonitorUnavailable(string monitorId)
+        private static void MarkMonitorUnavailable(string monitorKey)
         {
-            if (string.IsNullOrWhiteSpace(monitorId))
+            if (string.IsNullOrWhiteSpace(monitorKey))
             {
                 return;
             }
 
-            _gpuUnavailableMonitors.TryAdd(monitorId, 0);
+            _gpuUnavailableMonitors.TryAdd(monitorKey, 0);
         }
 
         internal static void ReportHostBlock(MonitorInfo monitor, string messageTemplate, LogEventLevel level)
         {
             ArgumentNullException.ThrowIfNull(monitor);
 
-            var monitorKey = !string.IsNullOrWhiteSpace(monitor.Id) ? monitor.Id : monitor.DeviceName;
+            var monitorKey = GetMonitorBackoffKey(monitor);
+            var monitorFriendlyName = GetMonitorFriendlyName(monitor);
+
             if (!string.IsNullOrWhiteSpace(monitorKey))
             {
                 GraphicsCaptureProvider.MarkGpuBackoff(monitorKey, Timeout.InfiniteTimeSpan);
                 MarkMonitorUnavailable(monitorKey);
-                LogGpuBackoff(monitorKey, monitor.DeviceName);
+                LogGpuBackoff(monitorKey, monitorFriendlyName);
             }
 
             if (_logger is null)
@@ -272,37 +328,32 @@ namespace Mieruka.Preview
                 return;
             }
 
-            var descriptor = string.IsNullOrWhiteSpace(monitor.DeviceName) ? monitorKey : monitor.DeviceName;
-            descriptor ??= "<unknown>";
+            var descriptor = string.IsNullOrWhiteSpace(monitorFriendlyName) ? monitorKey : monitorFriendlyName;
+            if (string.IsNullOrWhiteSpace(descriptor))
+            {
+                descriptor = "<unknown>";
+            }
+
             var key = string.IsNullOrWhiteSpace(monitorKey) ? descriptor : monitorKey;
-            key ??= "<unknown>";
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                key = "<unknown>";
+            }
 
             if (!_hostBlockLogged.TryAdd(key, 0))
             {
                 return;
             }
 
-            switch (level)
-            {
-                case LogEventLevel.Warning:
-                    _logger.Warning(messageTemplate, descriptor);
-                    break;
-                case LogEventLevel.Error:
-                    _logger.Error(messageTemplate, descriptor);
-                    break;
-                case LogEventLevel.Fatal:
-                    _logger.Fatal(messageTemplate, descriptor);
-                    break;
-                case LogEventLevel.Debug:
-                    _logger.Debug(messageTemplate, descriptor);
-                    break;
-                case LogEventLevel.Verbose:
-                    _logger.Verbose(messageTemplate, descriptor);
-                    break;
-                default:
-                    _logger.Information(messageTemplate, descriptor);
-                    break;
-            }
+            var contextualLogger = _logger
+                .ForContext("MonitorKey", key)
+                .ForContext("MonitorFriendly", descriptor);
+
+            var enrichedTemplate = string.Concat(
+                string.IsNullOrWhiteSpace(messageTemplate) ? string.Empty : messageTemplate.TrimEnd(),
+                " monitor={MonitorFriendly} key={MonitorKey}");
+
+            contextualLogger.Write(level, enrichedTemplate, descriptor, key);
         }
     }
 
