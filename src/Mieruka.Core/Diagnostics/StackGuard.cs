@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Serilog;
 
 namespace Mieruka.Core.Diagnostics;
@@ -10,8 +11,7 @@ public readonly struct StackGuard : IDisposable
 {
     private const int MaxDepth = 32;
 
-    [ThreadStatic]
-    private static int _depth;
+    private static readonly AsyncLocal<int> _depth = new();
 
     private readonly bool _entered;
 
@@ -26,19 +26,19 @@ public readonly struct StackGuard : IDisposable
     /// <param name="name">Name used for logging context.</param>
     public StackGuard(string name)
     {
-        var depth = ++_depth;
-        if (depth > MaxDepth)
+        var nextDepth = _depth.Value + 1;
+        if (nextDepth > MaxDepth)
         {
             Log.Warning(
                 "StackGuard triggered for {Name}. depth={Depth} max={MaxDepth}",
                 name,
-                depth,
+                nextDepth,
                 MaxDepth);
             _entered = false;
-            --_depth;
         }
         else
         {
+            _depth.Value = nextDepth;
             _entered = true;
         }
     }
@@ -48,7 +48,15 @@ public readonly struct StackGuard : IDisposable
     {
         if (_entered)
         {
-            --_depth;
+            var currentDepth = _depth.Value;
+            if (currentDepth <= 0)
+            {
+                _depth.Value = 0;
+            }
+            else
+            {
+                _depth.Value = currentDepth - 1;
+            }
         }
     }
 }
