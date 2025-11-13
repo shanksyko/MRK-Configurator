@@ -127,6 +127,28 @@ public static class MonitorIdentifier
         return true;
     }
 
+    /// <summary>
+    /// Normalizes the provided identifier into its canonical representation.
+    /// </summary>
+    /// <remarks>
+    /// When the identifier cannot be parsed it is returned trimmed, ensuring a stable
+    /// representation suitable for lookups such as GPU backoff keys.
+    /// </remarks>
+    public static string Normalize(string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return string.Empty;
+        }
+
+        if (TryParse(identifier, out var key, out var deviceName))
+        {
+            return Create(key, deviceName);
+        }
+
+        return identifier.Trim();
+    }
+
     private static bool TryParseModernFormat(string candidate, ref MonitorKey key)
     {
         var segments = candidate.Split(SegmentSeparator, StringSplitOptions.RemoveEmptyEntries);

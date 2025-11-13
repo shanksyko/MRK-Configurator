@@ -105,7 +105,28 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             throw new ArgumentException("Monitor device name is not defined.", nameof(monitor));
         }
 
-        if (IsGpuInBackoff(monitor.Id))
+        var monitorKey = MonitorIdentifier.Create(monitor);
+        if (string.IsNullOrWhiteSpace(monitorKey))
+        {
+            monitorKey = monitor.Id;
+        }
+
+        if (string.IsNullOrWhiteSpace(monitorKey))
+        {
+            monitorKey = monitor.DeviceName;
+        }
+
+        if (string.IsNullOrWhiteSpace(monitorKey))
+        {
+            monitorKey = monitor.Name;
+        }
+
+        if (string.IsNullOrWhiteSpace(monitorKey))
+        {
+            monitorKey = "<unknown>";
+        }
+
+        if (IsGpuInBackoff(monitorKey))
         {
             throw new NotSupportedException("GPU capture em backoff para este display; use GDI.");
         }
@@ -131,7 +152,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             try
             {
-                _monitorId = monitor.Id;
+                _monitorId = monitorKey;
                 InitializeDirect3D();
 
                 _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
@@ -174,11 +195,6 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 // ensure bounds stored so fallback can use if needed
                 _ = bounds;
 
-                var monitorKey = MonitorIdentifier.Create(monitor);
-                if (string.IsNullOrWhiteSpace(monitorKey))
-                {
-                    monitorKey = monitor.DeviceName ?? monitor.Id ?? "<unknown>";
-                }
                 _monitorId = monitorKey;
                 _captureId = Guid.NewGuid().ToString("N");
                 _captureLogger = Logger.ForMonitor(monitorKey).ForContext("CaptureId", _captureId);

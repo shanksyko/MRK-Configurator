@@ -20,11 +20,15 @@ namespace Mieruka.Preview
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
 
-            var log = Logger.ForMonitor(monitorId);
+            var canonicalId = MonitorIdentifier.Normalize(monitorId);
+            var log = Logger.ForMonitor(canonicalId);
 
             if (!GpuCaptureGuard.CanUseGpu())
             {
-                log.Information("CaptureFactory: GPU disabled by guard for {MonitorId}; signalling fallback.", monitorId);
+                log.Information(
+                    "CaptureFactory: GPU disabled by guard for {MonitorId}; signalling fallback. key={MonitorKey}",
+                    monitorId,
+                    canonicalId);
                 throw new GraphicsCaptureUnavailableException("GPU disabled by guard.", isPermanent: true);
             }
 
@@ -32,13 +36,20 @@ namespace Mieruka.Preview
 
             try
             {
-                var capture = await WgcMonitorCapture.CreateAsync(monitorId, cancellationToken).ConfigureAwait(false);
-                log.Information("CaptureFactory: GPU capture ready for {MonitorId}", monitorId);
+                var capture = await WgcMonitorCapture.CreateAsync(canonicalId, cancellationToken).ConfigureAwait(false);
+                log.Information(
+                    "CaptureFactory: GPU capture ready for {MonitorId}. key={MonitorKey}",
+                    monitorId,
+                    canonicalId);
                 return capture;
             }
             catch (GraphicsCaptureUnavailableException ex)
             {
-                log.Warning(ex, "CaptureFactory: GPU unavailable for {MonitorId}; propagating fallback.", monitorId);
+                log.Warning(
+                    ex,
+                    "CaptureFactory: GPU unavailable for {MonitorId}; propagating fallback. key={MonitorKey}",
+                    monitorId,
+                    canonicalId);
                 if (ex.IsPermanent)
                 {
                     GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailableException");
@@ -47,7 +58,11 @@ namespace Mieruka.Preview
             }
             catch (Exception ex)
             {
-                log.Error(ex, "CaptureFactory: GPU backend failed during creation for {MonitorId}; disabling guard.", monitorId);
+                log.Error(
+                    ex,
+                    "CaptureFactory: GPU backend failed during creation for {MonitorId}; disabling guard. key={MonitorKey}",
+                    monitorId,
+                    canonicalId);
                 GpuCaptureGuard.DisableGpuPermanently($"{ex.GetType().Name}: {ex.Message}");
                 throw new GraphicsCaptureUnavailableException("Falha ao inicializar captura GPU.", isPermanent: true, ex);
             }
@@ -64,7 +79,8 @@ namespace Mieruka.Preview
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
 
-            var log = Logger.ForMonitor(monitorId);
+            var canonicalId = MonitorIdentifier.Normalize(monitorId);
+            var log = Logger.ForMonitor(canonicalId);
             log.Information("CaptureFactory: selecting backend {Backend}", "GDI");
 
             return GdiMonitorCapture.Create(monitorId);
@@ -73,6 +89,8 @@ namespace Mieruka.Preview
         public static bool IsHostSuitableForWgc(MonitorInfo monitor)
         {
             ArgumentNullException.ThrowIfNull(monitor);
+
+            var monitorKey = MonitorIdentifier.Create(monitor);
 
             if (!GpuCaptureGuard.CanUseGpu())
             {
@@ -116,7 +134,7 @@ namespace Mieruka.Preview
                 return false;
             }
 
-            if (GraphicsCaptureProvider.IsGpuInBackoff(monitor.Id))
+            if (GraphicsCaptureProvider.IsGpuInBackoff(monitorKey))
             {
                 return false;
             }
