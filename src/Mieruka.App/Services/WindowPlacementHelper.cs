@@ -292,9 +292,11 @@ internal static class WindowPlacementHelper
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
+        var fallbackBounds = CreateFallbackBounds(monitor);
+
         if (!OperatingSystem.IsWindows())
         {
-            return new Drawing.Rectangle(0, 0, monitor.Width, monitor.Height);
+            return fallbackBounds;
         }
 
         if (!string.IsNullOrWhiteSpace(monitor.DeviceName) &&
@@ -309,7 +311,7 @@ internal static class WindowPlacementHelper
             return bounds;
         }
 
-        return new Drawing.Rectangle(0, 0, monitor.Width, monitor.Height);
+        return fallbackBounds;
     }
 
     /// <summary>
@@ -892,6 +894,43 @@ internal static class WindowPlacementHelper
         var width = Math.Max(1, bounds.Width);
         var height = Math.Max(1, bounds.Height);
         return (bounds.X, bounds.Y, width, height);
+    }
+
+    private static Drawing.Rectangle CreateFallbackBounds(MonitorInfo monitor)
+    {
+        var hasValidSize = monitor.Bounds.Width > 0 && monitor.Bounds.Height > 0;
+        if (hasValidSize)
+        {
+            return monitor.Bounds;
+        }
+
+        var width = monitor.Bounds.Width > 0 ? monitor.Bounds.Width : monitor.Width;
+        var height = monitor.Bounds.Height > 0 ? monitor.Bounds.Height : monitor.Height;
+
+        if (width <= 0)
+        {
+            width = Math.Max(1, monitor.Width);
+        }
+
+        if (height <= 0)
+        {
+            height = Math.Max(1, monitor.Height);
+        }
+
+        if (width <= 0)
+        {
+            width = DefaultFallbackSize.Width;
+        }
+
+        if (height <= 0)
+        {
+            height = DefaultFallbackSize.Height;
+        }
+
+        var left = monitor.Bounds != Drawing.Rectangle.Empty ? monitor.Bounds.Left : 0;
+        var top = monitor.Bounds != Drawing.Rectangle.Empty ? monitor.Bounds.Top : 0;
+
+        return new Drawing.Rectangle(left, top, width, height);
     }
 
     private static int ClampToInt(uint value)
