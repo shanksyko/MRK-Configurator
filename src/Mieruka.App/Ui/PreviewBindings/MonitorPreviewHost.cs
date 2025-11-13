@@ -1143,7 +1143,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             try
             {
-                _target.BeginInvoke(new Action(() =>
+                _target.BeginInvoke(new Action(async () =>
                 {
                     if (_suppressEvents || _disposed || _target.IsDisposed)
                     {
@@ -1156,7 +1156,16 @@ public sealed partial class MonitorPreviewHost : IDisposable
                         return;
                     }
 
-                    StartSafe(preferGpu: false);
+                    try
+                    {
+                        await StartSafeAsync(preferGpu: false).ConfigureAwait(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        ForEvent("SafeModeStartRetryFailed")
+                            .Error(ex, "Falha ao reiniciar a pré-visualização em modo seguro.");
+                        throw;
+                    }
                 }));
             }
             catch (ObjectDisposedException)
