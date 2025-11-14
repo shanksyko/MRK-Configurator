@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Reflection;
 using System.Threading;
 using Mieruka.Core.Contracts;
@@ -27,6 +28,8 @@ internal sealed class TabEditCoordinator
     private readonly WinForms.Timer _uiEventDebounceTimer;
     private readonly object _uiEventDebounceGate = new();
     private readonly MethodInfo? _applyAppTypeUiMethod;
+
+    private Size _lastRootSize; // MIERUKA_FIX
 
     private int _applying;
     private IDisposable? _bindingScope;
@@ -317,6 +320,14 @@ internal sealed class TabEditCoordinator
         {
             return;
         }
+
+        var currentSize = _root.Size;
+        if (currentSize == _lastRootSize)
+        {
+            return;
+        }
+
+        _lastRootSize = currentSize;
 
         ScheduleApplyAppTypeUi();
     }
