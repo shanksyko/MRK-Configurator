@@ -26,6 +26,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
     private static readonly TimeSpan SafeModeFrameThrottle = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan SafeModeStartDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan LifecycleWaitDelay = TimeSpan.FromMilliseconds(10);
     private static readonly TimeSpan GpuFallbackLogInterval = TimeSpan.FromSeconds(10);
     private static long _lastGpuFallbackLogTicks;
 
@@ -392,8 +393,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
     /// </summary>
     public async Task StopSafeAsync(CancellationToken cancellationToken = default)
     {
-        var spinner = new SpinWait();
-
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -407,13 +406,13 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (state is LifecycleStarting or LifecycleStopping)
             {
-                spinner.SpinOnce();
+                await WaitForLifecycleAvailabilityAsync(cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
             if (Interlocked.CompareExchange(ref _lifecycleState, LifecycleStopping, state) != state)
             {
-                spinner.SpinOnce();
+                await WaitForLifecycleAvailabilityAsync(cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
@@ -1033,10 +1032,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     public async Task<bool> StartSafeAsync(bool preferGpu, CancellationToken cancellationToken = default)
     {
-        var spinner = new SpinWait();
-
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var state = Volatile.Read(ref _lifecycleState);
 
             if (state == LifecycleRunning)
@@ -1046,13 +1045,13 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (state is LifecycleStarting or LifecycleStopping)
             {
-                spinner.SpinOnce();
+                await WaitForLifecycleAvailabilityAsync(cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
             if (Interlocked.CompareExchange(ref _lifecycleState, LifecycleStarting, state) != state)
             {
-                spinner.SpinOnce();
+                await WaitForLifecycleAvailabilityAsync(cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
@@ -1068,6 +1067,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 Volatile.Write(ref _lifecycleState, started ? LifecycleRunning : LifecycleStopped);
             }
         }
+    }
+
+    private static Task WaitForLifecycleAvailabilityAsync(CancellationToken cancellationToken)
+    {
+        return Task.Delay(LifecycleWaitDelay, cancellationToken);
     }
 
     private bool ShouldDelayStartForSafeMode(out TimeSpan remainingDelay)
