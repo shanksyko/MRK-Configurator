@@ -100,6 +100,16 @@ internal sealed class ConfigForm : WinForms.Form
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
         _monitorSeeder = new MonitorSeeder();
 
+        InitializeComponent();
+        // MIERUKA_FIX
+        SetStyle(
+            WinForms.ControlStyles.AllPaintingInWmPaint
+            | WinForms.ControlStyles.OptimizedDoubleBuffer
+            | WinForms.ControlStyles.UserPaint,
+            true);
+        UpdateStyles();
+        DoubleBuffered = true;
+
         _toolTip = ToolTipTamer.Create();
 
         _footerPanel = new WinForms.FlowLayoutPanel
@@ -2754,6 +2764,10 @@ internal sealed class ConfigForm : WinForms.Form
         {
             Log.Warning(ex, "Falha durante a automação de login.");
         }
+    }
+
+    private void InitializeComponent()
+    {
     }
 
 }
