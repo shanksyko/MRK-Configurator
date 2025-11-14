@@ -35,6 +35,7 @@ namespace Mieruka.App.Forms;
 public partial class AppEditorForm : WinForms.Form
 {
     private static readonly ILogger Logger = Log.ForContext<AppEditorForm>();
+    private readonly ILogger _logger = Log.ForContext<AppEditorForm>(); // MIERUKA_FIX
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
@@ -531,11 +532,16 @@ public partial class AppEditorForm : WinForms.Form
         using var scope = _tabEditCoordinator.BeginEditScope(nameof(ApplyAppTypeUI));
         if (!scope.IsActive)
         {
+            _logger.Debug("ApplyAppTypeUI: exit scope inactive // MIERUKA_FIX");
             return;
         }
 
         var isExecutable = rbExe?.Checked ?? false;
         var isBrowser = rbBrowser?.Checked ?? false;
+        _logger.Debug(
+            "ApplyAppTypeUI: enter isExecutable={IsExecutable} isBrowser={IsBrowser} // MIERUKA_FIX",
+            isExecutable,
+            isBrowser);
 
         var tabControl = tabEditor;
         var appsTabPage = tabAplicativos;
@@ -659,6 +665,15 @@ public partial class AppEditorForm : WinForms.Form
         {
             sitesEditorControl.Visible = isBrowser;
         }
+
+        var selectedTabName = tabEditor?.SelectedTab?.Name ?? tabEditor?.SelectedTab?.Text ?? string.Empty;
+        var installedAppsVisible = grpInstalledApps?.Visible ?? false;
+        _logger.Information(
+            "ApplyAppTypeUI: exit selectedTab={SelectedTab} isExecutable={IsExecutable} isBrowser={IsBrowser} installedAppsVisible={InstalledAppsVisible} // MIERUKA_FIX",
+            selectedTabName,
+            isExecutable,
+            isBrowser,
+            installedAppsVisible);
     }
 
     private static void SetTabVisibility(TabControl tabControl, TabPage tabPage, int originalIndex, bool visible)
@@ -984,8 +999,14 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimRects()
     {
+        _logger.Debug(
+            "RebuildSimRects: enter isDisposed={IsDisposed} simulationActive={SimulationActive} // MIERUKA_FIX",
+            IsDisposed,
+            _cycleSimulationCts is not null);
+
         if (IsDisposed)
         {
+            _logger.Debug("RebuildSimRects: exit form disposed // MIERUKA_FIX");
             return;
         }
 
@@ -998,6 +1019,7 @@ public partial class AppEditorForm : WinForms.Form
                 BeginInvoke(new Action(RebuildSimRects));
             }
 
+            _logger.Information("RebuildSimRects: exit deferred due to active simulation // MIERUKA_FIX");
             return;
         }
 
@@ -1006,6 +1028,7 @@ public partial class AppEditorForm : WinForms.Form
 
         if (flowCycleItems is null)
         {
+            _logger.Information("RebuildSimRects: exit missing cycle container // MIERUKA_FIX");
             return;
         }
 
@@ -1033,6 +1056,7 @@ public partial class AppEditorForm : WinForms.Form
 
             flowCycleItems.Controls.Add(placeholder);
             UpdateCycleControlsState();
+            _logger.Information("RebuildSimRects: exit no items generated // MIERUKA_FIX");
             return;
         }
 
@@ -1053,6 +1077,10 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         UpdateCycleControlsState();
+        _logger.Information(
+            "RebuildSimRects: exit createdDisplays={DisplayCount} totalItems={ItemCount} // MIERUKA_FIX",
+            _cycleDisplays.Count,
+            items.Count);
     }
 
     private IReadOnlyList<AppCycleSimulator.SimRect> BuildSimRectList()
@@ -2265,6 +2293,10 @@ public partial class AppEditorForm : WinForms.Form
     {
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
+        _logger.Debug(
+            "CaptureWindowPreviewSnapshot: enter monitorId={MonitorId} // MIERUKA_FIX",
+            monitorId ?? string.Empty);
+
         var autoStart = chkAutoStart?.Checked ?? false;
         var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
         var appId = txtId?.Text?.Trim() ?? string.Empty;
@@ -2282,7 +2314,16 @@ public partial class AppEditorForm : WinForms.Form
                 (int)nudJanelaAltura.Value);
         }
 
-        return new WindowPreviewSnapshot(monitorId, bounds, isFullScreen, autoStart, appId);
+        var snapshot = new WindowPreviewSnapshot(monitorId, bounds, isFullScreen, autoStart, appId);
+        _logger.Information(
+            "CaptureWindowPreviewSnapshot: exit bounds={Bounds} monitorId={MonitorId} fullScreen={FullScreen} autoStart={AutoStart} appId={AppId} // MIERUKA_FIX",
+            snapshot.Bounds,
+            snapshot.MonitorId ?? string.Empty,
+            snapshot.IsFullScreen,
+            snapshot.AutoStart,
+            snapshot.AppId);
+
+        return snapshot;
     }
 
     private void ApplyWindowPreviewSnapshot(WindowPreviewSnapshot snapshot, TimeSpan timestamp)
@@ -2331,8 +2372,14 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimulationOverlays()
     {
+        var hasPreviewDisplay = monitorPreviewDisplay is not null;
+        _logger.Debug(
+            "RebuildSimulationOverlays: enter hasPreviewDisplay={HasPreviewDisplay} // MIERUKA_FIX",
+            hasPreviewDisplay);
+
         if (monitorPreviewDisplay is null)
         {
+            _logger.Debug("RebuildSimulationOverlays: exit missing preview display // MIERUKA_FIX");
             return;
         }
 
@@ -2340,6 +2387,7 @@ public partial class AppEditorForm : WinForms.Form
         if (monitor is null)
         {
             monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+            _logger.Information("RebuildSimulationOverlays: exit no monitor selected // MIERUKA_FIX");
             return;
         }
 
@@ -2347,6 +2395,9 @@ public partial class AppEditorForm : WinForms.Form
         if (string.IsNullOrWhiteSpace(monitorId))
         {
             monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+            _logger.Information(
+                "RebuildSimulationOverlays: exit invalid monitor identifier monitor={MonitorName} // MIERUKA_FIX",
+                monitor.Name ?? string.Empty);
             return;
         }
 
@@ -2442,6 +2493,12 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         monitorPreviewDisplay.SetSimulationRects(overlays);
+        _logger.Information(
+            "RebuildSimulationOverlays: exit monitorId={MonitorId} overlayCandidates={OverlayCandidates} overlaysRendered={OverlaysRendered} currentAppId={CurrentAppId} // MIERUKA_FIX",
+            monitorId,
+            overlayApps.Count,
+            overlays.Count,
+            current.Id ?? string.Empty);
     }
 
     private MonitorInfo? ResolveMonitorForApp(ProgramaConfig app)
