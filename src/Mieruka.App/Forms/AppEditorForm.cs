@@ -128,6 +128,9 @@ public partial class AppEditorForm : WinForms.Form
         _editSessionId = Guid.NewGuid();
         _logScope = LogContext.PushProperty("EditSessionId", _editSessionId);
         InitializeComponent();
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true); // MIERUKA_FIX
+        UpdateStyles(); // MIERUKA_FIX
+        DoubleBuffered = true; // MIERUKA_FIX
         _uiThreadId = Environment.CurrentManagedThreadId;
         _uiContext = SynchronizationContext.Current;
         ToolTipTamer.Tame(this, components);
