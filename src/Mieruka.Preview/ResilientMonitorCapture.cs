@@ -172,11 +172,20 @@ internal sealed class ResilientMonitorCapture : IMonitorCapture
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
+        var handler = FrameArrived;
+
         if (!ReferenceEquals(sender, _active))
         {
+            e.Dispose();
             return;
         }
 
-        FrameArrived?.Invoke(this, e);
+        if (handler is null)
+        {
+            e.Dispose();
+            return;
+        }
+
+        handler(this, e);
     }
 }
