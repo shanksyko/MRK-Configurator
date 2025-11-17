@@ -9,14 +9,20 @@ public sealed class PreviewFrameScheduler
 {
     private readonly object _gate = new();
     private readonly Stopwatch _stopwatch = new();
+    private readonly TimeSpan _frameInterval;
 
     private CancellationTokenSource? _cts;
     private Task? _worker;
+
     private long _nextFrameAtTicks;
+    private long _framesThisWindow;
+    private TimeSpan _windowStart;
+    private double _currentFps;
+    private double _lastFrameDurationMs;
+    private long _totalFrames;
     private long _completedFrames;
     private long _totalProcessingTicks;
 
-    // TODO: Document where PreviewFrameScheduler instances are created and how they are injected into preview components.
     public PreviewFrameScheduler(double targetFramesPerSecond)
     {
         if (double.IsNaN(targetFramesPerSecond) || double.IsInfinity(targetFramesPerSecond) || targetFramesPerSecond <= 0)
@@ -25,6 +31,9 @@ public sealed class PreviewFrameScheduler
         }
 
         TargetFps = targetFramesPerSecond;
+        _frameInterval = TimeSpan.FromSeconds(1d / TargetFps);
+        _windowStart = TimeSpan.Zero;
+
         _stopwatch.Start();
     }
 
@@ -44,6 +53,8 @@ public sealed class PreviewFrameScheduler
             _nextFrameAtTicks = 0;
             _completedFrames = 0;
             _totalProcessingTicks = 0;
+            _framesThisWindow = 0;
+            _windowStart = _stopwatch.Elapsed;
 
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _worker = Task.Run(() => RunAsync(frameProducer, _cts.Token), CancellationToken.None);
@@ -52,50 +63,51 @@ public sealed class PreviewFrameScheduler
 
     public bool TryBeginFrame(out long timestampTicks)
     {
-        if (renderLoopAsync is null)
-        {
-            throw new ArgumentNullException(nameof(renderLoopAsync));
-        }
-
         lock (_gate)
         {
-            if (_renderTask != null && !_renderTask.IsCompleted)
+            var now = _stopwatch.Elapsed;
+            timestampTicks = now.Ticks;
+
+            if (_nextFrameAtTicks == 0)
             {
-                return Task.CompletedTask;
+                _nextFrameAtTicks = now.Ticks;
             }
 
-            _windowStart = _stopwatch.Elapsed;
-            _cancellation = new CancellationTokenSource();
-            _renderTask = Task.Run(() => RunRenderLoopAsync(renderLoopAsync, _cancellation.Token), CancellationToken.None);
-            return Task.CompletedTask;
+            if (now.Ticks < _nextFrameAtTicks)
+            {
+                return false;
+            }
+
+            if (_windowStart == TimeSpan.Zero)
+            {
+                _windowStart = now;
+            }
+
+            _nextFrameAtTicks = now.Ticks + _frameInterval.Ticks;
+            return true;
         }
     }
 
-    public async Task Stop()
+    public void EndFrame(long frameStartTimestampTicks)
     {
-        Task? renderTask;
         lock (_gate)
         {
-            if (_cancellation == null)
-            {
-                return;
-            }
+            var nowTicks = _stopwatch.ElapsedTicks;
+            var frameDurationTicks = Math.Max(0, nowTicks - frameStartTimestampTicks);
 
-            _cancellation.Cancel();
-            renderTask = _renderTask;
-            _cancellation = null;
-            _renderTask = null;
-        }
+            _framesThisWindow++;
+            _totalFrames++;
+            _completedFrames++;
+            _totalProcessingTicks += frameDurationTicks;
+            _lastFrameDurationMs = frameDurationTicks / (double)TimeSpan.TicksPerMillisecond;
 
-        if (renderTask is not null)
-        {
-            try
+            var now = TimeSpan.FromTicks(nowTicks);
+            var windowElapsed = now - _windowStart;
+            if (windowElapsed.TotalSeconds >= 1)
             {
-                await renderTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when stopping the scheduler.
+                _currentFps = _framesThisWindow / windowElapsed.TotalSeconds;
+                _framesThisWindow = 0;
+                _windowStart = now;
             }
         }
     }
@@ -136,19 +148,31 @@ public sealed class PreviewFrameScheduler
         }
     }
 
+    public void Stop()
+    {
+        StopAsync().GetAwaiter().GetResult();
+    }
+
     public PreviewFrameSchedulerMetrics GetMetricsAndReset()
     {
         lock (_gate)
         {
+            var averageProcessingMs = _completedFrames == 0
+                ? 0
+                : (_totalProcessingTicks / (double)_completedFrames) / TimeSpan.TicksPerMillisecond;
+
             var metrics = new PreviewFrameSchedulerMetrics(
                 _currentFps,
                 _lastFrameDurationMs,
+                averageProcessingMs,
                 _framesThisWindow,
                 _totalFrames);
 
             _currentFps = 0;
             _lastFrameDurationMs = 0;
             _framesThisWindow = 0;
+            _completedFrames = 0;
+            _totalProcessingTicks = 0;
             _windowStart = _stopwatch.Elapsed;
 
             return metrics;
@@ -161,8 +185,7 @@ public sealed class PreviewFrameScheduler
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            long frameStartTimestamp;
-            if (!TryBeginFrame(out frameStartTimestamp))
+            if (!TryBeginFrame(out var frameStartTimestamp))
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(1), cancellationToken).ConfigureAwait(false);
                 continue;
@@ -190,11 +213,17 @@ public sealed class PreviewFrameScheduler
 
 public readonly struct PreviewFrameSchedulerMetrics
 {
-    public PreviewFrameSchedulerMetrics(double currentFps, double lastFrameDurationMs, long framesThisWindow, long totalFrames)
+    public PreviewFrameSchedulerMetrics(
+        double currentFps,
+        double lastFrameDurationMs,
+        double averageProcessingMilliseconds,
+        long frames,
+        long totalFrames)
     {
         CurrentFps = currentFps;
         LastFrameDurationMs = lastFrameDurationMs;
-        FramesThisWindow = framesThisWindow;
+        AverageProcessingMilliseconds = averageProcessingMilliseconds;
+        Frames = frames;
         TotalFrames = totalFrames;
     }
 
@@ -202,7 +231,9 @@ public readonly struct PreviewFrameSchedulerMetrics
 
     public double LastFrameDurationMs { get; }
 
-    public long FramesThisWindow { get; }
+    public double AverageProcessingMilliseconds { get; }
+
+    public long Frames { get; }
 
     public long TotalFrames { get; }
 }
