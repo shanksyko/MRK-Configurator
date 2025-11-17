@@ -30,6 +30,8 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private ILogger? _captureLogger;
     private string? _captureId;
     private string? _monitorId;
+    private bool _isRunning;
+    private string? _previewSessionId;
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
@@ -62,12 +64,17 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
         _monitorId = monitor.Id ?? monitor.DeviceName ?? string.Empty;
         _captureId = Guid.NewGuid().ToString("N");
-        _captureLogger = Logger.ForMonitor(_monitorId).ForContext("CaptureId", _captureId);
+        _previewSessionId = Guid.NewGuid().ToString("N");
+        _captureLogger = Logger
+            .ForMonitor(_monitorId)
+            .ForContext("CaptureId", _captureId)
+            .ForContext("PreviewSessionId", _previewSessionId);
         _captureStopwatch.Restart();
         Interlocked.Exchange(ref _frames, 0);
         _lastStatsSampleUtc = DateTime.UtcNow;
         _captureLogger.Information("PreviewStart: backend={Backend}", "GDI");
 
+        _isRunning = true;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _captureLoop = Task.Run(() => CaptureLoopAsync(_cts.Token), CancellationToken.None);
 
@@ -77,10 +84,13 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     /// <inheritdoc />
     public async ValueTask StopAsync()
     {
+        var hasActiveSession = _isRunning;
+        _isRunning = false;
+
         if (_cts is null)
         {
             _initialized = false;
-            CompleteSession(forceStats: false);
+            CompleteSession(forceStats: false, hasActiveSession: hasActiveSession);
             return;
         }
 
@@ -98,7 +108,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             _initialized = false;
             _cts.Dispose();
             _cts = null;
-            CompleteSession(forceStats: true);
+            CompleteSession(forceStats: hasActiveSession, hasActiveSession: hasActiveSession);
         }
     }
 
@@ -174,12 +184,27 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
     private void RecordFrameProduced()
     {
+        if (!_isRunning || _cts?.IsCancellationRequested == true)
+        {
+            return;
+        }
+
         Interlocked.Increment(ref _frames);
         MaybePublishStats();
     }
 
     private void MaybePublishStats(bool force = false)
     {
+        if (!_isRunning && !force)
+        {
+            return;
+        }
+
+        if (_cts?.IsCancellationRequested == true && !force)
+        {
+            return;
+        }
+
         var now = DateTime.UtcNow;
         if (!force && (now - _lastStatsSampleUtc).TotalSeconds < 5)
         {
@@ -205,9 +230,9 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             0);
     }
 
-    private void CompleteSession(bool forceStats)
+    private void CompleteSession(bool forceStats, bool hasActiveSession)
     {
-        var hasCapture = _captureLogger is not null || _captureStopwatch.IsRunning;
+        var hasCapture = hasActiveSession && (_captureLogger is not null || _captureStopwatch.IsRunning);
         if (!hasCapture)
         {
             Interlocked.Exchange(ref _frames, 0);
@@ -227,6 +252,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         _captureLogger = null;
         _captureId = null;
         _monitorId = null;
+        _previewSessionId = null;
     }
 
 }
