@@ -10,13 +10,11 @@ public sealed class PreviewFrameScheduler
     private readonly object _gate = new();
     private readonly Stopwatch _stopwatch = new();
 
-    private CancellationTokenSource? _cancellation;
-    private Task? _renderTask;
-    private double _currentFps;
-    private double _lastFrameDurationMs;
-    private long _framesThisWindow;
-    private long _totalFrames;
-    private TimeSpan _windowStart;
+    private CancellationTokenSource? _cts;
+    private Task? _worker;
+    private long _nextFrameAtTicks;
+    private long _completedFrames;
+    private long _totalProcessingTicks;
 
     // TODO: Document where PreviewFrameScheduler instances are created and how they are injected into preview components.
     public PreviewFrameScheduler(double targetFramesPerSecond)
@@ -32,7 +30,27 @@ public sealed class PreviewFrameScheduler
 
     public double TargetFps { get; }
 
-    public Task Start(Func<CancellationToken, Task> renderLoopAsync)
+    public void Start(Func<CancellationToken, Task> frameProducer, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(frameProducer);
+
+        lock (_gate)
+        {
+            if (_cts is not null)
+            {
+                throw new InvalidOperationException("Frame scheduler already started.");
+            }
+
+            _nextFrameAtTicks = 0;
+            _completedFrames = 0;
+            _totalProcessingTicks = 0;
+
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _worker = Task.Run(() => RunAsync(frameProducer, _cts.Token), CancellationToken.None);
+        }
+    }
+
+    public bool TryBeginFrame(out long timestampTicks)
     {
         if (renderLoopAsync is null)
         {
@@ -82,6 +100,42 @@ public sealed class PreviewFrameScheduler
         }
     }
 
+    public async Task StopAsync()
+    {
+        Task? worker;
+        CancellationTokenSource? cts;
+
+        lock (_gate)
+        {
+            cts = _cts;
+            worker = _worker;
+            _cts = null;
+            _worker = null;
+        }
+
+        if (cts is null)
+        {
+            return;
+        }
+
+        try
+        {
+            cts.Cancel();
+            if (worker is not null)
+            {
+                await worker.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when cancellation is requested.
+        }
+        finally
+        {
+            cts.Dispose();
+        }
+    }
+
     public PreviewFrameSchedulerMetrics GetMetricsAndReset()
     {
         lock (_gate)
@@ -101,42 +155,36 @@ public sealed class PreviewFrameScheduler
         }
     }
 
-    private async Task RunRenderLoopAsync(Func<CancellationToken, Task> renderLoopAsync, CancellationToken cancellationToken)
+    private async Task RunAsync(Func<CancellationToken, Task> frameProducer, CancellationToken cancellationToken)
     {
-        var targetFrameDuration = TimeSpan.FromSeconds(1 / TargetFps);
+        await Task.Yield();
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var frameStart = _stopwatch.Elapsed;
-
-            await renderLoopAsync(cancellationToken).ConfigureAwait(false);
-
-            var frameEnd = _stopwatch.Elapsed;
-            var frameDuration = frameEnd - frameStart;
-
-            lock (_gate)
+            long frameStartTimestamp;
+            if (!TryBeginFrame(out frameStartTimestamp))
             {
-                _lastFrameDurationMs = frameDuration.TotalMilliseconds;
-                _totalFrames++;
-                _framesThisWindow++;
-
-                var windowDuration = frameEnd - _windowStart;
-                if (windowDuration >= TimeSpan.FromSeconds(1))
-                {
-                    _currentFps = _framesThisWindow / windowDuration.TotalSeconds;
-                    _framesThisWindow = 0;
-                    _windowStart = frameEnd;
-                }
+                await Task.Delay(TimeSpan.FromMilliseconds(1), cancellationToken).ConfigureAwait(false);
+                continue;
             }
 
-            var delay = targetFrameDuration - frameDuration;
-            if (delay > TimeSpan.Zero)
+            try
             {
-                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                await frameProducer(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception)
+            {
+                // Swallow unexpected exceptions to keep the loop alive.
+            }
+            finally
+            {
+                EndFrame(frameStartTimestamp);
             }
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
     }
 }
 

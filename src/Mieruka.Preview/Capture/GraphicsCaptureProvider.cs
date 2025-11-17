@@ -39,7 +39,6 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 #endif
     private static int _gpuGloballyDisabled;
     private const string Backend = "WGC";
-    private const double TargetFramesPerSecond = 30d;
 
     private const int MinFramePoolBufferCount = 2;
     private const int MaxFramePoolBufferCount = 3;
@@ -189,7 +188,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
                 _framePool = CreateFramePool(bufferCount, _currentSize);
 
-                _frameScheduler = new PreviewFrameScheduler(TargetFramesPerSecond);
+                _frameScheduler = new PreviewFrameScheduler(PreviewFrameSchedulerOptions.Default.FramesPerSecond);
                 _framePool.FrameArrived += OnFrameArrived;
 
                 _session = _framePool.CreateCaptureSession(_captureItem);
