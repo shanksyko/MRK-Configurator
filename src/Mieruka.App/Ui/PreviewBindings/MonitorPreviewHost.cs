@@ -294,7 +294,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
         if (!_lifecycleGate.TryEnter())
         {
-            LogReentrancyBlocked(nameof(Start));
+            LogReentrancyBlocked(nameof(StartAsync));
             return Capture is not null;
         }
 
@@ -304,7 +304,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (!TryEnterBusy(out var scope))
             {
-                LogReentrancyBlocked(nameof(Start));
+                LogReentrancyBlocked(nameof(StartAsync));
                 return Capture is not null;
             }
 
@@ -693,8 +693,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
             }
 
             StopCoreUnsafeAsync(clearFrame: true, resetPaused: true, cancellationToken: CancellationToken.None)
-                .AsTask()
-                .Wait();
+                .GetAwaiter()
+                .GetResult();
 
             GC.SuppressFinalize(this);
         }
@@ -958,7 +958,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        if (!TryEnterStartStop(nameof(Start), () => PostStart(preferGpu), out var scope))
+        if (!TryEnterStartStop(nameof(StartAsync), () => PostStart(preferGpu), out var scope))
         {
             SetState(previousState);
 

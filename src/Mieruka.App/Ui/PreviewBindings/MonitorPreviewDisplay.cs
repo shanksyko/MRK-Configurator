@@ -304,6 +304,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         base.Dispose(disposing);
     }
 
+    private void Unbind()
+    {
+        UnbindAsync().GetAwaiter().GetResult();
+    }
+
     /// <summary>
     /// Applies a set of simulated rectangles to the preview overlay.
     /// </summary>
