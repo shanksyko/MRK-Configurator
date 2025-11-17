@@ -81,7 +81,7 @@ public sealed class PreviewFrameScheduler
     }
 }
 
-internal readonly struct PreviewFrameSchedulerMetrics
+public readonly struct PreviewFrameSchedulerMetrics
 {
     public PreviewFrameSchedulerMetrics(long frames, long totalProcessingTicks, long frequency)
     {
