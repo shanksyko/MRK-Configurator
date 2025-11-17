@@ -74,6 +74,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly HashSet<Drawing.Bitmap> _pendingFrames = new();
+    private const int PendingFrameLimit = 2;
     private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
@@ -1425,7 +1426,15 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            RegisterPendingFrame(clone);
+            if (!RegisterPendingFrame(clone, out var pendingCount))
+            {
+                ForEvent("FrameDroppedBackpressure").Debug(
+                    "Quadro de pré-visualização descartado por backpressure. Pendentes={PendingCount} Limite={Limit}.",
+                    pendingCount,
+                    PendingFrameLimit);
+                return;
+            }
+
             UpdateTarget(clone);
         }
         finally
@@ -1915,6 +1924,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool ShouldProcessFrame()
     {
+        if (!HasPendingFrameCapacity())
+        {
+            return false;
+        }
+
         TimeSpan throttle;
         lock (_frameTimingGate)
         {
@@ -1936,6 +1950,14 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             _nextFrameAt = now + throttle;
             return true;
+        }
+    }
+
+    private bool HasPendingFrameCapacity()
+    {
+        lock (_pendingFramesGate)
+        {
+            return _pendingFrames.Count < PendingFrameLimit;
         }
     }
 
@@ -1985,12 +2007,30 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
-    private void RegisterPendingFrame(Drawing.Bitmap frame)
+    private bool RegisterPendingFrame(Drawing.Bitmap frame, out int pendingCount)
     {
+        var shouldDispose = false;
         lock (_pendingFramesGate)
         {
-            _pendingFrames.Add(frame);
+            if (_pendingFrames.Count >= PendingFrameLimit)
+            {
+                pendingCount = _pendingFrames.Count;
+                shouldDispose = true;
+            }
+            else
+            {
+                _pendingFrames.Add(frame);
+                pendingCount = _pendingFrames.Count;
+            }
         }
+
+        if (shouldDispose)
+        {
+            DisposeFrame(frame);
+            return false;
+        }
+
+        return true;
     }
 
     private void UnregisterPendingFrame(Drawing.Bitmap frame)
