@@ -39,6 +39,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 #endif
     private static int _gpuGloballyDisabled;
     private const string Backend = "WGC";
+    private const double TargetFramesPerSecond = 60d;
 
     private const int MinFramePoolBufferCount = 2;
     private const int MaxFramePoolBufferCount = 3;
@@ -59,6 +60,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private ILogger? _captureLogger;
     private string? _previewSessionId;
     private readonly Stopwatch _captureStopwatch = new();
+    private PreviewFrameScheduler? _frameScheduler;
     private long _frames;
     private long _dropped;
     private long _invalidImages;
@@ -187,6 +189,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
                 _framePool = CreateFramePool(bufferCount, _currentSize);
 
+                _frameScheduler = new PreviewFrameScheduler(TargetFramesPerSecond);
                 _framePool.FrameArrived += OnFrameArrived;
 
                 _session = _framePool.CreateCaptureSession(_captureItem);
@@ -216,11 +219,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 _lastStatsSampleUtc = DateTime.UtcNow;
 
                 _captureLogger.Information(
-                    "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, featureLevel={Level}",
+                    "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, featureLevel={Level}, targetFps={TargetFps:F1}",
                     Backend,
                     _monitorId,
                     _previewSessionId,
-                    _selectedFeatureLevel);
+                    _selectedFeatureLevel,
+                    _frameScheduler.TargetFps);
             }
             catch (GraphicsCaptureUnavailableException)
             {
@@ -382,15 +386,31 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
 
         Direct3D11CaptureFrame? frame = null;
+        var scheduler = _frameScheduler;
+        var frameProcessingStarted = false;
+        long frameStartTimestamp = 0;
 
         try
         {
+            var shouldProcess = scheduler?.TryBeginFrame(out frameStartTimestamp) ?? true;
             frame = sender.TryGetNextFrame();
             if (frame is null)
+            {
+                if (shouldProcess)
+                {
+                    scheduler?.EndFrame(frameStartTimestamp);
+                }
+                RecordFrameDiscarded(invalidFrame: false);
+                return;
+            }
+
+            if (!shouldProcess)
             {
                 RecordFrameDiscarded(invalidFrame: false);
                 return;
             }
+
+            frameProcessingStarted = true;
 
             if (frame.ContentSize.Width <= 0 || frame.ContentSize.Height <= 0)
             {
@@ -456,6 +476,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
         finally
         {
+            if (frameProcessingStarted)
+            {
+                scheduler?.EndFrame(frameStartTimestamp);
+            }
+
             frame?.Dispose();
         }
     }
@@ -649,6 +674,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         _captureLogger = null;
         _previewSessionId = null;
+        _frameScheduler = null;
 
         if (_framePool is not null)
         {
@@ -717,18 +743,21 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         var fps = frames / elapsedSeconds;
         var logger = _captureLogger ?? Logger;
+        var schedulerMetrics = _frameScheduler?.GetMetricsAndReset();
         logger.Debug(
-            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, targetFps={TargetFps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}, processingMs={ProcessingMs:F2}",
             Backend,
             _monitorId,
             _previewSessionId,
             fps,
+            _frameScheduler?.TargetFps,
             frames,
             dropped,
             invalid,
             Interlocked.Read(ref _totalFrames),
             Interlocked.Read(ref _totalDropped),
-            Interlocked.Read(ref _totalInvalidImages));
+            Interlocked.Read(ref _totalInvalidImages),
+            schedulerMetrics?.AverageProcessingMilliseconds ?? 0);
     }
 
     private Direct3D11CaptureFramePool CreateFramePool(int bufferCount, Windows.Graphics.SizeInt32 size)

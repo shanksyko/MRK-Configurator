@@ -16,11 +16,11 @@ namespace Mieruka.Preview;
 [SupportedOSPlatform("windows")]
 public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 {
-    private const int TargetFramesPerSecond = 30;
     private const string Backend = "GDI";
 
     private static readonly ILogger Logger = Log.ForContext<GdiMonitorCaptureProvider>();
 
+    private readonly PreviewFrameScheduler _frameScheduler;
     private CancellationTokenSource? _cts;
     private Task? _captureLoop;
     private MonitorUtilities.RECT _monitorBounds;
@@ -38,6 +38,16 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private string? _previewSessionId; // Keep this unique to avoid duplicate session tracking fields
     private string? _monitorId;
     private bool _isRunning;
+
+    public GdiMonitorCaptureProvider()
+        : this(new PreviewFrameScheduler())
+    {
+    }
+
+    public GdiMonitorCaptureProvider(PreviewFrameScheduler frameScheduler)
+    {
+        _frameScheduler = frameScheduler ?? throw new ArgumentNullException(nameof(frameScheduler));
+    }
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
@@ -137,8 +147,6 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
     private async Task CaptureLoopAsync(CancellationToken cancellationToken)
     {
-        var frameInterval = TimeSpan.FromMilliseconds(1000.0 / TargetFramesPerSecond);
-
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -150,15 +158,6 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Swallow unexpected exceptions to keep the capture loop alive.
-            }
-
-            try
-            {
-                await Task.Delay(frameInterval, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
             }
         }
     }
