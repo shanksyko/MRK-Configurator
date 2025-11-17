@@ -40,6 +40,7 @@ internal static class Program
             Log.Information("Iniciando Mieruka Configurator.");
 
             var graphicsOptions = LoadPreviewGraphicsOptions();
+            PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
             InitializeGpuCapture(graphicsOptions);
 
             var mainForm = new MainForm();
