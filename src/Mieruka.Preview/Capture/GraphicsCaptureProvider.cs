@@ -39,7 +39,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 #endif
     private static int _gpuGloballyDisabled;
     private const string Backend = "WGC";
-    private const double TargetFramesPerSecond = 60d;
+    private const double TargetFramesPerSecond = 30d;
 
     private const int MinFramePoolBufferCount = 2;
     private const int MaxFramePoolBufferCount = 3;
