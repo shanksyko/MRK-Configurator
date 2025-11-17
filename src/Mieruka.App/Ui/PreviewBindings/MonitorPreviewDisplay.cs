@@ -183,12 +183,6 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
     }
 
-    /// <summary>
-    /// Stops the preview and releases any held resources.
-    /// </summary>
-    public void Unbind()
-        => UnbindAsync().GetAwaiter().GetResult();
-
     public async Task UnbindAsync(CancellationToken cancellationToken = default)
     {
         using var guard = new StackGuard(nameof(UnbindAsync));
@@ -226,12 +220,6 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         SetSimulationRects(Array.Empty<SimRect>());
     }
 
-    /// <summary>
-    /// Temporarily suspends the active preview capture, if any.
-    /// </summary>
-    public void SuspendCapture()
-        => SuspendCaptureAsync().GetAwaiter().GetResult();
-
     public async Task SuspendCaptureAsync(CancellationToken cancellationToken = default)
     {
         using var guard = new StackGuard(nameof(SuspendCaptureAsync));
@@ -245,12 +233,6 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             await host.SuspendCaptureAsync(cancellationToken).ConfigureAwait(true);
         }
     }
-
-    /// <summary>
-    /// Resumes a previously suspended preview capture, if any.
-    /// </summary>
-    public void ResumeCapture()
-        => ResumeCaptureAsync().GetAwaiter().GetResult();
 
     public async Task ResumeCaptureAsync(CancellationToken cancellationToken = default)
     {
