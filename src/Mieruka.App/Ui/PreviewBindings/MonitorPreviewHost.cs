@@ -284,12 +284,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
-    /// <summary>
-    /// Starts the preview using GPU capture when available.
-    /// </summary>
-    public bool Start(bool preferGpu)
-        => StartAsync(preferGpu).GetAwaiter().GetResult();
-
     public async Task<bool> StartAsync(bool preferGpu, CancellationToken cancellationToken = default)
     {
         using var guard = new StackGuard(nameof(StartAsync));
@@ -328,12 +322,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
             _lifecycleGate.Exit();
         }
     }
-
-    /// <summary>
-    /// Stops the current preview session.
-    /// </summary>
-    public void Stop()
-        => StopAsync().GetAwaiter().GetResult();
 
     /// <summary>
     /// Stops the current preview session.
@@ -386,12 +374,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
     /// <summary>
     /// Stops the current preview session while preventing overlapping lifecycle transitions.
     /// </summary>
-    public void StopSafe()
-        => StopSafeAsync().GetAwaiter().GetResult();
-
-    /// <summary>
-    /// Stops the current preview session while preventing overlapping lifecycle transitions.
-    /// </summary>
     public async Task StopSafeAsync(CancellationToken cancellationToken = default)
     {
         while (true)
@@ -429,12 +411,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return;
         }
     }
-
-    /// <summary>
-    /// Temporarily suspends the capture pipeline while keeping the current frame.
-    /// </summary>
-    public void SuspendCapture()
-        => SuspendCaptureAsync().GetAwaiter().GetResult();
 
     public async Task SuspendCaptureAsync(CancellationToken cancellationToken = default)
     {
@@ -581,9 +557,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
         ResumeCore();
     }
 
-    public void Pause()
-        => PauseAsync().GetAwaiter().GetResult();
-
     public async Task PauseAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed)
@@ -612,9 +585,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
             scope.Dispose();
         }
     }
-
-    public void Resume()
-        => ResumeAsync().GetAwaiter().GetResult();
 
     public async Task ResumeAsync()
     {
@@ -722,7 +692,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 _isSuspended = false;
             }
 
-            StopCoreUnsafe(clearFrame: true, resetPaused: true);
+            StopCoreUnsafeAsync(clearFrame: true, resetPaused: true, cancellationToken: CancellationToken.None)
+                .AsTask()
+                .Wait();
 
             GC.SuppressFinalize(this);
         }
@@ -892,9 +864,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
-    private bool StartCore(bool preferGpu)
-        => StartCoreAsync(preferGpu, CancellationToken.None).GetAwaiter().GetResult();
-
     private async Task<bool> StartCoreAsync(bool preferGpu, CancellationToken cancellationToken)
     {
         using var guard = new StackGuard(nameof(StartCoreAsync));
@@ -1024,12 +993,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return started;
         }
     }
-
-    /// <summary>
-    /// Attempts to start the preview while preventing concurrent lifecycle operations.
-    /// </summary>
-    public bool StartSafe(bool preferGpu)
-        => StartSafeAsync(preferGpu).GetAwaiter().GetResult();
 
     public async Task<bool> StartSafeAsync(bool preferGpu, CancellationToken cancellationToken = default)
     {
@@ -1185,9 +1148,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
             }
         });
     }
-
-    private bool StartCoreUnsafe(bool preferGpu)
-        => StartCoreUnsafeAsync(preferGpu, CancellationToken.None).GetAwaiter().GetResult();
 
     private async Task<bool> StartCoreUnsafeAsync(bool preferGpu, CancellationToken cancellationToken)
     {

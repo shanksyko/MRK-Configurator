@@ -2873,7 +2873,14 @@ public partial class AppEditorForm : WinForms.Form
             UseWaitCursor = true;
             Cursor.Current = Cursors.WaitCursor;
 
-            SuspendPreviewCapture();
+            try
+            {
+                await SuspendPreviewCaptureAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Falha ao suspender pré-visualização antes de testar app real.");
+            }
             OnBeforeMoveWindowUI();
 
             await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
@@ -3034,7 +3041,14 @@ public partial class AppEditorForm : WinForms.Form
         {
             var handle = await WindowWaiter.WaitForMainWindowAsync(process, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
             var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
-            SuspendPreviewCapture();
+            try
+            {
+                await SuspendPreviewCaptureAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Falha ao suspender pré-visualização antes do movimento da janela de teste.");
+            }
             try
             {
                 WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
@@ -3598,11 +3612,22 @@ public partial class AppEditorForm : WinForms.Form
         Close();
     }
 
-    protected override void OnFormClosing(WinForms.FormClosingEventArgs e)
+    protected override async void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
         StopCycleSimulation();
         base.OnFormClosing(e);
-        monitorPreviewDisplay?.Unbind();
+
+        if (monitorPreviewDisplay is { } preview)
+        {
+            try
+            {
+                await preview.UnbindAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Falha ao encerrar pré-visualização ao fechar o editor.");
+            }
+        }
     }
 
     private void AppsTab_ExecutableChosen(object? sender, AppSelectionEventArgs e)
