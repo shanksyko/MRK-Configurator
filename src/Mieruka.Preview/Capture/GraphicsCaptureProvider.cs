@@ -38,6 +38,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private static readonly AsyncLocal<int> _dispatchDepth = new();
 #endif
     private static int _gpuGloballyDisabled;
+    private const string Backend = "WGC";
 
     private const int MinFramePoolBufferCount = 2;
     private const int MaxFramePoolBufferCount = 3;
@@ -56,11 +57,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private Windows.Graphics.SizeInt32 _currentSize;
     private string? _monitorId;
     private ILogger? _captureLogger;
-    private string? _captureId;
+    private string? _previewSessionId;
     private readonly Stopwatch _captureStopwatch = new();
     private long _frames;
     private long _dropped;
     private long _invalidImages;
+    private long _totalFrames;
+    private long _totalDropped;
+    private long _totalInvalidImages;
     private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
     private FeatureLevel _selectedFeatureLevel = FeatureLevel.Level_11_0;
 
@@ -196,15 +200,27 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 _ = bounds;
 
                 _monitorId = monitorKey;
-                _captureId = Guid.NewGuid().ToString("N");
-                _captureLogger = Logger.ForMonitor(monitorKey).ForContext("CaptureId", _captureId);
+                _previewSessionId = Guid.NewGuid().ToString("N");
+                _captureLogger = Logger
+                    .ForMonitor(monitorKey)
+                    .ForContext("MonitorId", _monitorId)
+                    .ForContext("Backend", Backend)
+                    .ForContext("PreviewSessionId", _previewSessionId);
                 _captureStopwatch.Restart();
                 Interlocked.Exchange(ref _frames, 0);
                 Interlocked.Exchange(ref _dropped, 0);
                 Interlocked.Exchange(ref _invalidImages, 0);
+                Interlocked.Exchange(ref _totalFrames, 0);
+                Interlocked.Exchange(ref _totalDropped, 0);
+                Interlocked.Exchange(ref _totalInvalidImages, 0);
                 _lastStatsSampleUtc = DateTime.UtcNow;
 
-                _captureLogger.Information("PreviewStart: backend={Backend}, featureLevel={Level}", "WGC", _selectedFeatureLevel);
+                _captureLogger.Information(
+                    "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, featureLevel={Level}",
+                    Backend,
+                    _monitorId,
+                    _previewSessionId,
+                    _selectedFeatureLevel);
             }
             catch (GraphicsCaptureUnavailableException)
             {
@@ -619,12 +635,20 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         {
             _captureStopwatch.Stop();
             var logger = _captureLogger ?? Logger;
-            logger.Information("PreviewStop: uptimeMs={Uptime}", _captureStopwatch.ElapsedMilliseconds);
+            logger.Information(
+                "PreviewStop: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, uptimeMs={Uptime}, frames={Frames}, dropped={Dropped}, invalid={Invalid}",
+                Backend,
+                _monitorId,
+                _previewSessionId,
+                _captureStopwatch.ElapsedMilliseconds,
+                Interlocked.Read(ref _totalFrames),
+                Interlocked.Read(ref _totalDropped),
+                Interlocked.Read(ref _totalInvalidImages));
             _captureStopwatch.Reset();
         }
 
         _captureLogger = null;
-        _captureId = null;
+        _previewSessionId = null;
 
         if (_framePool is not null)
         {
@@ -642,20 +666,30 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         _captureItem = null;
         _monitorId = null;
         ReleaseDirect3D();
+
+        Interlocked.Exchange(ref _frames, 0);
+        Interlocked.Exchange(ref _dropped, 0);
+        Interlocked.Exchange(ref _invalidImages, 0);
+        Interlocked.Exchange(ref _totalFrames, 0);
+        Interlocked.Exchange(ref _totalDropped, 0);
+        Interlocked.Exchange(ref _totalInvalidImages, 0);
     }
 
     private void RecordFrameProduced()
     {
         Interlocked.Increment(ref _frames);
+        Interlocked.Increment(ref _totalFrames);
         MaybePublishStats();
     }
 
     private void RecordFrameDiscarded(bool invalidFrame)
     {
         Interlocked.Increment(ref _dropped);
+        Interlocked.Increment(ref _totalDropped);
         if (invalidFrame)
         {
             Interlocked.Increment(ref _invalidImages);
+            Interlocked.Increment(ref _totalInvalidImages);
         }
 
         MaybePublishStats();
@@ -684,11 +718,17 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         var fps = frames / elapsedSeconds;
         var logger = _captureLogger ?? Logger;
         logger.Debug(
-            "PreviewStats: fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}",
+            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+            Backend,
+            _monitorId,
+            _previewSessionId,
             fps,
             frames,
             dropped,
-            invalid);
+            invalid,
+            Interlocked.Read(ref _totalFrames),
+            Interlocked.Read(ref _totalDropped),
+            Interlocked.Read(ref _totalInvalidImages));
     }
 
     private Direct3D11CaptureFramePool CreateFramePool(int bufferCount, Windows.Graphics.SizeInt32 size)

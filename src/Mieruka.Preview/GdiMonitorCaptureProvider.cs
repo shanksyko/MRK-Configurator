@@ -17,6 +17,7 @@ namespace Mieruka.Preview;
 public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 {
     private const int TargetFramesPerSecond = 30;
+    private const string Backend = "GDI";
 
     private static readonly ILogger Logger = Log.ForContext<GdiMonitorCaptureProvider>();
 
@@ -26,9 +27,12 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private bool _initialized;
     private readonly Stopwatch _captureStopwatch = new();
     private long _frames;
+    private long _totalFrames;
+    private long _totalDropped;
+    private long _totalInvalid;
     private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
     private ILogger? _captureLogger;
-    private string? _captureId;
+    private string? _previewSessionId;
     private string? _monitorId;
 
     /// <inheritdoc />
@@ -61,12 +65,23 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         _initialized = true;
 
         _monitorId = monitor.Id ?? monitor.DeviceName ?? string.Empty;
-        _captureId = Guid.NewGuid().ToString("N");
-        _captureLogger = Logger.ForMonitor(_monitorId).ForContext("CaptureId", _captureId);
+        _previewSessionId = Guid.NewGuid().ToString("N");
+        _captureLogger = Logger
+            .ForMonitor(_monitorId)
+            .ForContext("MonitorId", _monitorId)
+            .ForContext("Backend", Backend)
+            .ForContext("PreviewSessionId", _previewSessionId);
         _captureStopwatch.Restart();
         Interlocked.Exchange(ref _frames, 0);
+        Interlocked.Exchange(ref _totalFrames, 0);
+        Interlocked.Exchange(ref _totalDropped, 0);
+        Interlocked.Exchange(ref _totalInvalid, 0);
         _lastStatsSampleUtc = DateTime.UtcNow;
-        _captureLogger.Information("PreviewStart: backend={Backend}", "GDI");
+        _captureLogger.Information(
+            "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}",
+            Backend,
+            _monitorId,
+            _previewSessionId);
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _captureLoop = Task.Run(() => CaptureLoopAsync(_cts.Token), CancellationToken.None);
@@ -175,6 +190,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private void RecordFrameProduced()
     {
         Interlocked.Increment(ref _frames);
+        Interlocked.Increment(ref _totalFrames);
         MaybePublishStats();
     }
 
@@ -198,11 +214,17 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         var logger = _captureLogger ?? Logger;
         var fps = frames / elapsedSeconds;
         logger.Debug(
-            "PreviewStats: fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}",
+            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+            Backend,
+            _monitorId,
+            _previewSessionId,
             fps,
             frames,
             0,
-            0);
+            0,
+            Interlocked.Read(ref _totalFrames),
+            Interlocked.Read(ref _totalDropped),
+            Interlocked.Read(ref _totalInvalid));
     }
 
     private void CompleteSession(bool forceStats)
@@ -216,17 +238,33 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
         MaybePublishStats(force: forceStats);
 
+        var totalFrames = Interlocked.Read(ref _totalFrames);
+        var totalDropped = Interlocked.Read(ref _totalDropped);
+        var totalInvalid = Interlocked.Read(ref _totalInvalid);
+
         if (_captureStopwatch.IsRunning)
         {
             _captureStopwatch.Stop();
             var logger = _captureLogger ?? Logger;
-            logger.Information("PreviewStop: uptimeMs={Uptime}", _captureStopwatch.ElapsedMilliseconds);
+            logger.Information(
+                "PreviewStop: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, uptimeMs={Uptime}, frames={Frames}, dropped={Dropped}, invalid={Invalid}",
+                Backend,
+                _monitorId,
+                _previewSessionId,
+                _captureStopwatch.ElapsedMilliseconds,
+                totalFrames,
+                totalDropped,
+                totalInvalid);
             _captureStopwatch.Reset();
         }
 
         _captureLogger = null;
-        _captureId = null;
+        _previewSessionId = null;
         _monitorId = null;
+        Interlocked.Exchange(ref _frames, 0);
+        Interlocked.Exchange(ref _totalFrames, 0);
+        Interlocked.Exchange(ref _totalDropped, 0);
+        Interlocked.Exchange(ref _totalInvalid, 0);
     }
 
 }
