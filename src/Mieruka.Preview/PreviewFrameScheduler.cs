@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace Mieruka.Preview;
 
-internal sealed class PreviewFrameScheduler
+public sealed class PreviewFrameScheduler
 {
     private readonly object _gate = new();
     private readonly Stopwatch _stopwatch = new();
