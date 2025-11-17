@@ -89,10 +89,11 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         Interlocked.Exchange(ref _totalInvalid, 0);
         _lastStatsSampleUtc = DateTime.UtcNow;
         _captureLogger.Information(
-            "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}",
+            "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps:F1}",
             Backend,
             _monitorId,
-            _previewSessionId);
+            _previewSessionId,
+            TargetFramesPerSecond);
 
         _isRunning = true;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -257,11 +258,12 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         var logger = _captureLogger ?? Logger;
         var fps = frames / elapsedSeconds;
         logger.Debug(
-            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, targetFps={TargetFps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
             Backend,
             _monitorId,
             _previewSessionId,
             fps,
+            TargetFramesPerSecond,
             frames,
             0,
             0,
