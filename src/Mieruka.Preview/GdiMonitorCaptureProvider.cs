@@ -32,10 +32,9 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private long _totalInvalid;
     private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
     private ILogger? _captureLogger;
-    private string? _previewSessionId;
+    private string? _previewSessionId; // Keep this unique to avoid duplicate session tracking fields
     private string? _monitorId;
     private bool _isRunning;
-    private string? _previewSessionId;
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
