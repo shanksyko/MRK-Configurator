@@ -20,6 +20,8 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
     private static readonly ILogger Logger = Log.ForContext<GdiMonitorCaptureProvider>();
 
+    private const double TargetFramesPerSecond = 30.0;
+
     private readonly PreviewFrameScheduler _frameScheduler;
     private CancellationTokenSource? _cts;
     private Task? _captureLoop;
@@ -40,7 +42,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private bool _isRunning;
 
     public GdiMonitorCaptureProvider()
-        : this(new PreviewFrameScheduler())
+        : this(new PreviewFrameScheduler(TargetFramesPerSecond))
     {
     }
 
@@ -147,6 +149,8 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
     private async Task CaptureLoopAsync(CancellationToken cancellationToken)
     {
+        await Task.Yield();
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
