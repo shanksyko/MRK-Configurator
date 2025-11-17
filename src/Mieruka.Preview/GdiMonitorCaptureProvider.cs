@@ -30,6 +30,9 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private long _totalFrames;
     private long _totalDropped;
     private long _totalInvalid;
+    private int _processingSamples;
+    private double _processingDurationTotalMs;
+    private double _processingDurationMaxMs;
     private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
     private ILogger? _captureLogger;
     private string? _previewSessionId; // Keep this unique to avoid duplicate session tracking fields
@@ -87,9 +90,12 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         Interlocked.Exchange(ref _totalFrames, 0);
         Interlocked.Exchange(ref _totalDropped, 0);
         Interlocked.Exchange(ref _totalInvalid, 0);
+        _processingSamples = 0;
+        _processingDurationTotalMs = 0;
+        _processingDurationMaxMs = 0;
         _lastStatsSampleUtc = DateTime.UtcNow;
         _captureLogger.Information(
-            "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps:F1}",
+            "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps}",
             Backend,
             _monitorId,
             _previewSessionId,
@@ -145,32 +151,9 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         {
             try
             {
-                if (!_frameScheduler.TryBeginFrame(out var delayUntilNextFrame))
-                {
-                    if (delayUntilNextFrame > TimeSpan.Zero)
-                    {
-                        try
-                        {
-                            await Task.Delay(delayUntilNextFrame, cancellationToken).ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            break;
-                        }
-                    }
-
-                    continue;
-                }
-
-                try
-                {
-                    var bitmap = CaptureFrame();
-                    DispatchFrame(bitmap);
-                }
-                finally
-                {
-                    _frameScheduler.EndFrame();
-                }
+                var frameStartTimestamp = Stopwatch.GetTimestamp();
+                var bitmap = CaptureFrame();
+                DispatchFrame(bitmap, frameStartTimestamp);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -203,7 +186,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         return ScreenCapture.CaptureRectangle(rectangle);
     }
 
-    private void DispatchFrame(Bitmap bitmap)
+    private void DispatchFrame(Bitmap bitmap, long frameStartTimestamp)
     {
         var handler = FrameArrived;
         if (handler is null)
@@ -212,11 +195,11 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             return;
         }
 
-        RecordFrameProduced();
+        RecordFrameProduced(frameStartTimestamp);
         handler(this, new MonitorFrameArrivedEventArgs(bitmap, DateTimeOffset.UtcNow));
     }
 
-    private void RecordFrameProduced()
+    private void RecordFrameProduced(long frameStartTimestamp)
     {
         if (!_isRunning || _cts?.IsCancellationRequested == true)
         {
@@ -225,6 +208,10 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
         Interlocked.Increment(ref _frames);
         Interlocked.Increment(ref _totalFrames);
+        var processingDurationMs = Stopwatch.GetElapsedTime(frameStartTimestamp).TotalMilliseconds;
+        _processingDurationTotalMs += processingDurationMs;
+        _processingDurationMaxMs = Math.Max(_processingDurationMaxMs, processingDurationMs);
+        _processingSamples++;
         MaybePublishStats();
     }
 
@@ -255,21 +242,48 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         var elapsedSeconds = Math.Max(0.001, (now - _lastStatsSampleUtc).TotalSeconds);
         _lastStatsSampleUtc = now;
 
-        var logger = _captureLogger ?? Logger;
         var fps = frames / elapsedSeconds;
-        logger.Debug(
-            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, fps={Fps:F1}, targetFps={TargetFps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
-            Backend,
-            _monitorId,
-            _previewSessionId,
-            fps,
-            TargetFramesPerSecond,
-            frames,
-            0,
-            0,
-            Interlocked.Read(ref _totalFrames),
-            Interlocked.Read(ref _totalDropped),
-            Interlocked.Read(ref _totalInvalid));
+        var logger = _captureLogger ?? Logger;
+
+        if (_processingSamples > 0)
+        {
+            var averageProcessingMs = _processingDurationTotalMs / _processingSamples;
+            logger.Debug(
+                "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps}, fps={Fps:F1}, frameProcessingAvgMs={FrameProcessingAvgMs:F2}, frameProcessingMaxMs={FrameProcessingMaxMs:F2}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+                Backend,
+                _monitorId,
+                _previewSessionId,
+                TargetFramesPerSecond,
+                fps,
+                averageProcessingMs,
+                _processingDurationMaxMs,
+                frames,
+                0,
+                0,
+                Interlocked.Read(ref _totalFrames),
+                Interlocked.Read(ref _totalDropped),
+                Interlocked.Read(ref _totalInvalid));
+        }
+        else
+        {
+            logger.Debug(
+                "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps}, fps={Fps:F1}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+                Backend,
+                _monitorId,
+                _previewSessionId,
+                TargetFramesPerSecond,
+                fps,
+                frames,
+                0,
+                0,
+                Interlocked.Read(ref _totalFrames),
+                Interlocked.Read(ref _totalDropped),
+                Interlocked.Read(ref _totalInvalid));
+        }
+
+        _processingSamples = 0;
+        _processingDurationTotalMs = 0;
+        _processingDurationMaxMs = 0;
     }
 
     private void CompleteSession(bool forceStats, bool hasActiveSession)
@@ -310,6 +324,9 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         Interlocked.Exchange(ref _totalFrames, 0);
         Interlocked.Exchange(ref _totalDropped, 0);
         Interlocked.Exchange(ref _totalInvalid, 0);
+        _processingSamples = 0;
+        _processingDurationTotalMs = 0;
+        _processingDurationMaxMs = 0;
     }
 
 }
