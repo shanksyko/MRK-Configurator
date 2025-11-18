@@ -1,5 +1,5 @@
 using Mieruka.App.Services;
-using Mieruka.Core.Monitors;
+using Mieruka.Core.Models;
 
 namespace Mieruka.App.Services.Testing;
 
