@@ -1708,7 +1708,10 @@ public partial class AppEditorForm : WinForms.Form
             ApplyRelativeWindowToNewMonitor(previousWindow, previousMonitor, option.Monitor);
         }
 
-        monitorPreviewDisplay?.Bind(option.Monitor);
+        if (monitorPreviewDisplay is not null)
+        {
+            await monitorPreviewDisplay.BindAsync(option.Monitor).ConfigureAwait(true);
+        }
         UpdateMonitorCoordinateLabel(null);
         RebuildSimulationOverlays();
     }
