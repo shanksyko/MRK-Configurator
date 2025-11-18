@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.App.Config;
-using Mieruka.Core.Monitors;
+using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using Serilog;
 
