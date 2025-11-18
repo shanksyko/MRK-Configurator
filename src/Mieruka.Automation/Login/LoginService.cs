@@ -99,7 +99,7 @@ public sealed class LoginService
             profile.UserSelector,
             timeout,
             () => ResolveUsernameField(driver),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         var automationPerformed = false;
 
@@ -113,7 +113,7 @@ public sealed class LoginService
             profile.PassSelector,
             timeout,
             () => ResolvePasswordField(driver),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         if (passwordField is null)
         {
@@ -122,14 +122,14 @@ public sealed class LoginService
 
         if (userField is not null && passwordField is not null)
         {
-            var usernameApplied = await ApplyValueAsync(driver, profile.Username, userField, () => ResolveUsernameField(driver), timeout, cancellationToken);
+            var usernameApplied = await ApplyValueAsync(driver, profile.Username, userField, () => ResolveUsernameField(driver), timeout, cancellationToken).ConfigureAwait(false);
             if (!usernameApplied)
             {
                 _telemetry.Warn("Failed to populate the username field during login automation.");
             }
             else
             {
-                var passwordApplied = await ApplyValueAsync(driver, profile.Password, passwordField, () => ResolvePasswordField(driver), timeout, cancellationToken);
+                var passwordApplied = await ApplyValueAsync(driver, profile.Password, passwordField, () => ResolvePasswordField(driver), timeout, cancellationToken).ConfigureAwait(false);
                 if (!passwordApplied)
                 {
                     _telemetry.Warn("Failed to populate the password field during login automation.");
@@ -143,11 +143,11 @@ public sealed class LoginService
                         profile.SubmitSelector,
                         timeout,
                         () => ResolveSubmitElement(driver),
-                        cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
 
                     if (submitElement is not null)
                     {
-                        if (!await ClickAsync(driver, submitElement, () => ResolveSubmitElement(driver), timeout, cancellationToken))
+                        if (!await ClickAsync(driver, submitElement, () => ResolveSubmitElement(driver), timeout, cancellationToken).ConfigureAwait(false))
                         {
                             _telemetry.Warn("Failed to activate the submit element during login automation.");
                         }
@@ -201,7 +201,7 @@ public sealed class LoginService
                 return null;
             }
 
-            var located = await WaitForElementAsync(driver, () => FindBySelector(driver, sanitizedSelector), timeout, cancellationToken);
+            var located = await WaitForElementAsync(driver, () => FindBySelector(driver, sanitizedSelector), timeout, cancellationToken).ConfigureAwait(false);
             if (located is not null)
             {
                 return located;
@@ -210,7 +210,7 @@ public sealed class LoginService
             _telemetry.Warn("Timeout ao aguardar o seletor configurado durante a automação de login.");
         }
 
-        return await WaitForElementAsync(driver, heuristic, timeout, cancellationToken);
+        return await WaitForElementAsync(driver, heuristic, timeout, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> ApplyValueAsync(
@@ -237,7 +237,7 @@ public sealed class LoginService
         }
         catch (StaleElementReferenceException)
         {
-            var refreshed = await WaitForElementAsync(driver, resolver, timeout, cancellationToken);
+            var refreshed = await WaitForElementAsync(driver, resolver, timeout, cancellationToken).ConfigureAwait(false);
             if (refreshed is null)
             {
                 return false;
@@ -268,7 +268,7 @@ public sealed class LoginService
         }
         catch (StaleElementReferenceException)
         {
-            var refreshed = await WaitForElementAsync(driver, resolver, timeout, cancellationToken);
+            var refreshed = await WaitForElementAsync(driver, resolver, timeout, cancellationToken).ConfigureAwait(false);
             if (refreshed is null)
             {
                 return false;
@@ -346,7 +346,7 @@ public sealed class LoginService
             var wait = delay < PollInterval ? delay : PollInterval;
             if (wait > TimeSpan.Zero)
             {
-                await Task.Delay(wait, cancellationToken);
+                await Task.Delay(wait, cancellationToken).ConfigureAwait(false);
             }
         }
 
