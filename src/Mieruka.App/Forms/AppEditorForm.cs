@@ -1678,7 +1678,19 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
-        await UpdateMonitorPreviewAsync().ConfigureAwait(true);
+        await UpdateMonitorPreviewSafelyAsync().ConfigureAwait(true);
+    }
+
+    private async Task UpdateMonitorPreviewSafelyAsync()
+    {
+        try
+        {
+            await UpdateMonitorPreviewAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "UpdateMonitorPreviewSafelyAsync: monitor preview update failed // MIERUKA_FIX");
+        }
     }
 
     private async Task UpdateMonitorPreviewAsync()
@@ -2231,6 +2243,9 @@ public partial class AppEditorForm : WinForms.Form
         var preview = monitorPreviewDisplay;
         if (preview is null || preview.IsDisposed)
         {
+            _windowBoundsDebounce.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
             return;
         }
 
@@ -2248,7 +2263,11 @@ public partial class AppEditorForm : WinForms.Form
 
         if (snapshot.Equals(_windowPreviewSnapshot))
         {
-            preview.Invalidate();
+            if (_windowPreviewRebuildScheduled)
+            {
+                preview.Invalidate();
+            }
+
             return;
         }
 
