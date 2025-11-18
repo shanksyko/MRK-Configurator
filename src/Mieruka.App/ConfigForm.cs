@@ -8,10 +8,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Globalization;
 using Mieruka.App.Config;
 using Mieruka.App.Controls;
 using Mieruka.App.Services;
+using Mieruka.App.Services.Testing;
 using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui;
 using Mieruka.Automation.Login;
@@ -19,7 +19,6 @@ using Mieruka.Automation.Tabs;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
-using OpenQA.Selenium;
 using Serilog;
 using WinForms = System.Windows.Forms;
 using Drawing = System.Drawing;
@@ -76,6 +75,8 @@ internal sealed class ConfigForm : WinForms.Form
     private readonly MonitorSeeder _monitorSeeder;
     private readonly WinForms.ToolTip _toolTip;
     private readonly WinForms.FlowLayoutPanel _footerPanel;
+    private readonly Services.Testing.AppTestService _appTestService;
+    private readonly Services.Testing.SiteTestService _siteTestService;
     private MonitorPreviewControl? _activePreview;
     private string? _selectedMonitorStableId;
     private readonly List<MonitorSelectionBinding> _monitorSelectionBindings = new();
@@ -83,6 +84,7 @@ internal sealed class ConfigForm : WinForms.Form
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
     private readonly object _testGate = new();
+    private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConfigForm"/> class.
@@ -99,6 +101,8 @@ internal sealed class ConfigForm : WinForms.Form
         _validator = new ConfigValidator();
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
         _monitorSeeder = new MonitorSeeder();
+        _appTestService = new AppTestService(_workspace, _displayService);
+        _siteTestService = new SiteTestService(_workspace, _displayService, _telemetry);
 
         InitializeComponent();
         // MIERUKA_FIX
@@ -2001,7 +2005,11 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.ZonePresets.ToList(),
             template: null,
             selectedMonitorStableId: _selectedMonitorStableId);
-        dialog.TestHandler = config => RunApplicationTestAsync(config, dialog, updateStatus: false);
+        dialog.TestHandler = config =>
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            return RunApplicationTestAsync(config, dialog, cts, updateStatus: false);
+        };
         RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
         dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
         dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
@@ -2044,7 +2052,11 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.ZonePresets.ToList(),
             current,
             _selectedMonitorStableId);
-        dialog.TestHandler = config => RunApplicationTestAsync(config, dialog, updateStatus: false);
+        dialog.TestHandler = config =>
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            return RunApplicationTestAsync(config, dialog, cts, updateStatus: false);
+        };
         RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
         dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
         dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
@@ -2141,9 +2153,11 @@ internal sealed class ConfigForm : WinForms.Form
             _appTestButton.Enabled = false;
         }
 
+        using var cts = new CancellationTokenSource(TestTimeout);
+
         try
         {
-            await RunApplicationTestAsync(app, this, updateStatus: true).ConfigureAwait(true);
+            await RunApplicationTestAsync(app, this, cts, updateStatus: true).ConfigureAwait(true);
         }
         finally
         {
@@ -2151,7 +2165,7 @@ internal sealed class ConfigForm : WinForms.Form
         }
     }
 
-    private async Task<bool> RunApplicationTestAsync(AppConfig app, WinForms.Control owner, bool updateStatus)
+    private async Task<bool> RunApplicationTestAsync(AppConfig app, WinForms.Control owner, CancellationTokenSource cts, bool updateStatus)
     {
         if (updateStatus)
         {
@@ -2159,84 +2173,48 @@ internal sealed class ConfigForm : WinForms.Form
         }
 
         Log.Information("Apps:Test -> {Name}", app.Id);
-        var success = await Task.Run(() => TestApplication(app, owner)).ConfigureAwait(true);
+        TestRunResult? result;
 
-        var monitor = ResolveTargetMonitor(app);
-        var result = success ? "ok" : "fail";
+        try
+        {
+            result = await RunUiAsync(cts, token => _appTestService.TestAsync(app, _selectedMonitorStableId, token)).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateStatus("Teste de aplicativo cancelado.");
+            return false;
+        }
+
+        if (result is null)
+        {
+            return false;
+        }
+
+        var monitorId = ResolveMonitorStableId(result.Monitor);
+        var outcome = result.Success ? "ok" : "fail";
         Log.Information(
             "Test(App) -> monitor={Monitor}, zone={Zone}, result={Result}",
-            ResolveMonitorStableId(monitor),
+            monitorId,
             DescribeZone(app),
-            result);
+            outcome);
+
+        if (!result.Success && result.ErrorMessage is { } error)
+        {
+            WinForms.MessageBox.Show(owner, error, "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+        else if (!result.WindowFound && string.IsNullOrWhiteSpace(result.ErrorMessage))
+        {
+            WinForms.MessageBox.Show(owner, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+        }
 
         if (updateStatus)
         {
-            UpdateStatus(success
+            UpdateStatus(result.Success
                 ? $"Aplicativo '{app.Id}' iniciado com sucesso."
                 : $"Falha ao testar '{app.Id}'. Verifique o log para mais detalhes.");
         }
 
-        return success;
-    }
-
-    private bool TestApplication(AppConfig app, WinForms.Control owner)
-    {
-        if (!File.Exists(app.ExecutablePath))
-        {
-            owner.BeginInvoke(new Action(() =>
-                WinForms.MessageBox.Show(owner, $"O executável '{app.ExecutablePath}' não foi encontrado.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning)));
-            return false;
-        }
-
-        try
-        {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = app.ExecutablePath,
-                Arguments = app.Arguments ?? string.Empty,
-                UseShellExecute = false,
-            };
-
-            foreach (var pair in app.EnvironmentVariables)
-            {
-                startInfo.Environment[pair.Key] = pair.Value;
-            }
-
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                owner.BeginInvoke(new Action(() =>
-                    WinForms.MessageBox.Show(owner, "Process.Start retornou nulo ao iniciar o aplicativo.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
-                return false;
-            }
-
-            var monitor = ResolveTargetMonitor(app);
-            var zoneRect = ResolveZoneRect(monitor, app.TargetZonePresetId, app.Window);
-            var topMost = app.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
-
-            WindowPlacementHelper.ForcePlaceProcessWindowAsync(
-                process,
-                monitor,
-                zoneRect,
-                topMost,
-                CancellationToken.None).GetAwaiter().GetResult();
-
-            process.Refresh();
-            if (process.MainWindowHandle == IntPtr.Zero)
-            {
-                owner.BeginInvoke(new Action(() =>
-                    WinForms.MessageBox.Show(owner, "O aplicativo foi iniciado, mas a janela principal não foi localizada.", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning)));
-            }
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Falha ao testar aplicativo {AppId}.", app.Id);
-            owner.BeginInvoke(new Action(() =>
-                WinForms.MessageBox.Show(owner, $"Falha ao iniciar o aplicativo: {ex.Message}", "Teste de aplicativo", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
-            return false;
-        }
+        return result.Success;
     }
 
     private MonitorInfo ResolveTargetMonitor(AppConfig app)
@@ -2256,36 +2234,9 @@ internal sealed class ConfigForm : WinForms.Form
     private WindowPlacementHelper.ZoneRect ResolveZoneRect(MonitorInfo monitor, string? zoneIdentifier, WindowConfig window)
         => WindowPlacementHelper.ResolveTargetZone(monitor, zoneIdentifier, window, _workspace.ZonePresets);
 
-    private bool TryPositionWindow(AppConfig app, IntPtr handle)
+    private static async Task<T?> RunUiAsync<T>(CancellationTokenSource cts, Func<CancellationToken, Task<T>> operation)
     {
-        var monitor = ResolveTargetMonitor(app);
-        return TryPositionWindowInternal(monitor, app.TargetZonePresetId, app.Window, handle);
-    }
-
-    private bool TryPositionWindow(SiteConfig site, IntPtr handle)
-    {
-        var monitor = ResolveTargetMonitor(site);
-        return TryPositionWindowInternal(monitor, site.TargetZonePresetId, site.Window, handle);
-    }
-
-    private bool TryPositionWindowInternal(MonitorInfo monitor, string? zoneIdentifier, WindowConfig window, IntPtr handle)
-    {
-        if (handle == IntPtr.Zero || !OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
-        try
-        {
-            var zoneRect = ResolveZoneRect(monitor, zoneIdentifier, window);
-            var topMost = window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
-            return WindowPlacementHelper.PlaceWindow(handle, monitor, zoneRect, topMost);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Falha ao posicionar janela durante o teste.");
-            return false;
-        }
+        return await Task.Run(() => operation(cts.Token), cts.Token).ConfigureAwait(true);
     }
 
 
@@ -2296,7 +2247,11 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.ZonePresets.ToList(),
             template: null,
             selectedMonitorStableId: _selectedMonitorStableId);
-        dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
+        dialog.TestHandler = config =>
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            return RunSiteTestAsync(config, dialog, cts, updateStatus: false);
+        };
         RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
         dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
         dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
@@ -2345,7 +2300,11 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.ZonePresets.ToList(),
             current,
             _selectedMonitorStableId);
-        dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
+        dialog.TestHandler = config =>
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            return RunSiteTestAsync(config, dialog, cts, updateStatus: false);
+        };
         RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
         dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
         dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
@@ -2450,9 +2409,11 @@ internal sealed class ConfigForm : WinForms.Form
             _siteTestButton.Enabled = false;
         }
 
+        using var cts = new CancellationTokenSource(TestTimeout);
+
         try
         {
-            await RunSiteTestAsync(site, this, updateStatus: true).ConfigureAwait(true);
+            await RunSiteTestAsync(site, this, cts, updateStatus: true).ConfigureAwait(true);
         }
         finally
         {
@@ -2460,24 +2421,7 @@ internal sealed class ConfigForm : WinForms.Form
         }
     }
 
-    private bool TestSite(SiteConfig site, WinForms.Control owner)
-    {
-        try
-        {
-            return RequiresSelenium(site)
-                ? TestSiteWithSelenium(site, owner)
-                : TestSiteWithProcess(site, owner);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Falha ao testar site {SiteId}.", site.Id);
-            owner.BeginInvoke(new Action(() =>
-                WinForms.MessageBox.Show(owner, $"Falha ao testar o site: {ex.Message}", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
-            return false;
-        }
-    }
-
-    private async Task<bool> RunSiteTestAsync(SiteConfig site, WinForms.Control owner, bool updateStatus)
+    private async Task<bool> RunSiteTestAsync(SiteConfig site, WinForms.Control owner, CancellationTokenSource cts, bool updateStatus)
     {
         if (updateStatus)
         {
@@ -2485,286 +2429,50 @@ internal sealed class ConfigForm : WinForms.Form
         }
 
         Log.Information("Sites:Test -> {Name}", $"{site.Id}|{site.Url}");
-        var success = await Task.Run(() => TestSite(site, owner)).ConfigureAwait(true);
+        TestRunResult? result;
 
-        var monitor = ResolveTargetMonitor(site);
-        var result = success ? "ok" : "fail";
+        try
+        {
+            result = await RunUiAsync(cts, token => _siteTestService.TestAsync(site, _selectedMonitorStableId, token)).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateStatus("Teste de site cancelado.");
+            return false;
+        }
+
+        if (result is null)
+        {
+            return false;
+        }
+
+        var monitorId = ResolveMonitorStableId(result.Monitor);
+        var outcome = result.Success ? "ok" : "fail";
         Log.Information(
             "Test(Site) -> monitor={Monitor}, zone={Zone}, result={Result}",
-            ResolveMonitorStableId(monitor),
+            monitorId,
             DescribeZone(site),
-            result);
+            outcome);
+
+        if (!result.Success && result.ErrorMessage is { } error)
+        {
+            WinForms.MessageBox.Show(owner, error, "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+        else if (!result.WindowFound && string.IsNullOrWhiteSpace(result.ErrorMessage))
+        {
+            WinForms.MessageBox.Show(owner, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+        }
 
         if (updateStatus)
         {
-            UpdateStatus(success
+            UpdateStatus(result.Success
                 ? $"Site '{site.Id}' iniciado com sucesso."
                 : $"Falha ao testar '{site.Id}'. Consulte os logs para mais detalhes.");
         }
 
-        return success;
+        return result.Success;
     }
 
-    private static bool RequiresSelenium(SiteConfig site)
-    {
-        if (site.Login is { } login)
-        {
-            if (!string.IsNullOrWhiteSpace(login.Username)
-                || !string.IsNullOrWhiteSpace(login.Password)
-                || !string.IsNullOrWhiteSpace(login.UserSelector)
-                || !string.IsNullOrWhiteSpace(login.PassSelector)
-                || !string.IsNullOrWhiteSpace(login.SubmitSelector)
-                || !string.IsNullOrWhiteSpace(login.Script))
-            {
-                return true;
-            }
-        }
-
-        return site.AllowedTabHosts?.Any(host => !string.IsNullOrWhiteSpace(host)) == true;
-    }
-
-    private bool TestSiteWithProcess(SiteConfig site, WinForms.Control owner)
-    {
-        var executable = ResolveBrowserExecutable(site.Browser);
-        var arguments = BuildBrowserArgumentString(site);
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = executable,
-            Arguments = arguments,
-            UseShellExecute = true,
-        };
-
-        using var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            owner.BeginInvoke(new Action(() =>
-                WinForms.MessageBox.Show(owner, "Falha ao iniciar o navegador.", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
-            return false;
-        }
-
-        var monitor = ResolveTargetMonitor(site);
-        var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
-        var topMost = site.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
-
-        WindowPlacementHelper.ForcePlaceProcessWindowAsync(
-            process,
-            monitor,
-            zoneRect,
-            topMost,
-            CancellationToken.None).GetAwaiter().GetResult();
-
-        process.Refresh();
-        if (process.MainWindowHandle == IntPtr.Zero)
-        {
-            owner.BeginInvoke(new Action(() =>
-                WinForms.MessageBox.Show(owner, "O navegador foi iniciado, mas a janela não foi encontrada.", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning)));
-        }
-
-        return true;
-    }
-
-    private bool TestSiteWithSelenium(SiteConfig site, WinForms.Control owner)
-    {
-        IWebDriver? driver = null;
-
-        try
-        {
-            var arguments = CollectBrowserArguments(site).ToList();
-            driver = WebDriverFactory.Create(site, arguments);
-            ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
-            ExecuteLoginAsync(driver, site.Login).GetAwaiter().GetResult();
-
-            var monitor = ResolveTargetMonitor(site);
-            var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
-            var bounds = WindowPlacementHelper.CalculateZoneBounds(monitor, zoneRect);
-
-            if (OperatingSystem.IsWindows())
-            {
-                var handleString = driver.CurrentWindowHandle;
-                if (long.TryParse(handleString, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handleValue))
-                {
-                    var handle = new IntPtr(handleValue);
-                    TryPositionWindow(site, handle);
-                }
-                else
-                {
-                    driver.Manage().Window.Position = new System.Drawing.Point(bounds.Left, bounds.Top);
-                    driver.Manage().Window.Size = new System.Drawing.Size(bounds.Width, bounds.Height);
-                }
-            }
-            else
-            {
-                driver.Manage().Window.Position = new System.Drawing.Point(bounds.Left, bounds.Top);
-                driver.Manage().Window.Size = new System.Drawing.Size(bounds.Width, bounds.Height);
-            }
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Erro ao testar site via Selenium {SiteId}.", site.Id);
-            owner.BeginInvoke(new Action(() =>
-                WinForms.MessageBox.Show(owner, $"Falha ao iniciar o Selenium: {ex.Message}", "Teste de site", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error)));
-            return false;
-        }
-        finally
-        {
-            driver?.Quit();
-        }
-    }
-
-    private string BuildBrowserArgumentString(SiteConfig site)
-    {
-        var arguments = CollectBrowserArguments(site).ToList();
-        if (!site.AppMode && !string.IsNullOrWhiteSpace(site.Url))
-        {
-            arguments.Add(site.Url);
-        }
-
-        return string.Join(' ', arguments);
-    }
-
-    private IEnumerable<string> CollectBrowserArguments(SiteConfig site)
-    {
-        var arguments = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void AddArgument(string? argument)
-        {
-            if (string.IsNullOrWhiteSpace(argument))
-            {
-                return;
-            }
-
-            if (seen.Add(argument))
-            {
-                arguments.Add(argument);
-            }
-        }
-
-        foreach (var argument in GetGlobalBrowserArguments(site.Browser))
-        {
-            AddArgument(argument);
-        }
-
-        foreach (var argument in site.BrowserArguments ?? Array.Empty<string>())
-        {
-            AddArgument(argument);
-        }
-
-        if (!string.IsNullOrWhiteSpace(site.UserDataDirectory) && !ContainsArgument(arguments, "--user-data-dir", matchByPrefix: true))
-        {
-            AddArgument(FormatArgument("--user-data-dir", site.UserDataDirectory));
-        }
-
-        if (!string.IsNullOrWhiteSpace(site.ProfileDirectory) && !ContainsArgument(arguments, "--profile-directory", matchByPrefix: true))
-        {
-            AddArgument(FormatArgument("--profile-directory", site.ProfileDirectory));
-        }
-
-        if (site.KioskMode && !ContainsArgument(arguments, "--kiosk"))
-        {
-            AddArgument("--kiosk");
-        }
-
-        if (site.AppMode)
-        {
-            if (!string.IsNullOrWhiteSpace(site.Url) && !ContainsArgument(arguments, "--app", matchByPrefix: true))
-            {
-                AddArgument(FormatArgument("--app", site.Url));
-            }
-        }
-
-        return arguments;
-    }
-
-    private IEnumerable<string> GetGlobalBrowserArguments(BrowserType browser)
-    {
-        return browser switch
-        {
-            BrowserType.Chrome => _workspace.BrowserArguments.Chrome ?? Array.Empty<string>(),
-            BrowserType.Edge => _workspace.BrowserArguments.Edge ?? Array.Empty<string>(),
-            _ => Array.Empty<string>(),
-        };
-    }
-
-    private static bool ContainsArgument(IEnumerable<string> arguments, string name, bool matchByPrefix = false)
-    {
-        foreach (var argument in arguments)
-        {
-            if (matchByPrefix)
-            {
-                if (argument.StartsWith(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            else if (string.Equals(argument, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string FormatArgument(string name, string value)
-    {
-        var sanitized = value.Replace("\"", "\\\"");
-        return $"{name}=\"{sanitized}\"";
-    }
-
-    private string ResolveBrowserExecutable(BrowserType browser)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return browser switch
-            {
-                BrowserType.Chrome => "chrome.exe",
-                BrowserType.Edge => "msedge.exe",
-                _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
-            };
-        }
-
-        return browser switch
-        {
-            BrowserType.Chrome => "google-chrome",
-            BrowserType.Edge => "microsoft-edge",
-            _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
-        };
-    }
-
-    private void ApplyWhitelist(IWebDriver driver, IEnumerable<string> hosts)
-    {
-        var sanitized = hosts?.Where(static host => !string.IsNullOrWhiteSpace(host)).ToList();
-        if (sanitized is null || sanitized.Count == 0)
-        {
-            return;
-        }
-
-        var tabManager = new TabManager(_telemetry);
-        var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        _ = Task.Run(() => tabManager.MonitorAsync(driver, sanitized, cancellation.Token));
-    }
-
-    private async Task ExecuteLoginAsync(IWebDriver driver, LoginProfile? login)
-    {
-        if (login is null)
-        {
-            return;
-        }
-
-        var loginService = new LoginService(_telemetry);
-        try
-        {
-            await loginService.TryLoginAsync(driver, login, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Falha durante a automação de login.");
-        }
-    }
 
     private void InitializeComponent()
     {
