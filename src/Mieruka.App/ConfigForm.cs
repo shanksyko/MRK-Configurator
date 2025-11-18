@@ -382,6 +382,27 @@ internal sealed class ConfigForm : WinForms.Form
         ApplyInitialSplitters();
     }
 
+    private async Task RunUiAsync(Func<Task> action)
+    {
+        try
+        {
+            Enabled = false;
+            UseWaitCursor = true;
+
+            await action().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao executar ação da interface.");
+            WinForms.MessageBox.Show(this, $"Não foi possível concluir a operação: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+            Enabled = true;
+        }
+    }
+
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
@@ -406,20 +427,23 @@ internal sealed class ConfigForm : WinForms.Form
     }
 
     /// <inheritdoc />
-    protected override void OnFormClosing(WinForms.FormClosingEventArgs e)
+    protected override async void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
 
+        await RunUiAsync(() => OnFormClosingAsync(e));
+    }
+
+    private async Task OnFormClosingAsync(WinForms.FormClosingEventArgs e)
+    {
         try
         {
-            var config = _workspace.BuildConfiguration();
-            var migrated = _migrator.Migrate(config);
-            _store.SaveAsync(migrated).GetAwaiter().GetResult();
+            await SaveConfigAsync().ConfigureAwait(true);
         }
-        catch (Exception ex)
+        catch
         {
-            Log.Error(ex, "Falha ao salvar a configuração.");
-            WinForms.MessageBox.Show(this, $"Não foi possível salvar as alterações: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+            e.Cancel = true;
+            throw;
         }
     }
 
@@ -523,29 +547,26 @@ internal sealed class ConfigForm : WinForms.Form
         }
     }
 
-    private void OnSaveConfigurationClicked(object? sender, EventArgs e)
+    private async void OnSaveConfigurationClicked(object? sender, EventArgs e)
     {
-        Log.Information("Solicitação de salvamento manual da configuração.");
+        await RunUiAsync(SaveConfigAsync);
+    }
 
-        try
-        {
-            var config = _workspace.BuildConfiguration();
-            if (!TryValidateBeforeSave(config, out var validationMessage))
-            {
-                WinForms.MessageBox.Show(this, validationMessage, "Salvar Configuração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
-                return;
-            }
+    private async Task SaveConfigAsync()
+    {
+        Log.Information("Salvamento de configuração iniciado.");
 
-            var migrated = _migrator.Migrate(config);
-            _store.SaveAsync(migrated).GetAwaiter().GetResult();
-            UpdateStatus("Configuração salva com sucesso.");
-            Log.Information("Configuração salva manualmente pelo usuário.");
-        }
-        catch (Exception ex)
+        var config = _workspace.BuildConfiguration();
+        if (!TryValidateBeforeSave(config, out var validationMessage))
         {
-            Log.Error(ex, "Erro ao salvar a configuração manualmente.");
-            WinForms.MessageBox.Show(this, $"Não foi possível salvar a configuração: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+            throw new InvalidOperationException(validationMessage);
         }
+
+        var migrated = _migrator.Migrate(config);
+        await _store.SaveAsync(migrated).ConfigureAwait(true);
+
+        UpdateStatus("Configuração salva com sucesso.");
+        Log.Information("Configuração salva.");
     }
 
     private bool TryValidateBeforeSave(GeneralConfig config, out string message)
