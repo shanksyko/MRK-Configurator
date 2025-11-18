@@ -131,9 +131,9 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     /// <param name="monitor">Monitor to display.</param>
     /// <param name="cadence">Optional frame cadence.</param>
-    public async void Bind(MonitorInfo monitor, TimeSpan? cadence = null)
+    public async Task BindAsync(MonitorInfo monitor, TimeSpan? cadence = null)
     {
-        using var guard = new StackGuard(nameof(Bind));
+        using var guard = new StackGuard(nameof(BindAsync));
         if (!guard.Entered)
         {
             return;

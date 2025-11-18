@@ -116,6 +116,8 @@ public partial class AppEditorForm : WinForms.Form
     private bool _windowBoundsDebouncePending;
     private Drawing.Rectangle _lastWindowRectLog = Drawing.Rectangle.Empty;
     private DateTime _lastWindowRectLogUtc;
+    private readonly SemaphoreSlim _monitorPreviewGate = new(1, 1);
+    private string? _monitorPreviewMonitorId;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
 
@@ -1676,41 +1678,70 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
-        await UpdateMonitorPreviewAsync().ConfigureAwait(true);
+        await UpdateMonitorPreviewSafelyAsync().ConfigureAwait(true);
+    }
+
+    private async Task UpdateMonitorPreviewSafelyAsync()
+    {
+        try
+        {
+            await UpdateMonitorPreviewAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "UpdateMonitorPreviewSafelyAsync: monitor preview update failed // MIERUKA_FIX");
+        }
     }
 
     private async Task UpdateMonitorPreviewAsync()
     {
-        var previousMonitor = _selectedMonitorInfo;
-        var previousMonitorId = _selectedMonitorId;
-        var previousWindow = BuildWindowConfigurationFromInputs();
-
-        _selectedMonitorInfo = null;
-        _selectedMonitorId = null;
-
-        if (cboMonitores?.SelectedItem is not MonitorOption option || option.Monitor is null || option.MonitorId is null)
+        await _monitorPreviewGate.WaitAsync().ConfigureAwait(true);
+        try
         {
-            if (monitorPreviewDisplay is not null)
+            var previousMonitor = _selectedMonitorInfo;
+            var previousMonitorId = _selectedMonitorId;
+            var previousWindow = BuildWindowConfigurationFromInputs();
+
+            _selectedMonitorInfo = null;
+            _selectedMonitorId = null;
+
+            if (cboMonitores?.SelectedItem is not MonitorOption option || option.Monitor is null || option.MonitorId is null)
             {
-                await monitorPreviewDisplay.UnbindAsync().ConfigureAwait(true);
+                if (monitorPreviewDisplay is not null)
+                {
+                    await monitorPreviewDisplay.UnbindAsync().ConfigureAwait(true);
+                }
+
+                _monitorPreviewMonitorId = null;
+                UpdateMonitorCoordinateLabel(null);
+                monitorPreviewDisplay?.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+                return;
             }
+
+            _selectedMonitorInfo = option.Monitor;
+            _selectedMonitorId = option.MonitorId;
+
+            var monitorChanged = !string.Equals(_monitorPreviewMonitorId, option.MonitorId, StringComparison.OrdinalIgnoreCase);
+
+            if (previousMonitor is not null &&
+                !string.Equals(previousMonitorId, option.MonitorId, StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyRelativeWindowToNewMonitor(previousWindow, previousMonitor, option.Monitor);
+            }
+
+            if (monitorChanged && monitorPreviewDisplay is not null)
+            {
+                await monitorPreviewDisplay.BindAsync(option.Monitor).ConfigureAwait(true);
+                _monitorPreviewMonitorId = option.MonitorId;
+            }
+
             UpdateMonitorCoordinateLabel(null);
-            monitorPreviewDisplay?.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
-            return;
+            RebuildSimulationOverlays();
         }
-
-        _selectedMonitorInfo = option.Monitor;
-        _selectedMonitorId = option.MonitorId;
-
-        if (previousMonitor is not null &&
-            !string.Equals(previousMonitorId, option.MonitorId, StringComparison.OrdinalIgnoreCase))
+        finally
         {
-            ApplyRelativeWindowToNewMonitor(previousWindow, previousMonitor, option.Monitor);
+            _monitorPreviewGate.Release();
         }
-
-        monitorPreviewDisplay?.Bind(option.Monitor);
-        UpdateMonitorCoordinateLabel(null);
-        RebuildSimulationOverlays();
     }
 
     private void chkJanelaTelaCheia_CheckedChanged(object? sender, EventArgs e)
@@ -2212,6 +2243,9 @@ public partial class AppEditorForm : WinForms.Form
         var preview = monitorPreviewDisplay;
         if (preview is null || preview.IsDisposed)
         {
+            _windowBoundsDebounce.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
             return;
         }
 
@@ -2229,7 +2263,11 @@ public partial class AppEditorForm : WinForms.Form
 
         if (snapshot.Equals(_windowPreviewSnapshot))
         {
-            preview.Invalidate();
+            if (_windowPreviewRebuildScheduled)
+            {
+                preview.Invalidate();
+            }
+
             return;
         }
 
