@@ -2296,7 +2296,7 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.ZonePresets.ToList(),
             template: null,
             selectedMonitorStableId: _selectedMonitorStableId);
-        dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
+        dialog.TestHandler = config => RunUiAsync(() => RunSiteTestAsync(config, dialog, updateStatus: false));
         RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
         dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
         dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
@@ -2345,7 +2345,7 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.ZonePresets.ToList(),
             current,
             _selectedMonitorStableId);
-        dialog.TestHandler = config => RunSiteTestAsync(config, dialog, updateStatus: false);
+        dialog.TestHandler = config => RunUiAsync(() => RunSiteTestAsync(config, dialog, updateStatus: false));
         RegisterMonitorBinding(dialog, dialog.SetSelectedMonitorStableId);
         dialog.MonitorSelectionChanged += OnDialogMonitorSelectionChanged;
         dialog.SetSelectedMonitorStableId(_selectedMonitorStableId);
@@ -2452,7 +2452,7 @@ internal sealed class ConfigForm : WinForms.Form
 
         try
         {
-            await RunSiteTestAsync(site, this, updateStatus: true).ConfigureAwait(true);
+            await RunUiAsync(() => RunSiteTestAsync(site, this, updateStatus: true)).ConfigureAwait(true);
         }
         finally
         {
@@ -2460,13 +2460,21 @@ internal sealed class ConfigForm : WinForms.Form
         }
     }
 
-    private bool TestSite(SiteConfig site, WinForms.Control owner)
+    private Task<bool> RunUiAsync(Func<Task<bool>> action)
+    {
+        return Task.Factory.StartNew(action, CancellationToken.None, TaskCreationOptions.None, TaskScheduler.FromCurrentSynchronizationContext()).Unwrap();
+    }
+
+    private async Task<bool> TestSiteAsync(SiteConfig site, WinForms.Control owner, CancellationToken cancellationToken)
     {
         try
         {
-            return RequiresSelenium(site)
-                ? TestSiteWithSelenium(site, owner)
-                : TestSiteWithProcess(site, owner);
+            if (RequiresSelenium(site))
+            {
+                return await TestSiteWithSeleniumAsync(site, owner, cancellationToken).ConfigureAwait(false);
+            }
+
+            return await TestSiteWithProcessAsync(site, owner, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -2485,7 +2493,10 @@ internal sealed class ConfigForm : WinForms.Form
         }
 
         Log.Information("Sites:Test -> {Name}", $"{site.Id}|{site.Url}");
-        var success = await Task.Run(() => TestSite(site, owner)).ConfigureAwait(true);
+        using var cancellationTokenSource = site.Login?.TimeoutSeconds is > 0
+            ? new CancellationTokenSource(TimeSpan.FromSeconds(site.Login.TimeoutSeconds))
+            : new CancellationTokenSource();
+        var success = await Task.Run(() => TestSiteAsync(site, owner, cancellationTokenSource.Token), cancellationTokenSource.Token).ConfigureAwait(true);
 
         var monitor = ResolveTargetMonitor(site);
         var result = success ? "ok" : "fail";
@@ -2523,7 +2534,7 @@ internal sealed class ConfigForm : WinForms.Form
         return site.AllowedTabHosts?.Any(host => !string.IsNullOrWhiteSpace(host)) == true;
     }
 
-    private bool TestSiteWithProcess(SiteConfig site, WinForms.Control owner)
+    private async Task<bool> TestSiteWithProcessAsync(SiteConfig site, WinForms.Control owner, CancellationToken cancellationToken)
     {
         var executable = ResolveBrowserExecutable(site.Browser);
         var arguments = BuildBrowserArgumentString(site);
@@ -2547,12 +2558,13 @@ internal sealed class ConfigForm : WinForms.Form
         var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
         var topMost = site.Window.AlwaysOnTop || (zoneRect.WidthPercentage >= 99.5 && zoneRect.HeightPercentage >= 99.5);
 
-        WindowPlacementHelper.ForcePlaceProcessWindowAsync(
-            process,
-            monitor,
-            zoneRect,
-            topMost,
-            CancellationToken.None).GetAwaiter().GetResult();
+        await WindowPlacementHelper.ForcePlaceProcessWindowAsync(
+                process,
+                monitor,
+                zoneRect,
+                topMost,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         process.Refresh();
         if (process.MainWindowHandle == IntPtr.Zero)
@@ -2564,7 +2576,7 @@ internal sealed class ConfigForm : WinForms.Form
         return true;
     }
 
-    private bool TestSiteWithSelenium(SiteConfig site, WinForms.Control owner)
+    private async Task<bool> TestSiteWithSeleniumAsync(SiteConfig site, WinForms.Control owner, CancellationToken cancellationToken)
     {
         IWebDriver? driver = null;
 
@@ -2573,7 +2585,18 @@ internal sealed class ConfigForm : WinForms.Form
             var arguments = CollectBrowserArguments(site).ToList();
             driver = WebDriverFactory.Create(site, arguments);
             ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
-            ExecuteLoginAsync(driver, site.Login).GetAwaiter().GetResult();
+
+            using var timeout = site.Login?.TimeoutSeconds is > 0
+                ? new CancellationTokenSource(TimeSpan.FromSeconds(site.Login.TimeoutSeconds))
+                : null;
+
+            using var linkedCancellation = timeout is null
+                ? null
+                : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+
+            var loginToken = linkedCancellation?.Token ?? cancellationToken;
+
+            await ExecuteLoginAsync(driver, site.Login, loginToken).ConfigureAwait(false);
 
             var monitor = ResolveTargetMonitor(site);
             var zoneRect = ResolveZoneRect(monitor, site.TargetZonePresetId, site.Window);
@@ -2748,7 +2771,7 @@ internal sealed class ConfigForm : WinForms.Form
         _ = Task.Run(() => tabManager.MonitorAsync(driver, sanitized, cancellation.Token));
     }
 
-    private async Task ExecuteLoginAsync(IWebDriver driver, LoginProfile? login)
+    private async Task ExecuteLoginAsync(IWebDriver driver, LoginProfile? login, CancellationToken cancellationToken)
     {
         if (login is null)
         {
@@ -2758,7 +2781,7 @@ internal sealed class ConfigForm : WinForms.Form
         var loginService = new LoginService(_telemetry);
         try
         {
-            await loginService.TryLoginAsync(driver, login, CancellationToken.None).ConfigureAwait(false);
+            await loginService.TryLoginAsync(driver, login, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
