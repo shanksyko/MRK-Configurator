@@ -194,10 +194,11 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                         isPermanent: false);
                 }
 
-                _captureItem = captureItem;
-                var captureItemInstance = _captureItem
+                var captureItemInstance = captureItem
                     ?? throw new InvalidOperationException(
                         "GraphicsCaptureProvider: capture item is null before starting capture.");
+
+                _captureItem = captureItemInstance;
                 var rawSize = captureItemInstance.Size;
                 _currentSize = SanitizeContentSize(rawSize, monitor.DeviceName);
 
@@ -224,11 +225,17 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 }
 
                 _framePool = CreateFramePool(bufferCount, _currentSize);
+                var framePool = _framePool
+                    ?? throw new InvalidOperationException(
+                        "GraphicsCaptureProvider: frame pool creation returned null.");
 
                 _frameScheduler = new PreviewFrameScheduler(PreviewSettings.Default.TargetFpsGpu);
-                _framePool.FrameArrived += OnFrameArrived;
+                framePool.FrameArrived += OnFrameArrived;
 
-                _session = _framePool.CreateCaptureSession(_captureItem);
+                var captureItemForSession = _captureItem
+                    ?? throw new InvalidOperationException(
+                        "GraphicsCaptureProvider: capture item unexpectedly released before creating capture session.");
+                _session = framePool.CreateCaptureSession(captureItemForSession);
                 if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
                 {
                     EnableCursorCapture(_session);
