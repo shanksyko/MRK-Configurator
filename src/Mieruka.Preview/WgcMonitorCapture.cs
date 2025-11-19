@@ -8,6 +8,7 @@ using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
 using Serilog;
 using Serilog.Events;
+using Mieruka.Preview.Diagnostics;
 
 namespace Mieruka.Preview
 {
@@ -165,10 +166,38 @@ namespace Mieruka.Preview
                 throw new NotSupportedException("Windows Graphics Capture indisponível para este monitor nesta sessão.");
             }
 
-            if (WgcEnvironment.IsRemoteSession())
+            var compatibility = WgcDiagnosticTool.GetReport();
+            if (compatibility.Warnings.Length > 0)
             {
+                foreach (var warning in compatibility.Warnings)
+                {
+                    _logger?.Warning(
+                        "Diagnóstico WGC: {Warning}. monitor={MonitorFriendly} key={MonitorKey}",
+                        warning,
+                        monitorFriendlyName,
+                        monitorKey);
+                }
+            }
+
+            if (compatibility.IsElevated)
+            {
+                var reason = "WGC desativado: processo está sendo executado com privilégios elevados. Execute o aplicativo como usuário padrão.";
+                _logger?.Warning(
+                    "{Reason} monitor={MonitorFriendly} key={MonitorKey}",
+                    reason,
+                    monitorFriendlyName,
+                    monitorKey);
+                GpuCaptureGuard.DisableGpuPermanently("ElevatedProcess");
+                throw new NotSupportedException(reason);
+            }
+
+            var isRemoteSession = compatibility.IsRdpSession || WgcEnvironment.IsRemoteSession();
+            if (isRemoteSession)
+            {
+                var reason = "WGC desativado: sessão remota detectada. GDI será usado como fallback.";
                 _logger?.Information(
-                    "Sessão remota detectada; captura GPU será ignorada para {MonitorFriendly}. key={MonitorKey}",
+                    "{Reason} monitor={MonitorFriendly} key={MonitorKey}",
+                    reason,
                     monitorFriendlyName,
                     monitorKey);
                 GpuCaptureGuard.DisableGpuPermanently("RemoteSession");
@@ -185,14 +214,28 @@ namespace Mieruka.Preview
                 throw new NotSupportedException("Windows Graphics Capture indisponível em ambiente headless.");
             }
 
-            if (!GraphicsCaptureProvider.IsGraphicsCaptureAvailable)
+            if (!compatibility.HasGraphicsCaptureType)
             {
-                _logger?.Information(
-                    "Windows Graphics Capture não está disponível nesta instalação; usando fallback para {MonitorFriendly}. key={MonitorKey}",
+                var reason = "Windows Graphics Capture support check falhou: GraphicsCaptureSession não está instalado. Instale o Media Feature Pack (Windows N) ou atualize o sistema.";
+                _logger?.Warning(
+                    "{Reason} monitor={MonitorFriendly} key={MonitorKey}",
+                    reason,
                     monitorFriendlyName,
                     monitorKey);
+                GpuCaptureGuard.DisableGpuPermanently("MissingGraphicsCaptureType");
+                throw new NotSupportedException(reason);
+            }
+
+            if (!compatibility.IsSupported)
+            {
+                var summary = WgcDiagnosticTool.BuildFailureMessage(compatibility);
+                _logger?.Warning(
+                    "Diagnóstico WGC falhou para {MonitorFriendly}. {Summary} key={MonitorKey}",
+                    monitorFriendlyName,
+                    summary,
+                    monitorKey);
                 GpuCaptureGuard.DisableGpuPermanently("GraphicsCaptureUnavailable");
-                throw new NotSupportedException("Windows Graphics Capture não está disponível neste host.");
+                throw new NotSupportedException(summary);
             }
         }
 
