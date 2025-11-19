@@ -35,9 +35,10 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private string? _previewSessionId; // Keep this unique to avoid duplicate session tracking fields
     private string? _monitorId;
     private bool _isRunning;
+    private PreviewResolution? _previewResolution;
 
     public GdiMonitorCaptureProvider()
-        : this(new PreviewFrameScheduler(PreviewFrameSchedulerOptions.Default.FramesPerSecond))
+        : this(new PreviewFrameScheduler(PreviewSettings.Default.TargetFpsGdi))
     {
     }
 
@@ -74,6 +75,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
         _monitorBounds = bounds;
         _initialized = true;
+        _previewResolution = monitor.GetPreviewResolution();
 
         _monitorId = monitor.Id ?? monitor.DeviceName ?? string.Empty;
         _previewSessionId = Guid.NewGuid().ToString("N");
@@ -172,6 +174,12 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             _monitorBounds.Top,
             width,
             height);
+
+        var target = _previewResolution;
+        if (target is { HasValidSize: true })
+        {
+            return ScreenCapture.CaptureRectangle(rectangle, target.ToSize());
+        }
 
         return ScreenCapture.CaptureRectangle(rectangle);
     }

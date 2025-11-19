@@ -45,6 +45,20 @@ internal static class ScreenCapture
     [DllImport("user32.dll")]
     private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
 
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern bool StretchBlt(
+        IntPtr hdcDest,
+        int nXOriginDest,
+        int nYOriginDest,
+        int nWidthDest,
+        int nHeightDest,
+        IntPtr hdcSrc,
+        int nXOriginSrc,
+        int nYOriginSrc,
+        int nWidthSrc,
+        int nHeightSrc,
+        int dwRop);
+
     private const int SRCCOPY = 0x00CC0020;
     private const int CAPTUREBLT = 0x40000000;
 
@@ -56,10 +70,21 @@ internal static class ScreenCapture
     /// <exception cref="ArgumentException">Thrown when the rectangle has invalid dimensions.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the capture fails.</exception>
     public static Bitmap CaptureRectangle(Rectangle src)
+        => CaptureRectangle(src, Size.Empty);
+
+    public static Bitmap CaptureRectangle(Rectangle src, Size targetSize)
     {
         if (src.Width <= 0 || src.Height <= 0)
         {
             throw new ArgumentException("The capture rectangle dimensions must be positive.", nameof(src));
+        }
+
+        var targetWidth = targetSize.Width > 0 ? targetSize.Width : src.Width;
+        var targetHeight = targetSize.Height > 0 ? targetSize.Height : src.Height;
+
+        if (targetWidth <= 0 || targetHeight <= 0)
+        {
+            throw new ArgumentException("The target capture size must be positive.", nameof(targetSize));
         }
 
         var desktop = GetDesktopWindow();
@@ -79,7 +104,7 @@ internal static class ScreenCapture
 
             try
             {
-                var hBmp = CreateCompatibleBitmap(hdcSrc, src.Width, src.Height);
+                var hBmp = CreateCompatibleBitmap(hdcSrc, targetWidth, targetHeight);
                 if (hBmp == IntPtr.Zero)
                 {
                     throw new InvalidOperationException("Failed to create the capture bitmap.");
@@ -88,9 +113,32 @@ internal static class ScreenCapture
                 var hOld = SelectObject(hdcMem, hBmp);
                 try
                 {
-                    if (!BitBlt(hdcMem, 0, 0, src.Width, src.Height, hdcSrc, src.Left, src.Top, SRCCOPY | CAPTUREBLT))
+                    var rop = SRCCOPY | CAPTUREBLT;
+                    bool success;
+
+                    if (targetWidth == src.Width && targetHeight == src.Height)
                     {
-                        throw new InvalidOperationException("BitBlt failed to copy the desktop pixels.");
+                        success = BitBlt(hdcMem, 0, 0, targetWidth, targetHeight, hdcSrc, src.Left, src.Top, rop);
+                    }
+                    else
+                    {
+                        success = StretchBlt(
+                            hdcMem,
+                            0,
+                            0,
+                            targetWidth,
+                            targetHeight,
+                            hdcSrc,
+                            src.Left,
+                            src.Top,
+                            src.Width,
+                            src.Height,
+                            rop);
+                    }
+
+                    if (!success)
+                    {
+                        throw new InvalidOperationException("GDI failed to copy the desktop pixels into the preview surface.");
                     }
 
                     var image = Image.FromHbitmap(hBmp);

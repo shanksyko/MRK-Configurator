@@ -10,6 +10,7 @@ using WinForms = System.Windows.Forms;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
+using Mieruka.Core.Monitors;
 using Serilog;
 
 namespace Mieruka.App.Ui.PreviewBindings;
@@ -27,6 +28,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private readonly WinForms.ToolTip _tooltip;
     private MonitorPreviewHost? _host;
     private MonitorInfo? _monitor;
+    private MonitorCoordinateMapper? _coordinateMapper;
     private string? _currentGlyphTooltip;
     private string? _placeholderMessage;
     private int _paintExceptionCount;
@@ -143,6 +145,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         await UnbindAsync().ConfigureAwait(true);
         _monitor = monitor;
+        _coordinateMapper = new MonitorCoordinateMapper(monitor);
 
         var monitorId = MonitorIdentifier.Create(monitor);
         var hostLogger = Log.ForContext<MonitorPreviewHost>();
@@ -194,6 +197,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         var host = _host;
         _host = null;
         _monitor = null;
+        _coordinateMapper = null;
 
         SetPlaceholder(null);
 
@@ -422,8 +426,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         UpdateGlyphTooltip(e.Location);
 
-        var monitor = _monitor;
-        if (monitor is null)
+        var mapper = _coordinateMapper;
+        if (mapper is null)
         {
             return;
         }
@@ -434,20 +438,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             return;
         }
 
-        var relativeX = (e.X - displayRect.X) / displayRect.Width;
-        var relativeY = (e.Y - displayRect.Y) / displayRect.Height;
-
-        relativeX = Math.Clamp(relativeX, 0f, 1f);
-        relativeY = Math.Clamp(relativeY, 0f, 1f);
-
-        var bounds = monitor.Bounds;
-        var monitorX = (int)Math.Round(relativeX * bounds.Width, MidpointRounding.AwayFromZero);
-        var monitorY = (int)Math.Round(relativeY * bounds.Height, MidpointRounding.AwayFromZero);
-
-        monitorX = Math.Clamp(monitorX, 0, Math.Max(0, bounds.Width));
-        monitorY = Math.Clamp(monitorY, 0, Math.Max(0, bounds.Height));
-
-        MouseMovedInMonitorSpace?.Invoke(this, new Drawing.Point(monitorX, monitorY));
+        var monitorPoint = mapper.UiToMonitor(e.Location, displayRect);
+        MouseMovedInMonitorSpace?.Invoke(this, monitorPoint);
     }
 
     private void PictureBoxOnMouseLeave(object? sender, EventArgs e)
@@ -479,15 +471,15 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
                 return;
             }
 
-            if (_monitor is null || _simRects.Count == 0)
+            var mapper = _coordinateMapper;
+            if (mapper is null || _simRects.Count == 0)
             {
                 _glyphRegions.Clear();
                 return;
             }
 
-            var monitorWidth = _monitor.Width > 0 ? _monitor.Width : _monitor.Bounds.Width;
-            var monitorHeight = _monitor.Height > 0 ? _monitor.Height : _monitor.Bounds.Height;
-            if (monitorWidth <= 0 || monitorHeight <= 0)
+            var previewResolution = mapper.PreviewResolution;
+            if (!previewResolution.HasValidSize)
             {
                 _glyphRegions.Clear();
                 return;
@@ -499,9 +491,6 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
                 _glyphRegions.Clear();
                 return;
             }
-
-            var scaleX = displayRect.Width / monitorWidth;
-            var scaleY = displayRect.Height / monitorHeight;
 
             var graphics = e.Graphics;
             graphics.SmoothingMode = Drawing2D.SmoothingMode.AntiAlias;
@@ -516,11 +505,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
                     continue;
                 }
 
-                var canvasRect = new Drawing.RectangleF(
-                    displayRect.X + (rect.MonRel.X * scaleX),
-                    displayRect.Y + (rect.MonRel.Y * scaleY),
-                    rect.MonRel.Width * scaleX,
-                    rect.MonRel.Height * scaleY);
+                var previewRect = mapper.MonitorToPreview(rect.MonRel);
+                var canvasRect = mapper.PreviewToUi(previewRect, displayRect);
 
                 if (canvasRect.Width <= 0f || canvasRect.Height <= 0f)
                 {

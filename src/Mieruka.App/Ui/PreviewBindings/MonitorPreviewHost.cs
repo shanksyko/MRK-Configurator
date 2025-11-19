@@ -22,8 +22,9 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// </summary>
 public sealed partial class MonitorPreviewHost : IDisposable
 {
-    private static readonly TimeSpan DefaultFrameThrottle = TimeSpan.FromMilliseconds(300);
-    private static readonly TimeSpan GdiFrameThrottle = TimeSpan.FromMilliseconds(1000.0 / 30d);
+    private static readonly TimeSpan DefaultFrameThrottle = PreviewSettings.CalculateFrameInterval(PreviewSettings.Default.TargetFpsGdi);
+    private static readonly TimeSpan GdiFrameThrottle = PreviewSettings.Default.GetGdiFrameInterval();
+    private static readonly TimeSpan GpuFrameThrottle = PreviewSettings.Default.GetGpuFrameInterval();
     private static readonly TimeSpan SafeModeFrameThrottle = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan SafeModeStartDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan LifecycleWaitDelay = TimeSpan.FromMilliseconds(10);
@@ -1945,7 +1946,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            var targetThrottle = capture is GraphicsCaptureProvider ? TimeSpan.Zero : GdiFrameThrottle;
+            var targetThrottle = capture is GraphicsCaptureProvider ? GpuFrameThrottle : GdiFrameThrottle;
             _frameThrottle = targetThrottle;
             if (_frameThrottle <= TimeSpan.Zero)
             {
