@@ -11,6 +11,8 @@ public sealed class MonitorCoordinateMapper
 {
     private readonly int _monitorWidth;
     private readonly int _monitorHeight;
+    private readonly float _previewScaleX;
+    private readonly float _previewScaleY;
 
     public MonitorCoordinateMapper(MonitorInfo monitor)
     {
@@ -23,6 +25,9 @@ public sealed class MonitorCoordinateMapper
         {
             PreviewResolution = PreviewResolution.FromDimensions(_monitorWidth, _monitorHeight);
         }
+
+        _previewScaleX = CalculateScale(PreviewResolution.LogicalWidth, _monitorWidth);
+        _previewScaleY = CalculateScale(PreviewResolution.LogicalHeight, _monitorHeight);
     }
 
     public MonitorInfo Monitor { get; }
@@ -31,17 +36,17 @@ public sealed class MonitorCoordinateMapper
 
     public Point MonitorToPreview(Point monitorPoint)
     {
-        var x = ScaleCoordinate(monitorPoint.X, PreviewResolution.ScaleX, PreviewResolution.LogicalWidth);
-        var y = ScaleCoordinate(monitorPoint.Y, PreviewResolution.ScaleY, PreviewResolution.LogicalHeight);
+        var x = ScaleCoordinate(monitorPoint.X, _previewScaleX, PreviewResolution.LogicalWidth);
+        var y = ScaleCoordinate(monitorPoint.Y, _previewScaleY, PreviewResolution.LogicalHeight);
         return new Point(x, y);
     }
 
     public Rectangle MonitorToPreview(Rectangle monitorRect)
     {
-        var x = ScaleCoordinate(monitorRect.X, PreviewResolution.ScaleX, PreviewResolution.LogicalWidth);
-        var y = ScaleCoordinate(monitorRect.Y, PreviewResolution.ScaleY, PreviewResolution.LogicalHeight);
-        var width = ScaleLength(monitorRect.Width, PreviewResolution.ScaleX, PreviewResolution.LogicalWidth);
-        var height = ScaleLength(monitorRect.Height, PreviewResolution.ScaleY, PreviewResolution.LogicalHeight);
+        var x = ScaleCoordinate(monitorRect.X, _previewScaleX, PreviewResolution.LogicalWidth);
+        var y = ScaleCoordinate(monitorRect.Y, _previewScaleY, PreviewResolution.LogicalHeight);
+        var width = ScaleLength(monitorRect.Width, _previewScaleX, PreviewResolution.LogicalWidth);
+        var height = ScaleLength(monitorRect.Height, _previewScaleY, PreviewResolution.LogicalHeight);
         return new Rectangle(x, y, width, height);
     }
 
@@ -145,6 +150,16 @@ public sealed class MonitorCoordinateMapper
         }
 
         return Math.Max(min, Math.Min(max, value));
+    }
+
+    private static float CalculateScale(int logicalDimension, int monitorDimension)
+    {
+        if (logicalDimension <= 0 || monitorDimension <= 0)
+        {
+            return 0f;
+        }
+
+        return (float)(logicalDimension / (double)monitorDimension);
     }
 
     private double MonitorWidthPerPreviewPixelX
