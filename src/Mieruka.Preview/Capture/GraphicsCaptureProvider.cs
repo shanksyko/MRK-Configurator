@@ -53,6 +53,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private Direct3D11CaptureFramePool? _framePool;
     private GraphicsCaptureSession? _session;
     private GraphicsCaptureItem? _captureItem;
+    private int _fatalFailureSignaled;
     private IDirect3DDevice? _direct3DDevice;
     private ID3D11Device? _d3dDevice;
     private ID3D11DeviceContext? _d3dContext;
@@ -194,8 +195,13 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                         isPermanent: false);
                 }
 
-                _captureItem = captureItem;
-                var rawSize = _captureItem.Size;
+                var captureItemInstance = captureItem
+                    ?? throw new InvalidOperationException(
+                        "GraphicsCaptureProvider: capture item is null before starting capture.");
+
+                _captureItem = captureItemInstance;
+                captureItemInstance.Closed += OnCaptureItemClosed;
+                var rawSize = captureItemInstance.Size;
                 _currentSize = SanitizeContentSize(rawSize, monitor.DeviceName);
 
                 if (rawSize.Width <= 0 || rawSize.Height <= 0 || _currentSize.Width <= 0 || _currentSize.Height <= 0)
@@ -221,11 +227,17 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 }
 
                 _framePool = CreateFramePool(bufferCount, _currentSize);
+                var framePool = _framePool
+                    ?? throw new InvalidOperationException(
+                        "GraphicsCaptureProvider: frame pool creation returned null.");
 
                 _frameScheduler = new PreviewFrameScheduler(PreviewSettings.Default.TargetFpsGpu);
-                _framePool.FrameArrived += OnFrameArrived;
+                framePool.FrameArrived += OnFrameArrived;
 
-                _session = _framePool.CreateCaptureSession(_captureItem);
+                var captureItemForSession = _captureItem
+                    ?? throw new InvalidOperationException(
+                        "GraphicsCaptureProvider: capture item unexpectedly released before creating capture session.");
+                _session = framePool.CreateCaptureSession(captureItemForSession);
                 if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
                 {
                     EnableCursorCapture(_session);
@@ -504,6 +516,16 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             RecordFrameDiscarded(invalidFrame: false);
             HandleFrameFailure("FrameProcessing", ex);
         }
+        catch (ObjectDisposedException ex)
+        {
+            RecordFrameDiscarded(invalidFrame: false);
+            HandleFatalFrameFailure("FrameProcessingDisposed", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            RecordFrameDiscarded(invalidFrame: false);
+            HandleFatalFrameFailure("FrameProcessingInvalidOperation", ex);
+        }
         catch (Exception ex)
         {
             RecordFrameDiscarded(invalidFrame: false);
@@ -724,9 +746,15 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             _session = null;
         }
 
+        if (_captureItem is not null)
+        {
+            _captureItem.Closed -= OnCaptureItemClosed;
+        }
+
         _captureItem = null;
         _monitorId = null;
         _previewResolution = null;
+        Interlocked.Exchange(ref _fatalFailureSignaled, 0);
         ReleaseDirect3D();
 
         Interlocked.Exchange(ref _frames, 0);
@@ -932,6 +960,37 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 CleanupAfterFailure();
             }
         }
+    }
+
+    private void HandleFatalFrameFailure(string stage, Exception exception)
+    {
+        if (Interlocked.Exchange(ref _fatalFailureSignaled, 1) == 1)
+        {
+            return;
+        }
+
+        Logger.Warning(
+            exception,
+            "Captura WGC encerrada por falha irreversível em {Stage} para monitor {MonitorId}.",
+            stage,
+            _monitorId ?? "<unknown>");
+
+        if (_monitorId is not null)
+        {
+            MarkGpuBackoff(_monitorId);
+        }
+
+        lock (_gate)
+        {
+            CleanupAfterFailure();
+        }
+    }
+
+    private void OnCaptureItemClosed(GraphicsCaptureItem sender, object args)
+    {
+        HandleFatalFrameFailure(
+            "GraphicsCaptureItemClosed",
+            new InvalidOperationException("GraphicsCaptureItem was closed."));
     }
 
     private void ThrowDeviceCreationFailure(int hresult, string stage)
