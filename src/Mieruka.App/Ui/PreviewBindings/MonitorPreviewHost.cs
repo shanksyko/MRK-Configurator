@@ -1192,6 +1192,16 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return false;
         }
 
+        if (UseExternalPreviewHost && !PreviewSafeModeEnabled)
+        {
+            var externalStarted = await TryStartExternalAsync(preferGpu, cancellationToken).ConfigureAwait(false);
+            if (externalStarted)
+            {
+                Interlocked.Exchange(ref _paused, 0);
+                return true;
+            }
+        }
+
         if (!PopulateMetadataFromMonitor())
         {
             return false;
@@ -1747,6 +1757,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             return;
         }
+
+        await StopExternalAsync().ConfigureAwait(false);
 
         IMonitorCapture? capture;
         lock (_gate)

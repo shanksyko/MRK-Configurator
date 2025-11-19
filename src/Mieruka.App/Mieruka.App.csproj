@@ -17,5 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Mieruka.Preview/Mieruka.Preview.csproj" />
+    <ProjectReference Include="../Mieruka.Preview.Ipc/Mieruka.Preview.Ipc.csproj" />
   </ItemGroup>
 </Project>
