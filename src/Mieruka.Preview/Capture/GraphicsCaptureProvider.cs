@@ -195,7 +195,10 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 }
 
                 _captureItem = captureItem;
-                var rawSize = _captureItem.Size;
+                var captureItemInstance = _captureItem
+                    ?? throw new InvalidOperationException(
+                        "GraphicsCaptureProvider: capture item is null before starting capture.");
+                var rawSize = captureItemInstance.Size;
                 _currentSize = SanitizeContentSize(rawSize, monitor.DeviceName);
 
                 if (rawSize.Width <= 0 || rawSize.Height <= 0 || _currentSize.Width <= 0 || _currentSize.Height <= 0)
