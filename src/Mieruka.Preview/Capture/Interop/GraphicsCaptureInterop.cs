@@ -1,7 +1,7 @@
 #if WINDOWS10_0_17763_0_OR_GREATER
 using System;
 using System.Runtime.InteropServices;
-using Mieruka.Preview;
+using Mieruka.Preview.Diagnostics;
 using Windows.Graphics.Capture;
 
 namespace Mieruka.Preview.Capture.Interop;
@@ -18,32 +18,31 @@ internal static class GraphicsCaptureInterop
     private static extern int RoGetActivationFactory(string activatableClassId, ref Guid iid, out IntPtr factory);
 
     public static bool IsWgcRuntimeSupported()
-    {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
-        {
-            return false;
-        }
+        => WgcDiagnosticTool.GetReport().IsSupported;
 
-        try
-        {
-            return GraphicsCaptureSession.IsSupported();
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public static Windows.Graphics.Capture.GraphicsCaptureItem CreateItemForMonitor(nint monitorHandle)
+    public static bool TryCreateItemForMonitor(
+        nint monitorHandle,
+        out Windows.Graphics.Capture.GraphicsCaptureItem? item,
+        out GraphicsCaptureUnavailableException? failure)
     {
-        if (!GraphicsCaptureSession.IsSupported())
+        item = null;
+        failure = null;
+
+        var compatibility = WgcDiagnosticTool.GetReport();
+        if (!compatibility.IsSupported)
         {
-            throw new GraphicsCaptureUnavailableException("Windows Graphics Capture não é suportado neste sistema.", isPermanent: true);
+            failure = new GraphicsCaptureUnavailableException(
+                WgcDiagnosticTool.BuildFailureMessage(compatibility),
+                WgcDiagnosticTool.ShouldTreatAsPermanent(compatibility));
+            return false;
         }
 
         if (monitorHandle == 0)
         {
-            throw new ArgumentException("HMONITOR inválido (IntPtr.Zero).", nameof(monitorHandle));
+            failure = new GraphicsCaptureUnavailableException(
+                "HMONITOR inválido (IntPtr.Zero).",
+                isPermanent: true);
+            return false;
         }
 
         var interopGuid = GraphicsCaptureItemInteropGuid;
@@ -51,19 +50,21 @@ internal static class GraphicsCaptureInterop
         if (hrFactory == E_INVALIDARG)
         {
             ReleaseAndClear(ref factoryPtr);
-            throw new GraphicsCaptureUnavailableException(
+            failure = new GraphicsCaptureUnavailableException(
                 "Windows Graphics Capture está indisponível neste host (E_INVALIDARG ao obter GraphicsCaptureItem factory).",
                 isPermanent: true,
                 new COMException("RoGetActivationFactory retornou E_INVALIDARG.", hrFactory));
+            return false;
         }
 
         if (hrFactory == REGDB_E_CLASSNOTREG)
         {
             ReleaseAndClear(ref factoryPtr);
-            throw new GraphicsCaptureUnavailableException(
+            failure = new GraphicsCaptureUnavailableException(
                 "Windows Graphics Capture não está registrado neste sistema.",
                 isPermanent: true,
                 new COMException("RoGetActivationFactory retornou REGDB_E_CLASSNOTREG.", hrFactory));
+            return false;
         }
 
         Marshal.ThrowExceptionForHR(hrFactory);
@@ -78,29 +79,56 @@ internal static class GraphicsCaptureInterop
                 var hr = factory.CreateForMonitor(monitorHandle, ref itemGuid, out itemPtr);
                 if (hr == E_INVALIDARG)
                 {
-                    throw new COMException("CreateForMonitor retornou E_INVALIDARG.", hr);
+                    failure = new GraphicsCaptureUnavailableException(
+                        "Windows Graphics Capture retornou E_INVALIDARG ao criar o item para o monitor. Verifique drivers, políticas de segurança ou execute como usuário padrão.",
+                        isPermanent: false,
+                        new COMException("CreateForMonitor retornou E_INVALIDARG.", hr));
+                    return false;
                 }
 
                 Marshal.ThrowExceptionForHR(hr);
 
                 if (itemPtr == IntPtr.Zero)
                 {
-                    throw new COMException("CreateForMonitor retornou ponteiro nulo.", E_INVALIDARG);
+                    failure = new GraphicsCaptureUnavailableException(
+                        "Windows Graphics Capture retornou um item nulo para o monitor informado.",
+                        isPermanent: false);
+                    return false;
                 }
 
-                var item = (Windows.Graphics.Capture.GraphicsCaptureItem)Marshal.GetObjectForIUnknown(itemPtr);
+                item = (Windows.Graphics.Capture.GraphicsCaptureItem)Marshal.GetObjectForIUnknown(itemPtr);
                 itemPtr = IntPtr.Zero;
-                return item;
+                return true;
             }
-            catch (COMException ex) when (ex.HResult == E_INVALIDARG)
+            catch (COMException ex)
             {
-                throw new ArgumentException("Windows Graphics Capture: E_INVALIDARG ao criar item para monitor. Provável handle inválido ou WGC desabilitado por política.", nameof(monitorHandle), ex);
+                failure ??= new GraphicsCaptureUnavailableException(
+                    "Falha COM ao criar item Windows Graphics Capture.",
+                    isPermanent: false,
+                    ex);
+                return false;
             }
             finally
             {
                 ReleaseAndClear(ref itemPtr);
                 Marshal.ReleaseComObject(factory);
             }
+        }
+        catch (COMException ex)
+        {
+            failure ??= new GraphicsCaptureUnavailableException(
+                "Falha COM ao inicializar Windows Graphics Capture.",
+                isPermanent: false,
+                ex);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            failure ??= new GraphicsCaptureUnavailableException(
+                "Falha inesperada ao inicializar Windows Graphics Capture.",
+                isPermanent: false,
+                ex);
+            return false;
         }
         finally
         {
@@ -178,5 +206,15 @@ namespace Mieruka.Preview.Capture.Interop;
 internal static class GraphicsCaptureInterop
 {
     public static bool IsWgcRuntimeSupported() => false;
+
+    public static bool TryCreateItemForMonitor(
+        nint monitorHandle,
+        out Windows.Graphics.Capture.GraphicsCaptureItem? item,
+        out GraphicsCaptureUnavailableException? failure)
+    {
+        item = null;
+        failure = new GraphicsCaptureUnavailableException("Windows Graphics Capture não é suportado neste sistema.", isPermanent: true);
+        return false;
+    }
 }
 #endif

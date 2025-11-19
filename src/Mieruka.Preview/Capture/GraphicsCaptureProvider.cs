@@ -13,6 +13,7 @@ using Mieruka.Core.Models;
 using Mieruka.Core.Diagnostics;
 #if WINDOWS10_0_17763_0_OR_GREATER
 using Mieruka.Preview.Capture.Interop;
+using Mieruka.Preview.Diagnostics;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -102,9 +103,28 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             throw new GraphicsCaptureUnavailableException("Windows Graphics Capture foi desativado para esta sessão.", isPermanent: true);
         }
 
-        if (!IsGraphicsCaptureAvailable)
+        var monitorDescriptor = monitor.DeviceName ?? monitor.Id ?? monitor.Name ?? "<unknown>";
+
+        var compatibility = WgcDiagnosticTool.GetReport();
+        if (compatibility.Warnings.Length > 0)
         {
-            throw new GraphicsCaptureUnavailableException("Windows Graphics Capture não é suportado neste sistema.", isPermanent: true);
+            foreach (var warning in compatibility.Warnings)
+            {
+                Logger.Warning(
+                    "Diagnóstico WGC gerou aviso para {Monitor}: {Warning}",
+                    monitorDescriptor,
+                    warning);
+            }
+        }
+
+        if (!compatibility.IsSupported)
+        {
+            var message = WgcDiagnosticTool.BuildFailureMessage(compatibility);
+            Logger.Warning(
+                "Windows Graphics Capture desabilitado antes do start para {Monitor}: {Reason}",
+                monitorDescriptor,
+                message);
+            throw new GraphicsCaptureUnavailableException(message, WgcDiagnosticTool.ShouldTreatAsPermanent(compatibility));
         }
 
         if (monitor.DeviceName is null)
@@ -162,7 +182,19 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 _monitorId = monitorKey;
                 InitializeDirect3D();
 
-                _captureItem = GraphicsCaptureInterop.CreateItemForMonitor(monitorHandle);
+                if (!GraphicsCaptureInterop.TryCreateItemForMonitor(monitorHandle, out var captureItem, out var creationFailure))
+                {
+                    if (creationFailure is not null)
+                    {
+                        throw creationFailure;
+                    }
+
+                    throw new GraphicsCaptureUnavailableException(
+                        "Falha desconhecida ao criar GraphicsCaptureItem para o monitor informado.",
+                        isPermanent: false);
+                }
+
+                _captureItem = captureItem;
                 var rawSize = _captureItem.Size;
                 _currentSize = SanitizeContentSize(rawSize, monitor.DeviceName);
 
@@ -1096,8 +1128,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     /// </summary>
 #if WINDOWS10_0_17763_0_OR_GREATER
     [SupportedOSPlatform("windows10.0.17763")]
-    public static bool IsGraphicsCaptureAvailable
-        => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && Windows.Graphics.Capture.GraphicsCaptureSession.IsSupported();
+    public static bool IsGraphicsCaptureAvailable => WgcDiagnosticTool.GetReport().IsSupported;
 #else
     public static bool IsGraphicsCaptureAvailable => false;
 #endif
