@@ -76,8 +76,8 @@ public sealed class MonitorCoordinateMapper
         var relativeX = (uiPoint.X - displayRect.X) / displayRect.Width;
         var relativeY = (uiPoint.Y - displayRect.Y) / displayRect.Height;
 
-        relativeX = Clamp01(relativeX);
-        relativeY = Clamp01(relativeY);
+        relativeX = (float)Clamp01(relativeX);
+        relativeY = (float)Clamp01(relativeY);
 
         var x = (int)Math.Round(relativeX * PreviewResolution.LogicalWidth, MidpointRounding.AwayFromZero);
         var y = (int)Math.Round(relativeY * PreviewResolution.LogicalHeight, MidpointRounding.AwayFromZero);
