@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Models\PreviewResolution.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Mieruka.Core/Mieruka.Core.csproj" />
   </ItemGroup>
 

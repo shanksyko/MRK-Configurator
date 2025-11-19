@@ -81,4 +81,12 @@ public sealed record class MonitorInfo
     /// Identificador único usado para cache de captura.
     /// </summary>
     public string Id => string.IsNullOrEmpty(StableId) ? DeviceName : StableId;
+
+    /// <summary>
+    /// Calculates the logical preview resolution associated with this monitor.
+    /// </summary>
+    public PreviewResolution GetPreviewResolution()
+    {
+        return PreviewResolution.FromMonitor(this);
+    }
 }

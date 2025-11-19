@@ -16,4 +16,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Mieruka.Preview\Models\PreviewResolution.cs" Link="Models\PreviewResolution.cs" />
+  </ItemGroup>
 </Project>

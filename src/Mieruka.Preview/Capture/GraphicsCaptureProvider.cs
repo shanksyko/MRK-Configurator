@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -60,6 +61,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private string? _previewSessionId;
     private readonly Stopwatch _captureStopwatch = new();
     private PreviewFrameScheduler? _frameScheduler;
+    private PreviewResolution? _previewResolution;
     private long _frames;
     private long _dropped;
     private long _invalidImages;
@@ -188,7 +190,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
                 _framePool = CreateFramePool(bufferCount, _currentSize);
 
-                _frameScheduler = new PreviewFrameScheduler(PreviewFrameSchedulerOptions.Default.FramesPerSecond);
+                _frameScheduler = new PreviewFrameScheduler(PreviewSettings.Default.TargetFpsGpu);
                 _framePool.FrameArrived += OnFrameArrived;
 
                 _session = _framePool.CreateCaptureSession(_captureItem);
@@ -209,6 +211,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                     .ForContext("Backend", Backend)
                     .ForContext("PreviewSessionId", _previewSessionId);
                 _captureStopwatch.Restart();
+                _previewResolution = monitor.GetPreviewResolution();
                 Interlocked.Exchange(ref _frames, 0);
                 Interlocked.Exchange(ref _dropped, 0);
                 Interlocked.Exchange(ref _invalidImages, 0);
@@ -461,6 +464,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             using var texture = CreateTextureFromSurface(frame.Surface);
             var bitmap = CopyTextureToBitmap(texture, frame.ContentSize.Width, frame.ContentSize.Height);
+            bitmap = ConvertToPreviewBitmap(bitmap);
             DispatchFrame(bitmap);
         }
         catch (COMException ex)
@@ -690,6 +694,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         _captureItem = null;
         _monitorId = null;
+        _previewResolution = null;
         ReleaseDirect3D();
 
         Interlocked.Exchange(ref _frames, 0);
@@ -984,6 +989,45 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         finally
         {
             _d3dContext.Unmap(staging, 0);
+        }
+    }
+
+    private Bitmap ConvertToPreviewBitmap(Bitmap bitmap)
+    {
+        var target = _previewResolution;
+        if (target is null || !target.HasValidSize)
+        {
+            return bitmap;
+        }
+
+        if (bitmap.Width == target.LogicalWidth && bitmap.Height == target.LogicalHeight)
+        {
+            return bitmap;
+        }
+
+        Bitmap? scaled = null;
+        try
+        {
+            scaled = new Bitmap(target.LogicalWidth, target.LogicalHeight, bitmap.PixelFormat);
+            using var graphics = Graphics.FromImage(scaled);
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.CompositingQuality = CompositingQuality.HighSpeed;
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.SmoothingMode = SmoothingMode.None;
+            graphics.DrawImage(
+                bitmap,
+                new Rectangle(0, 0, scaled.Width, scaled.Height),
+                new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                GraphicsUnit.Pixel);
+
+            bitmap.Dispose();
+            return scaled;
+        }
+        catch
+        {
+            scaled?.Dispose();
+            return bitmap;
         }
     }
 
