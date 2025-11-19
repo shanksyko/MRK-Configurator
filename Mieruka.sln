@@ -12,6 +12,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.App", "src\\Mieruka
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Tests", "src\\Mieruka.Tests\\Mieruka.Tests.csproj", "{EB7C6B74-2957-4E21-9D62-764F2890B007}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Preview.Ipc", "src\\Mieruka.Preview.Ipc\\Mieruka.Preview.Ipc.csproj", "{A09F24A6-1243-416C-8103-92CF0995C7D2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mieruka.Preview.Host", "src\\Mieruka.Preview.Host\\Mieruka.Preview.Host.csproj", "{C7E12850-B9D1-45E5-9C68-B4FB4EDAFDC1}"
+EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
         Debug|Any CPU = Debug|Any CPU
@@ -38,6 +42,14 @@ Global
         {EB7C6B74-2957-4E21-9D62-764F2890B007}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {EB7C6B74-2957-4E21-9D62-764F2890B007}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {EB7C6B74-2957-4E21-9D62-764F2890B007}.Release|Any CPU.Build.0 = Release|Any CPU
+        {A09F24A6-1243-416C-8103-92CF0995C7D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {A09F24A6-1243-416C-8103-92CF0995C7D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {A09F24A6-1243-416C-8103-92CF0995C7D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {A09F24A6-1243-416C-8103-92CF0995C7D2}.Release|Any CPU.Build.0 = Release|Any CPU
+        {C7E12850-B9D1-45E5-9C68-B4FB4EDAFDC1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {C7E12850-B9D1-45E5-9C68-B4FB4EDAFDC1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {C7E12850-B9D1-45E5-9C68-B4FB4EDAFDC1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {C7E12850-B9D1-45E5-9C68-B4FB4EDAFDC1}.Release|Any CPU.Build.0 = Release|Any CPU
     EndGlobalSection
     GlobalSection(SolutionProperties) = preSolution
         HideSolutionNode = FALSE
