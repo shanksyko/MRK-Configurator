@@ -22,4 +22,13 @@
     <PackageReference Include="Microsoft.Windows.SDK.Contracts" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>
+
+  <Target Name="FailOnWinmdReferences" BeforeTargets="ResolveReferences">
+    <ItemGroup>
+      <WinmdReference Include="%(Reference.Identity)"
+        Condition="'%(Reference.HintPath)' != '' and $([System.String]::Copy('%(Reference.HintPath)').EndsWith('.winmd', System.StringComparison.OrdinalIgnoreCase))" />
+    </ItemGroup>
+    <Error Condition="@(WinmdReference) != ''"
+      Text="Direct WinMD references are not supported. Remove: @(WinmdReference, ', ')" />
+  </Target>
 </Project>
