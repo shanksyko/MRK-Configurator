@@ -110,6 +110,8 @@ public partial class AppEditorForm : WinForms.Form
     private readonly Stopwatch _windowPreviewStopwatch = Stopwatch.StartNew();
     private WindowPreviewSnapshot _windowPreviewSnapshot;
     private bool _hasWindowPreviewSnapshot;
+    private TimeSpan _lastWindowPreviewSnapshotAt = TimeSpan.Zero;
+    private Drawing.Point? _lastWindowPreviewSnapshotPoint;
     private TimeSpan _lastWindowPreviewRebuild = TimeSpan.Zero;
     private bool _windowPreviewRebuildScheduled;
     private readonly WinForms.Timer _windowBoundsDebounce;
@@ -120,6 +122,8 @@ public partial class AppEditorForm : WinForms.Form
     private string? _monitorPreviewMonitorId;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
+    private static readonly TimeSpan WindowPreviewSnapshotThrottleInterval = TimeSpan.FromMilliseconds(75);
+    private const int WindowPreviewSnapshotDelta = 4;
 
     public AppEditorForm(
         ProgramaConfig? programa = null,
@@ -2332,6 +2336,7 @@ public partial class AppEditorForm : WinForms.Form
 
     private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
     {
+        var now = _windowPreviewStopwatch.Elapsed;
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
         _logger.Debug(
@@ -2355,8 +2360,31 @@ public partial class AppEditorForm : WinForms.Form
                 (int)nudJanelaAltura.Value);
         }
 
+        var currentPoint = bounds.Location;
+        if (_hasWindowPreviewSnapshot)
+        {
+            var elapsed = now - _lastWindowPreviewSnapshotAt;
+            var lastPoint = _lastWindowPreviewSnapshotPoint;
+            if (elapsed < WindowPreviewSnapshotThrottleInterval &&
+                lastPoint.HasValue &&
+                Math.Abs(currentPoint.X - lastPoint.Value.X) < WindowPreviewSnapshotDelta &&
+                Math.Abs(currentPoint.Y - lastPoint.Value.Y) < WindowPreviewSnapshotDelta)
+            {
+                _logger.Debug(
+                    "CaptureWindowPreviewSnapshot: throttled elapsed={Elapsed} delta=({DeltaX},{DeltaY}) // MIERUKA_FIX",
+                    elapsed,
+                    currentPoint.X - lastPoint.Value.X,
+                    currentPoint.Y - lastPoint.Value.Y);
+
+                return _windowPreviewSnapshot;
+            }
+        }
+
         var snapshot = new WindowPreviewSnapshot(monitorId, bounds, isFullScreen, autoStart, appId);
-        _logger.Information(
+        _lastWindowPreviewSnapshotAt = now;
+        _lastWindowPreviewSnapshotPoint = currentPoint;
+
+        _logger.Debug(
             "CaptureWindowPreviewSnapshot: exit bounds={Bounds} monitorId={MonitorId} fullScreen={FullScreen} autoStart={AutoStart} appId={AppId} // MIERUKA_FIX",
             snapshot.Bounds,
             snapshot.MonitorId ?? string.Empty,
