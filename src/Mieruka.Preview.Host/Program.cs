@@ -171,24 +171,31 @@ internal sealed class CaptureRunner
 
             _nextFrameAtUtc = nowUtc + _frameInterval;
             using var processed = DownscaleFrame(e.Frame, _resolution);
-            using var locked = processed.LockBits(new Rectangle(0, 0, processed.Width, processed.Height),
+            var bmpData = processed.LockBits(new Rectangle(0, 0, processed.Width, processed.Height),
                 ImageLockMode.ReadOnly,
                 PixelFormat.Format32bppPArgb);
 
-            var buffer = new byte[Math.Max(0, locked.Stride * locked.Height)];
-            System.Runtime.InteropServices.Marshal.Copy(locked.Scan0, buffer, 0, buffer.Length);
+            try
+            {
+                var buffer = new byte[Math.Max(0, bmpData.Stride * bmpData.Height)];
+                System.Runtime.InteropServices.Marshal.Copy(bmpData.Scan0, buffer, 0, buffer.Length);
 
-            var frame = new PreviewFrameMessage(
-                _backend,
-                processed.Width,
-                processed.Height,
-                locked.Stride,
-                locked.PixelFormat,
-                Interlocked.Increment(ref _frameIndex),
-                e.Timestamp,
-                buffer);
+                var frame = new PreviewFrameMessage(
+                    _backend,
+                    processed.Width,
+                    processed.Height,
+                    bmpData.Stride,
+                    bmpData.PixelFormat,
+                    Interlocked.Increment(ref _frameIndex),
+                    e.Timestamp,
+                    buffer);
 
-            _ = _server.SendAsync(PreviewIpcMessageKind.Frame, frame, buffer, CancellationToken.None);
+                _ = _server.SendAsync(PreviewIpcMessageKind.Frame, frame, buffer, CancellationToken.None);
+            }
+            finally
+            {
+                processed.UnlockBits(bmpData);
+            }
         }
         finally
         {
