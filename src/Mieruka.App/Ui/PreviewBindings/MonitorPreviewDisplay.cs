@@ -268,6 +268,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         if (_host is { } host)
         {
+            host.SetEditorPreviewDisabledMode(true);
             await host.PauseAsync(cancellationToken).ConfigureAwait(true);
         }
     }
@@ -288,6 +289,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         if (_host is { } host)
         {
+            host.SetEditorPreviewDisabledMode(false);
             await host.ResumeAsync().ConfigureAwait(true);
         }
     }

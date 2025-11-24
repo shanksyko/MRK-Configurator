@@ -26,8 +26,8 @@ public sealed class MonitorCoordinateMapper
             PreviewResolution = PreviewResolution.FromDimensions(_monitorWidth, _monitorHeight);
         }
 
-        ScaleX = (float)CalculateScale(PreviewResolution.LogicalWidth, _monitorWidth);
-        ScaleY = (float)CalculateScale(PreviewResolution.LogicalHeight, _monitorHeight);
+        ScaleX = (float)CalculateScale(LogicalPreviewWidth, _monitorWidth);
+        ScaleY = (float)CalculateScale(LogicalPreviewHeight, _monitorHeight);
     }
 
     public MonitorInfo Monitor { get; }
@@ -36,17 +36,17 @@ public sealed class MonitorCoordinateMapper
 
     public Point MonitorToPreview(Point monitorPoint)
     {
-        var x = ScaleCoordinate(monitorPoint.X, ScaleX, PreviewResolution.LogicalWidth);
-        var y = ScaleCoordinate(monitorPoint.Y, ScaleY, PreviewResolution.LogicalHeight);
+        var x = ScaleCoordinate(monitorPoint.X, ScaleX, LogicalPreviewWidth);
+        var y = ScaleCoordinate(monitorPoint.Y, ScaleY, LogicalPreviewHeight);
         return new Point(x, y);
     }
 
     public Rectangle MonitorToPreview(Rectangle monitorRect)
     {
-        var x = ScaleCoordinate(monitorRect.X, ScaleX, PreviewResolution.LogicalWidth);
-        var y = ScaleCoordinate(monitorRect.Y, ScaleY, PreviewResolution.LogicalHeight);
-        var width = ScaleLength(monitorRect.Width, ScaleX, PreviewResolution.LogicalWidth);
-        var height = ScaleLength(monitorRect.Height, ScaleY, PreviewResolution.LogicalHeight);
+        var x = ScaleCoordinate(monitorRect.X, ScaleX, LogicalPreviewWidth);
+        var y = ScaleCoordinate(monitorRect.Y, ScaleY, LogicalPreviewHeight);
+        var width = ScaleLength(monitorRect.Width, ScaleX, LogicalPreviewWidth);
+        var height = ScaleLength(monitorRect.Height, ScaleY, LogicalPreviewHeight);
         return new Rectangle(x, y, width, height);
     }
 
@@ -68,7 +68,7 @@ public sealed class MonitorCoordinateMapper
 
     public Point UiToPreview(Point uiPoint, RectangleF displayRect)
     {
-        if (!PreviewResolution.HasValidSize || displayRect.Width <= 0f || displayRect.Height <= 0f)
+        if (displayRect.Width <= 0f || displayRect.Height <= 0f)
         {
             return Point.Empty;
         }
@@ -79,23 +79,23 @@ public sealed class MonitorCoordinateMapper
         relativeX = (float)Clamp01(relativeX);
         relativeY = (float)Clamp01(relativeY);
 
-        var x = (int)Math.Round(relativeX * PreviewResolution.LogicalWidth, MidpointRounding.AwayFromZero);
-        var y = (int)Math.Round(relativeY * PreviewResolution.LogicalHeight, MidpointRounding.AwayFromZero);
+        var x = (int)Math.Round(relativeX * LogicalPreviewWidth, MidpointRounding.AwayFromZero);
+        var y = (int)Math.Round(relativeY * LogicalPreviewHeight, MidpointRounding.AwayFromZero);
 
-        x = ClampDimension(x, 0, PreviewResolution.LogicalWidth);
-        y = ClampDimension(y, 0, PreviewResolution.LogicalHeight);
+        x = ClampDimension(x, 0, LogicalPreviewWidth);
+        y = ClampDimension(y, 0, LogicalPreviewHeight);
         return new Point(x, y);
     }
 
     public RectangleF PreviewToUi(Rectangle previewRect, RectangleF displayRect)
     {
-        if (!PreviewResolution.HasValidSize || displayRect.Width <= 0f || displayRect.Height <= 0f)
+        if (displayRect.Width <= 0f || displayRect.Height <= 0f)
         {
             return RectangleF.Empty;
         }
 
-        var scaleX = displayRect.Width / PreviewResolution.LogicalWidth;
-        var scaleY = displayRect.Height / PreviewResolution.LogicalHeight;
+        var scaleX = displayRect.Width / LogicalPreviewWidth;
+        var scaleY = displayRect.Height / LogicalPreviewHeight;
 
         var x = (float)(displayRect.X + (previewRect.X * scaleX));
         var y = (float)(displayRect.Y + (previewRect.Y * scaleY));
@@ -162,9 +162,13 @@ public sealed class MonitorCoordinateMapper
         return logicalDimension / (double)monitorDimension;
     }
 
+    private int LogicalPreviewWidth => Math.Max(1, PreviewResolution.HasValidSize ? PreviewResolution.LogicalWidth : _monitorWidth);
+
+    private int LogicalPreviewHeight => Math.Max(1, PreviewResolution.HasValidSize ? PreviewResolution.LogicalHeight : _monitorHeight);
+
     private double MonitorWidthPerPreviewPixelX
-        => _monitorWidth / (double)Math.Max(1, PreviewResolution.LogicalWidth);
+        => _monitorWidth / (double)Math.Max(1, LogicalPreviewWidth);
 
     private double MonitorHeightPerPreviewPixelY
-        => _monitorHeight / (double)Math.Max(1, PreviewResolution.LogicalHeight);
+        => _monitorHeight / (double)Math.Max(1, LogicalPreviewHeight);
 }
