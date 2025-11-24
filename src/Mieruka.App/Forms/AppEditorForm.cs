@@ -2334,9 +2334,6 @@ public partial class AppEditorForm : WinForms.Form
     {
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
-        _logger.Debug(
-            "CaptureWindowPreviewSnapshot: enter monitorId={MonitorId} // MIERUKA_FIX",
-            monitorId ?? string.Empty);
 
         var autoStart = chkAutoStart?.Checked ?? false;
         var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
@@ -2356,8 +2353,8 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         var snapshot = new WindowPreviewSnapshot(monitorId, bounds, isFullScreen, autoStart, appId);
-        _logger.Information(
-            "CaptureWindowPreviewSnapshot: exit bounds={Bounds} monitorId={MonitorId} fullScreen={FullScreen} autoStart={AutoStart} appId={AppId} // MIERUKA_FIX",
+        _logger.Debug(
+            "CaptureWindowPreviewSnapshot: bounds={Bounds} monitorId={MonitorId} fullScreen={FullScreen} autoStart={AutoStart} appId={AppId} // MIERUKA_FIX",
             snapshot.Bounds,
             snapshot.MonitorId ?? string.Empty,
             snapshot.IsFullScreen,
@@ -2375,7 +2372,7 @@ public partial class AppEditorForm : WinForms.Form
         _windowPreviewRebuildScheduled = false;
 
         RebuildSimulationOverlays();
-        Logger.Information(
+        Logger.Debug(
             "ApplySelectionOverlay: bounds={Bounds} monitor={MonitorId} fullScreen={FullScreen} autoStart={AutoStart}",
             snapshot.Bounds,
             snapshot.MonitorId ?? string.Empty,
@@ -2413,14 +2410,9 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimulationOverlays()
     {
-        var hasPreviewDisplay = monitorPreviewDisplay is not null;
-        _logger.Debug(
-            "RebuildSimulationOverlays: enter hasPreviewDisplay={HasPreviewDisplay} // MIERUKA_FIX",
-            hasPreviewDisplay);
-
         if (monitorPreviewDisplay is null)
         {
-            _logger.Debug("RebuildSimulationOverlays: exit missing preview display // MIERUKA_FIX");
+            _logger.Debug("RebuildSimulationOverlays: skip missing preview display // MIERUKA_FIX");
             return;
         }
 
@@ -2428,7 +2420,7 @@ public partial class AppEditorForm : WinForms.Form
         if (monitor is null)
         {
             monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
-            _logger.Information("RebuildSimulationOverlays: exit no monitor selected // MIERUKA_FIX");
+            _logger.Debug("RebuildSimulationOverlays: cleared overlays because no monitor selected // MIERUKA_FIX");
             return;
         }
 
@@ -2437,7 +2429,7 @@ public partial class AppEditorForm : WinForms.Form
         {
             monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
             _logger.Information(
-                "RebuildSimulationOverlays: exit invalid monitor identifier monitor={MonitorName} // MIERUKA_FIX",
+                "RebuildSimulationOverlays: invalid monitor identifier monitor={MonitorName} // MIERUKA_FIX",
                 monitor.Name ?? string.Empty);
             return;
         }
@@ -2534,8 +2526,8 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         monitorPreviewDisplay.SetSimulationRects(overlays);
-        _logger.Information(
-            "RebuildSimulationOverlays: exit monitorId={MonitorId} overlayCandidates={OverlayCandidates} overlaysRendered={OverlaysRendered} currentAppId={CurrentAppId} // MIERUKA_FIX",
+        _logger.Debug(
+            "RebuildSimulationOverlays: monitorId={MonitorId} overlayCandidates={OverlayCandidates} overlaysRendered={OverlaysRendered} currentAppId={CurrentAppId} // MIERUKA_FIX",
             monitorId,
             overlayApps.Count,
             overlays.Count,
