@@ -287,6 +287,8 @@ public partial class AppEditorForm : WinForms.Form
             }
         };
 
+        editorTabs.SelectedIndexChanged += TabEditor_SelectedIndexChanged;
+
         InitializeCycleMetadata(profileApps, programa);
 
         if (programa is not null)
@@ -317,6 +319,7 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         ApplyAppTypeUI();
+        UpdatePreviewVisibility();
     }
 
     private void ConfigureInstalledAppsSection(WinForms.ListView installedAppsList)
@@ -1671,6 +1674,11 @@ public partial class AppEditorForm : WinForms.Form
         return false;
     }
 
+    private void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        UpdatePreviewVisibility();
+    }
+
     private async void cboMonitores_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_suppressMonitorComboEvents)
@@ -2657,6 +2665,22 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         return cboMonitores?.SelectedItem is MonitorOption option ? option.Monitor : null;
+    }
+
+    private void UpdatePreviewVisibility()
+    {
+        var preview = monitorPreviewDisplay;
+        if (preview is null || preview.IsDisposed)
+        {
+            return;
+        }
+
+        var previewTabSelected = tabEditor is { SelectedTab: { } selectedTab }
+            && tpJanela is not null
+            && ReferenceEquals(selectedTab, tpJanela)
+            && tabEditor.TabPages.Contains(tpJanela);
+
+        preview.SetPreviewVisibility(previewTabSelected);
     }
 
     private static WindowConfig ClampWindowBounds(WindowConfig window, MonitorInfo monitor)
