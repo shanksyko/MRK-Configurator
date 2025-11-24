@@ -74,7 +74,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly object _frameTimingGate = new();
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
-    private readonly HashSet<Drawing.Bitmap> _pendingFrames = new();
+    private readonly List<Drawing.Bitmap> _pendingFrames = new();
     private const int PendingFrameLimit = 2;
     private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
@@ -1897,11 +1897,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool ShouldProcessFrame()
     {
-        if (!HasPendingFrameCapacity())
-        {
-            return false;
-        }
-
         TimeSpan throttle;
         lock (_frameTimingGate)
         {
@@ -1923,14 +1918,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             _nextFrameAt = now + throttle;
             return true;
-        }
-    }
-
-    private bool HasPendingFrameCapacity()
-    {
-        lock (_pendingFramesGate)
-        {
-            return _pendingFrames.Count < PendingFrameLimit;
         }
     }
 
@@ -1982,25 +1969,23 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool RegisterPendingFrame(Drawing.Bitmap frame, out int pendingCount)
     {
-        var shouldDispose = false;
+        Drawing.Bitmap? droppedFrame = null;
+
         lock (_pendingFramesGate)
         {
             if (_pendingFrames.Count >= PendingFrameLimit)
             {
-                pendingCount = _pendingFrames.Count;
-                shouldDispose = true;
+                droppedFrame = _pendingFrames[0];
+                _pendingFrames.RemoveAt(0);
             }
-            else
-            {
-                _pendingFrames.Add(frame);
-                pendingCount = _pendingFrames.Count;
-            }
+
+            _pendingFrames.Add(frame);
+            pendingCount = _pendingFrames.Count;
         }
 
-        if (shouldDispose)
+        if (droppedFrame is not null)
         {
-            DisposeFrame(frame);
-            return false;
+            DisposeFrame(droppedFrame);
         }
 
         return true;
@@ -2022,8 +2007,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             if (_pendingFrames.Count > 0)
             {
-                frames = new Drawing.Bitmap[_pendingFrames.Count];
-                _pendingFrames.CopyTo(frames);
+                frames = _pendingFrames.ToArray();
                 _pendingFrames.Clear();
             }
         }
