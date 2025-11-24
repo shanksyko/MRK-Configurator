@@ -81,6 +81,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private bool _frameThrottleCustomized;
     private int _isVisible = 1;
     private Drawing.Bitmap? _currentFrame;
+    private Drawing.Bitmap? _editorSnapshotBitmap;
+    private bool _editorSnapshotModeEnabled;
     private int _stateRaw = (int)PreviewState.Stopped;
     private bool _disposed;
     private Drawing.Rectangle _monitorBounds;
@@ -211,6 +213,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
         get => Volatile.Read(ref _isVisible) == 1;
         set => Volatile.Write(ref _isVisible, value ? 1 : 0);
     }
+
+    private bool IsEditorSnapshotActive
+        => _editorSnapshotModeEnabled && _editorSnapshotBitmap is not null && Volatile.Read(ref _paused) == 1;
 
     /// <summary>
     /// Gets the bounds of the monitor being captured when available.
@@ -582,6 +587,24 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
         try
         {
+            var snapshotCaptured = false;
+            if (IsEditorSnapshotActive)
+            {
+                snapshotCaptured = true;
+            }
+            else
+            {
+                snapshotCaptured = await CaptureEditorSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!snapshotCaptured)
+            {
+                _logger.Warning(
+                    "EditorSnapshot: não foi possível capturar snapshot, mantendo preview contínuo. Motivo={Reason} // MIERUKA_FIX",
+                    "SnapshotFalhou");
+                return;
+            }
+
             var wasPaused = Interlocked.Exchange(ref _paused, 1) == 1;
             var detached = await DisposeCaptureRetainingFrameAsync(resetPaused: false, cancellationToken)
                 .ConfigureAwait(false);
@@ -589,6 +612,16 @@ public sealed partial class MonitorPreviewHost : IDisposable
             if (!wasPaused || detached)
             {
                 _logger.Information("PreviewPaused");
+            }
+
+            if (snapshotCaptured && IsEditorSnapshotActive)
+            {
+                var backend = _isGpuActive ? "GPU" : "GDI";
+                _logger.Information(
+                    "EditorSnapshot: ativando modo snapshot para monitor={MonitorId}, backend={Backend} // MIERUKA_FIX",
+                    MonitorId,
+                    backend);
+                _logger.Information("EditorSnapshot: modo snapshot ativado, preview contínuo pausado // MIERUKA_FIX");
             }
         }
         finally
@@ -616,6 +649,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
+            var snapshotWasActive = DisableEditorSnapshot(clearImage: true);
+
             bool useGpu;
             lock (_stateGate)
             {
@@ -625,6 +660,12 @@ public sealed partial class MonitorPreviewHost : IDisposable
             var resumed = await StartCoreAsync(useGpu, CancellationToken.None).ConfigureAwait(false);
             if (resumed)
             {
+                if (snapshotWasActive)
+                {
+                    _logger.Information(
+                        "EditorSnapshot: modo snapshot desativado, preview contínuo retomado // MIERUKA_FIX");
+                }
+
                 _logger.Information("PreviewResumed");
             }
         }
@@ -702,6 +743,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 _isGpuActive = false;
                 _isSuspended = false;
             }
+
+            DisableEditorSnapshot(clearImage: true);
 
             StopCoreUnsafeAsync(clearFrame: true, resetPaused: true, cancellationToken: CancellationToken.None)
                 .GetAwaiter()
@@ -1359,6 +1402,13 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
+            if (IsEditorSnapshotActive)
+            {
+                _logger.Debug("EditorSnapshot: quadro ignorado porque snapshot está ativo // MIERUKA_FIX");
+                e.Dispose();
+                return;
+            }
+
             if (IsBusy || !ShouldDisplayFrame())
             {
                 e.Dispose();
@@ -1468,6 +1518,72 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
+    private bool TryApplyFrame(Drawing.Bitmap frame)
+    {
+        if (!TryGetFrameSize(frame, out var width, out var height))
+        {
+            frame.Dispose();
+            return false;
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            ForEvent("FrameDiscarded").Debug(
+                "Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.",
+                width,
+                height);
+            frame.Dispose();
+            return false;
+        }
+
+        var previous = Interlocked.Exchange(ref _currentFrame, frame);
+        var animationWasStopped = false;
+
+        if (previous is not null)
+        {
+            animationWasStopped = StopAnimationSafe(previous);
+        }
+
+        try
+        {
+            _target.Image = frame;
+            StartAnimationSafe(frame);
+        }
+        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
+        {
+            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            StopAnimationSafe(frame);
+            frame.Dispose();
+
+            if (previous is not null)
+            {
+                if (animationWasStopped)
+                {
+                    StartAnimationSafe(previous);
+                }
+
+                Interlocked.Exchange(ref _currentFrame, previous);
+                _target.Image = previous;
+            }
+            else
+            {
+                Interlocked.Exchange(ref _currentFrame, null);
+                _target.Image = null;
+            }
+
+            return false;
+        }
+        finally
+        {
+            if (previous is not null && !ReferenceEquals(previous, _currentFrame))
+            {
+                DisposeFrame(previous);
+            }
+        }
+
+        return true;
+    }
+
     private void UpdateTarget(Drawing.Bitmap frame)
     {
         using var guard = new StackGuard(nameof(UpdateTarget));
@@ -1522,65 +1638,213 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (!TryGetFrameSize(frame, out var width, out var height))
+        TryApplyFrame(frame);
+    }
+
+    private Drawing.Image? GetLatestFrameForSnapshot()
+    {
+        var frame = Interlocked.CompareExchange(ref _currentFrame, null, null);
+        if (frame is not null)
         {
-            frame.Dispose();
-            return;
+            return frame;
         }
 
-        if (width <= 0 || height <= 0)
+        lock (_pendingFramesGate)
         {
-            ForEvent("FrameDiscarded").Debug(
-                "Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.",
-                width,
-                height);
-            frame.Dispose();
-            return;
-        }
-
-        var previous = Interlocked.Exchange(ref _currentFrame, frame);
-        var animationWasStopped = false;
-
-        if (previous is not null)
-        {
-            animationWasStopped = StopAnimationSafe(previous);
+            if (_pendingFrames.Count > 0)
+            {
+                return _pendingFrames[^1];
+            }
         }
 
         try
         {
-            _target.Image = frame;
-            StartAnimationSafe(frame);
-        }
-        catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
-        {
-            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
-            StopAnimationSafe(frame);
-            frame.Dispose();
-
-            if (previous is not null)
+            if (_target.IsDisposed)
             {
-                if (animationWasStopped)
+                return null;
+            }
+
+            if (_target.InvokeRequired)
+            {
+                return _target.Invoke(new Func<Drawing.Image?>(() => _target.Image));
+            }
+
+            return _target.Image;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<bool> CaptureEditorSnapshotAsync(CancellationToken cancellationToken)
+    {
+        if (_disposed || _target.IsDisposed)
+        {
+            return false;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var source = GetLatestFrameForSnapshot();
+        if (source is null)
+        {
+            _logger.Warning("EditorSnapshot: não foi possível capturar snapshot, mantendo preview contínuo. Motivo={Reason} // MIERUKA_FIX", "SemFrame");
+            return false;
+        }
+
+        if (!TryGetFrameSize(source, out var width, out var height) || width <= 0 || height <= 0)
+        {
+            _logger.Warning("EditorSnapshot: não foi possível capturar snapshot, mantendo preview contínuo. Motivo={Reason} // MIERUKA_FIX", "FrameInvalido");
+            return false;
+        }
+
+        Drawing.Bitmap? snapshot = null;
+
+        try
+        {
+            snapshot = new Drawing.Bitmap(source);
+        }
+        catch (Exception ex) when (ex is ArgumentException or ExternalException or InvalidOperationException)
+        {
+            _logger.Warning(ex, "EditorSnapshot: não foi possível clonar frame para snapshot // MIERUKA_FIX");
+            return false;
+        }
+        catch (Exception ex) when (ex is OutOfMemoryException)
+        {
+            _logger.Warning(ex, "EditorSnapshot: falha de memória ao clonar frame para snapshot // MIERUKA_FIX");
+            return false;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var applied = await RenderEditorSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(true);
+        if (applied)
+        {
+            _logger.Information(
+                "EditorSnapshot: snapshot capturado para monitor {MonitorId}, bounds={Width}x{Height} // MIERUKA_FIX",
+                MonitorId,
+                width,
+                height);
+        }
+
+        return applied;
+    }
+
+    private Task<bool> RenderEditorSnapshotAsync(Drawing.Bitmap snapshot, CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Apply()
+        {
+            if (cancellationToken.IsCancellationRequested || _disposed || _target.IsDisposed)
+            {
+                TryDisposeSnapshot(snapshot);
+                completion.TrySetResult(false);
+                return;
+            }
+
+            var previousSnapshot = Interlocked.Exchange(ref _editorSnapshotBitmap, snapshot);
+            _editorSnapshotModeEnabled = true;
+
+            if (!TryApplyFrame(snapshot))
+            {
+                _editorSnapshotModeEnabled = false;
+                Interlocked.Exchange(ref _editorSnapshotBitmap, null);
+                if (previousSnapshot is not null && !ReferenceEquals(previousSnapshot, snapshot))
                 {
-                    StartAnimationSafe(previous);
+                    TryDisposeSnapshot(previousSnapshot);
                 }
 
-                Interlocked.Exchange(ref _currentFrame, previous);
-                _target.Image = previous;
+                completion.TrySetResult(false);
+                return;
+            }
+
+            if (previousSnapshot is not null && !ReferenceEquals(previousSnapshot, snapshot))
+            {
+                TryDisposeSnapshot(previousSnapshot);
+            }
+
+            _logger.Debug(
+                "EditorSnapshot: overlays aplicados sobre snapshot estático monitor={MonitorId} // MIERUKA_FIX",
+                MonitorId);
+            completion.TrySetResult(true);
+        }
+
+        try
+        {
+            if (_target.InvokeRequired)
+            {
+                _target.BeginInvoke(new Action(Apply));
             }
             else
             {
+                Apply();
+            }
+        }
+        catch
+        {
+            TryDisposeSnapshot(snapshot);
+            completion.TrySetResult(false);
+        }
+
+        return completion.Task;
+    }
+
+    private bool DisableEditorSnapshot(bool clearImage)
+    {
+        var snapshot = Interlocked.Exchange(ref _editorSnapshotBitmap, null);
+        var hadSnapshot = snapshot is not null || _editorSnapshotModeEnabled;
+        _editorSnapshotModeEnabled = false;
+
+        if (snapshot is null)
+        {
+            return hadSnapshot;
+        }
+
+        void DisposeSnapshot()
+        {
+            if (clearImage && ReferenceEquals(_currentFrame, snapshot))
+            {
+                StopAnimationSafe(snapshot);
                 Interlocked.Exchange(ref _currentFrame, null);
-                _target.Image = null;
+
+                if (!_target.IsDisposed && ReferenceEquals(_target.Image, snapshot))
+                {
+                    _target.Image = null;
+                }
             }
 
-            return;
+            TryDisposeSnapshot(snapshot);
         }
-        finally
+
+        if (_target.InvokeRequired)
         {
-            if (previous is not null && !ReferenceEquals(previous, _currentFrame))
+            try
             {
-                DisposeFrame(previous);
+                _target.BeginInvoke(new Action(DisposeSnapshot));
             }
+            catch
+            {
+                TryDisposeSnapshot(snapshot);
+            }
+        }
+        else
+        {
+            DisposeSnapshot();
+        }
+
+        return hadSnapshot;
+    }
+
+    private static void TryDisposeSnapshot(Drawing.Bitmap snapshot)
+    {
+        try
+        {
+            snapshot.Dispose();
+        }
+        catch
+        {
         }
     }
 
@@ -1908,6 +2172,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool ShouldProcessFrame()
     {
+        if (IsEditorSnapshotActive)
+        {
+            return false;
+        }
+
         if (!IsVisible)
         {
             return false;
@@ -1997,6 +2266,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool ShouldDisplayFrame()
     {
+        if (IsEditorSnapshotActive)
+        {
+            return false;
+        }
+
         if (Volatile.Read(ref _paused) == 1 || _isSuspended || !IsVisible)
         {
             return false;
