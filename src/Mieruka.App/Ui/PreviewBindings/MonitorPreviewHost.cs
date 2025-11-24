@@ -1413,6 +1413,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                     "Quadro de pré-visualização descartado por backpressure. Pendentes={PendingCount} Limite={Limit}.",
                     pendingCount,
                     PendingFrameLimit);
+                clone.Dispose();
                 return;
             }
 
@@ -1941,6 +1942,26 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
+    private bool HasPendingFrameCapacity()
+    {
+        int pendingCount;
+        lock (_pendingFramesGate)
+        {
+            if (_pendingFrames.Count < PendingFrameLimit)
+            {
+                return true;
+            }
+
+            pendingCount = _pendingFrames.Count;
+        }
+
+        ForEvent("FrameDroppedBackpressure").Debug(
+            "Limite de fila atingido; quadro mais recente será descartado. Pendentes={Pending} Limite={Limit}",
+            pendingCount,
+            PendingFrameLimit);
+        return false;
+    }
+
     private void ResetFrameThrottle()
     {
         lock (_frameTimingGate)
@@ -1989,23 +2010,16 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool RegisterPendingFrame(Drawing.Bitmap frame, out int pendingCount)
     {
-        Drawing.Bitmap? droppedFrame = null;
-
         lock (_pendingFramesGate)
         {
             if (_pendingFrames.Count >= PendingFrameLimit)
             {
-                droppedFrame = _pendingFrames[0];
-                _pendingFrames.RemoveAt(0);
+                pendingCount = _pendingFrames.Count;
+                return false;
             }
 
             _pendingFrames.Add(frame);
             pendingCount = _pendingFrames.Count;
-        }
-
-        if (droppedFrame is not null)
-        {
-            DisposeFrame(droppedFrame);
         }
 
         return true;
@@ -2015,7 +2029,12 @@ public sealed partial class MonitorPreviewHost : IDisposable
     {
         lock (_pendingFramesGate)
         {
+            var previousCount = _pendingFrames.Count;
             _pendingFrames.Remove(frame);
+            if (_pendingFrames.Count == 0 && previousCount > 0)
+            {
+                ForEvent("FrameQueueIdle").Debug("Fila de frames vazia; preview ocioso.");
+            }
         }
     }
 
