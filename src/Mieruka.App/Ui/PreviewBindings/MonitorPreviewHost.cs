@@ -79,6 +79,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
+    private int _isVisible = 1;
     private Drawing.Bitmap? _currentFrame;
     private int _stateRaw = (int)PreviewState.Stopped;
     private bool _disposed;
@@ -201,6 +202,15 @@ public sealed partial class MonitorPreviewHost : IDisposable
     /// Gets a value indicating whether the host is currently paused.
     /// </summary>
     public bool IsPaused => Volatile.Read(ref _paused) == 1;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the preview is visible and should process frames.
+    /// </summary>
+    public bool IsVisible
+    {
+        get => Volatile.Read(ref _isVisible) == 1;
+        set => Volatile.Write(ref _isVisible, value ? 1 : 0);
+    }
 
     /// <summary>
     /// Gets the bounds of the monitor being captured when available.
@@ -1897,6 +1907,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool ShouldProcessFrame()
     {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
         if (!HasPendingFrameCapacity())
         {
             return false;
@@ -1969,7 +1984,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private bool ShouldDisplayFrame()
     {
-        if (Volatile.Read(ref _paused) == 1 || _isSuspended)
+        if (Volatile.Read(ref _paused) == 1 || _isSuspended || !IsVisible)
         {
             return false;
         }
