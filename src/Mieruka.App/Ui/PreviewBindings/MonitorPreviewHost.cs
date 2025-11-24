@@ -811,7 +811,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private IEnumerable<(string Mode, Func<IMonitorCapture> Factory)> EnumerateFactories(bool preferGpu)
     {
         var monitorKey = MonitorIdentifier.Normalize(MonitorId);
-        var gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(monitorKey);
+        var gpuInBackoff = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && GraphicsCaptureProvider.IsGpuInBackoff(monitorKey);
         var hostSupportsGpu = false;
         string? monitorFriendlyName = null;
 
@@ -833,7 +833,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 hostSupportsGpu = CaptureFactory.IsHostSuitableForWgc(monitor);
                 if (!hostSupportsGpu)
                 {
-                    gpuInBackoff = GraphicsCaptureProvider.IsGpuInBackoff(monitorKey);
+                    gpuInBackoff = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763) && GraphicsCaptureProvider.IsGpuInBackoff(monitorKey);
                 }
             }
         }
