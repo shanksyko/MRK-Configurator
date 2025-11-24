@@ -291,6 +291,8 @@ public partial class AppEditorForm : WinForms.Form
             }
         };
 
+        editorTabs.SelectedIndexChanged += TabEditor_SelectedIndexChanged;
+
         InitializeCycleMetadata(profileApps, programa);
 
         if (programa is not null)
@@ -321,6 +323,7 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         ApplyAppTypeUI();
+        UpdatePreviewVisibility();
     }
 
     private void ConfigureInstalledAppsSection(WinForms.ListView installedAppsList)
@@ -1675,6 +1678,11 @@ public partial class AppEditorForm : WinForms.Form
         return false;
     }
 
+    private void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        UpdatePreviewVisibility();
+    }
+
     private async void cboMonitores_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_suppressMonitorComboEvents)
@@ -2338,9 +2346,6 @@ public partial class AppEditorForm : WinForms.Form
     {
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
-        _logger.Debug(
-            "CaptureWindowPreviewSnapshot: enter monitorId={MonitorId} // MIERUKA_FIX",
-            monitorId ?? string.Empty);
 
         var autoStart = chkAutoStart?.Checked ?? false;
         var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
@@ -2421,14 +2426,9 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimulationOverlays()
     {
-        var hasPreviewDisplay = monitorPreviewDisplay is not null;
-        _logger.Debug(
-            "RebuildSimulationOverlays: enter hasPreviewDisplay={HasPreviewDisplay} // MIERUKA_FIX",
-            hasPreviewDisplay);
-
         if (monitorPreviewDisplay is null)
         {
-            _logger.Debug("RebuildSimulationOverlays: exit missing preview display // MIERUKA_FIX");
+            _logger.Debug("RebuildSimulationOverlays: skip missing preview display // MIERUKA_FIX");
             return;
         }
 
@@ -2709,6 +2709,22 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         return cboMonitores?.SelectedItem is MonitorOption option ? option.Monitor : null;
+    }
+
+    private void UpdatePreviewVisibility()
+    {
+        var preview = monitorPreviewDisplay;
+        if (preview is null || preview.IsDisposed)
+        {
+            return;
+        }
+
+        var previewTabSelected = tabEditor is { SelectedTab: { } selectedTab }
+            && tpJanela is not null
+            && ReferenceEquals(selectedTab, tpJanela)
+            && tabEditor.TabPages.Contains(tpJanela);
+
+        preview.SetPreviewVisibility(previewTabSelected);
     }
 
     private static WindowConfig ClampWindowBounds(WindowConfig window, MonitorInfo monitor)
