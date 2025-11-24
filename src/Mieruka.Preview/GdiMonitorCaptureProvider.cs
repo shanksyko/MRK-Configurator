@@ -239,13 +239,17 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         _lastStatsSampleUtc = now;
 
         var fps = schedulerMetrics.Frames / elapsedSeconds;
+        var effectiveFps = schedulerMetrics.EffectiveFps;
+        var effectiveIntervalMs = schedulerMetrics.EffectiveFrameInterval.TotalMilliseconds;
         var logger = _captureLogger ?? Logger;
         logger.Debug(
-            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps}, fps={Fps:F1}, frameProcessingAvgMs={FrameProcessingAvgMs:F2}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
+            "PreviewStats: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps}, effectiveFps={EffectiveFps:F1}, effectiveIntervalMs={EffectiveIntervalMs:F2}, fps={Fps:F1}, frameProcessingAvgMs={FrameProcessingAvgMs:F2}, frames={Frames}, dropped={Dropped}, invalid={Invalid}, totalFrames={TotalFrames}, totalDropped={TotalDropped}, totalInvalid={TotalInvalid}",
             Backend,
             _monitorId,
             _previewSessionId,
             _frameScheduler.TargetFps,
+            effectiveFps,
+            effectiveIntervalMs,
             fps,
             schedulerMetrics.AverageProcessingMilliseconds,
             schedulerMetrics.Frames,
