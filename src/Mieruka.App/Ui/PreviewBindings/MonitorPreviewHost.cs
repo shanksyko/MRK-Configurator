@@ -76,6 +76,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly object _pendingFramesGate = new();
     private readonly List<Drawing.Bitmap> _pendingFrames = new();
     private const int PendingFrameLimit = 2;
+    private Drawing.Bitmap? _previewPlaceholderBitmap;
+    private bool _editorPreviewDisabledMode;
     private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
     private bool _frameThrottleCustomized;
@@ -214,8 +216,35 @@ public sealed partial class MonitorPreviewHost : IDisposable
         set => Volatile.Write(ref _isVisible, value ? 1 : 0);
     }
 
+    public void SetEditorPreviewDisabledMode(bool enabled)
+    {
+        var previous = _editorPreviewDisabledMode;
+        _editorPreviewDisabledMode = enabled;
+
+        if (enabled == previous)
+        {
+            return;
+        }
+
+        if (enabled)
+        {
+            DisableEditorSnapshot(clearImage: true);
+            _logger.Information(
+                "EditorPreviewDisabled: usando imagem placeholder para monitor={MonitorId} // MIERUKA_FIX",
+                MonitorId);
+            ApplyPlaceholderFrame();
+        }
+        else
+        {
+            _logger.Information(
+                "EditorPreviewDisabled: saindo do modo placeholder, preview real pode ser retomado // MIERUKA_FIX");
+        }
+    }
+
     private bool IsEditorSnapshotActive
         => _editorSnapshotModeEnabled && _editorSnapshotBitmap is not null && Volatile.Read(ref _paused) == 1;
+
+    private bool IsEditorPreviewDisabled => _editorPreviewDisabledMode;
 
     /// <summary>
     /// Gets the bounds of the monitor being captured when available.
@@ -587,6 +616,20 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
         try
         {
+            if (IsEditorPreviewDisabled)
+            {
+                var wasPaused = Interlocked.Exchange(ref _paused, 1) == 1;
+                await StopCoreAsync(clearFrame: true, resetPaused: false, cancellationToken).ConfigureAwait(true);
+                ApplyPlaceholderFrame();
+
+                if (!wasPaused)
+                {
+                    _logger.Information("PreviewPaused");
+                }
+
+                return;
+            }
+
             var snapshotCaptured = false;
             if (IsEditorSnapshotActive)
             {
@@ -644,9 +687,16 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
         try
         {
+            var wasEditorPreviewDisabled = IsEditorPreviewDisabled;
             if (Volatile.Read(ref _paused) == 0)
             {
+                SetEditorPreviewDisabledMode(false);
                 return;
+            }
+
+            if (wasEditorPreviewDisabled)
+            {
+                SetEditorPreviewDisabledMode(false);
             }
 
             var snapshotWasActive = DisableEditorSnapshot(clearImage: true);
@@ -749,6 +799,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
             StopCoreUnsafeAsync(clearFrame: true, resetPaused: true, cancellationToken: CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
+
+            DisposePlaceholderBitmap();
 
             GC.SuppressFinalize(this);
         }
@@ -1402,6 +1454,15 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
+            if (IsEditorPreviewDisabled)
+            {
+                _logger.Debug(
+                    "[DBG] EditorPreviewDisabled: descartando frame de preview ao vivo monitor={MonitorId} // MIERUKA_FIX",
+                    MonitorId);
+                e.Dispose();
+                return;
+            }
+
             if (IsEditorSnapshotActive)
             {
                 _logger.Debug("EditorSnapshot: quadro ignorado porque snapshot está ativo // MIERUKA_FIX");
@@ -1492,6 +1553,83 @@ public sealed partial class MonitorPreviewHost : IDisposable
         _lastGateReportUtc = now;
     }
 
+    private bool IsPlaceholderImage(Drawing.Image? image)
+        => image is not null && ReferenceEquals(image, _previewPlaceholderBitmap);
+
+    private Drawing.Size GetPlaceholderTargetSize()
+    {
+        try
+        {
+            var size = _target.ClientSize;
+            if (size.Width > 0 && size.Height > 0)
+            {
+                return size;
+            }
+        }
+        catch
+        {
+            // Ignore size retrieval failures; fall back to a default placeholder size.
+        }
+
+        return new Drawing.Size(800, 450);
+    }
+
+    private void EnsurePlaceholderBitmap(Drawing.Size targetSize)
+    {
+        var width = Math.Max(1, targetSize.Width);
+        var height = Math.Max(1, targetSize.Height);
+
+        if (_previewPlaceholderBitmap is { } existing
+            && existing.Width == width
+            && existing.Height == height)
+        {
+            return;
+        }
+
+        var bitmap = new Drawing.Bitmap(width, height);
+        using (var g = Drawing.Graphics.FromImage(bitmap))
+        {
+            g.Clear(Drawing.Color.FromArgb(30, 30, 30));
+
+            using var pen = new Drawing.Pen(Drawing.Color.FromArgb(60, 60, 60));
+            var step = Math.Max(20, Math.Min(width, height) / 10);
+            for (var x = 0; x < width; x += step)
+            {
+                g.DrawLine(pen, x, 0, x, height);
+            }
+
+            for (var y = 0; y < height; y += step)
+            {
+                g.DrawLine(pen, 0, y, width, y);
+            }
+
+            using var brush = new Drawing.SolidBrush(Drawing.Color.FromArgb(120, 200, 200));
+            using var font = new Drawing.Font(
+                "Segoe UI",
+                (float)Math.Max(10, Math.Min(width, height) / 24f),
+                Drawing.FontStyle.Bold,
+                Drawing.GraphicsUnit.Pixel);
+            var text = "PREVIEW DESATIVADO";
+            var textSize = g.MeasureString(text, font);
+            var origin = new Drawing.PointF(
+                (width - textSize.Width) / 2f,
+                (height - textSize.Height) / 2f);
+            g.DrawString(text, font, brush, origin);
+        }
+
+        var previous = Interlocked.Exchange(ref _previewPlaceholderBitmap, bitmap);
+        if (previous is not null && !ReferenceEquals(previous, bitmap))
+        {
+            try
+            {
+                previous.Dispose();
+            }
+            catch
+            {
+            }
+        }
+    }
+
     private Drawing.Bitmap? TryCloneFrame(Drawing.Image frame, int width, int height)
     {
         try
@@ -1575,13 +1713,67 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
         finally
         {
-            if (previous is not null && !ReferenceEquals(previous, _currentFrame))
+            if (previous is not null && !ReferenceEquals(previous, _currentFrame) && !IsPlaceholderImage(previous))
             {
                 DisposeFrame(previous);
             }
         }
 
         return true;
+    }
+
+    private void ApplyPlaceholderFrame()
+    {
+        using var guard = new StackGuard(nameof(ApplyPlaceholderFrame));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
+        if (_suppressEvents || _target.IsDisposed)
+        {
+            return;
+        }
+
+        if (_target.InvokeRequired)
+        {
+            try
+            {
+                _target.BeginInvoke(new Action(ApplyPlaceholderFrame));
+            }
+            catch
+            {
+                // Ignore invoke failures during shutdown.
+            }
+
+            return;
+        }
+
+        var previous = Interlocked.Exchange(ref _currentFrame, null);
+        if (previous is not null)
+        {
+            StopAnimationSafe(previous);
+        }
+
+        var targetSize = GetPlaceholderTargetSize();
+        EnsurePlaceholderBitmap(targetSize);
+        var placeholder = _previewPlaceholderBitmap;
+        if (placeholder is null)
+        {
+            if (previous is not null && !IsPlaceholderImage(previous))
+            {
+                DisposeFrame(previous);
+            }
+
+            return;
+        }
+
+        _target.Image = placeholder;
+
+        if (previous is not null && !ReferenceEquals(previous, placeholder) && !IsPlaceholderImage(previous))
+        {
+            DisposeFrame(previous);
+        }
     }
 
     private void UpdateTarget(Drawing.Bitmap frame)
@@ -1591,6 +1783,14 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             UnregisterPendingFrame(frame);
             frame.Dispose();
+            return;
+        }
+
+        if (IsEditorPreviewDisabled)
+        {
+            UnregisterPendingFrame(frame);
+            frame.Dispose();
+            ApplyPlaceholderFrame();
             return;
         }
 
@@ -1646,7 +1846,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
         var frame = Interlocked.CompareExchange(ref _currentFrame, null, null);
         if (frame is not null)
         {
-            return frame;
+            if (!IsPlaceholderImage(frame))
+            {
+                return frame;
+            }
         }
 
         lock (_pendingFramesGate)
@@ -1666,10 +1869,15 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (_target.InvokeRequired)
             {
-                return _target.Invoke(new Func<Drawing.Image?>(() => _target.Image));
+                return _target.Invoke(new Func<Drawing.Image?>(() =>
+                {
+                    var image = _target.Image;
+                    return IsPlaceholderImage(image) ? null : image;
+                }));
             }
 
-            return _target.Image;
+            var targetImage = _target.Image;
+            return IsPlaceholderImage(targetImage) ? null : targetImage;
         }
         catch
         {
@@ -1680,6 +1888,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private async Task<bool> CaptureEditorSnapshotAsync(CancellationToken cancellationToken)
     {
         if (_disposed || _target.IsDisposed)
+        {
+            return false;
+        }
+
+        if (IsEditorPreviewDisabled)
         {
             return false;
         }
@@ -1958,7 +2171,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return;
         }
 
-        if (ReferenceEquals(_target.Image, _currentFrame))
+        if (ReferenceEquals(_target.Image, _currentFrame) || IsPlaceholderImage(_target.Image))
         {
             _target.Image = null;
         }
@@ -1966,10 +2179,30 @@ public sealed partial class MonitorPreviewHost : IDisposable
         if (_currentFrame is not null)
         {
             StopAnimationSafe(_currentFrame);
-            DisposeFrame(_currentFrame);
+            if (!IsPlaceholderImage(_currentFrame))
+            {
+                DisposeFrame(_currentFrame);
+            }
             _currentFrame = null;
         }
         ResetFrameThrottle();
+    }
+
+    private void DisposePlaceholderBitmap()
+    {
+        var placeholder = Interlocked.Exchange(ref _previewPlaceholderBitmap, null);
+        if (placeholder is null)
+        {
+            return;
+        }
+
+        try
+        {
+            placeholder.Dispose();
+        }
+        catch
+        {
+        }
     }
 
     private async Task StopCoreAsync(bool clearFrame, bool resetPaused, CancellationToken cancellationToken)
@@ -2177,6 +2410,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return false;
         }
 
+        if (IsEditorPreviewDisabled)
+        {
+            return false;
+        }
+
         if (!IsVisible)
         {
             return false;
@@ -2267,6 +2505,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private bool ShouldDisplayFrame()
     {
         if (IsEditorSnapshotActive)
+        {
+            return false;
+        }
+
+        if (IsEditorPreviewDisabled)
         {
             return false;
         }
