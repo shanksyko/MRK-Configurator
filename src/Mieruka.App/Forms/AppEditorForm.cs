@@ -120,6 +120,10 @@ public partial class AppEditorForm : WinForms.Form
     private DateTime _lastWindowRectLogUtc;
     private readonly SemaphoreSlim _monitorPreviewGate = new(1, 1);
     private string? _monitorPreviewMonitorId;
+    private Drawing.Rectangle _lastOverlayBounds = Drawing.Rectangle.Empty;
+    private string? _lastOverlayMonitorId;
+    private bool _lastOverlayFullScreen;
+    private bool _hasCachedOverlayBounds;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
     private static readonly TimeSpan WindowPreviewSnapshotThrottleInterval = TimeSpan.FromMilliseconds(75);
@@ -291,6 +295,8 @@ public partial class AppEditorForm : WinForms.Form
             }
         };
 
+        editorTabs.SelectedIndexChanged += TabEditor_SelectedIndexChanged;
+
         InitializeCycleMetadata(profileApps, programa);
 
         if (programa is not null)
@@ -321,6 +327,7 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         ApplyAppTypeUI();
+        UpdatePreviewVisibility();
     }
 
     private void ConfigureInstalledAppsSection(WinForms.ListView installedAppsList)
@@ -1675,6 +1682,11 @@ public partial class AppEditorForm : WinForms.Form
         return false;
     }
 
+    private void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        UpdatePreviewVisibility();
+    }
+
     private async void cboMonitores_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_suppressMonitorComboEvents)
@@ -2339,9 +2351,6 @@ public partial class AppEditorForm : WinForms.Form
         var now = _windowPreviewStopwatch.Elapsed;
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
-        _logger.Debug(
-            "CaptureWindowPreviewSnapshot: enter monitorId={MonitorId} // MIERUKA_FIX",
-            monitorId ?? string.Empty);
 
         var autoStart = chkAutoStart?.Checked ?? false;
         var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
@@ -2402,14 +2411,18 @@ public partial class AppEditorForm : WinForms.Form
         _lastWindowPreviewRebuild = timestamp;
         _windowPreviewRebuildScheduled = false;
 
-        RebuildSimulationOverlays();
-        Logger.Information(
-            "ApplySelectionOverlay: bounds={Bounds} monitor={MonitorId} fullScreen={FullScreen} autoStart={AutoStart}",
-            snapshot.Bounds,
-            snapshot.MonitorId ?? string.Empty,
-            snapshot.IsFullScreen,
-            snapshot.AutoStart);
-        monitorPreviewDisplay?.Invalidate();
+        if (ShouldApplyOverlay(snapshot))
+        {
+            CacheOverlaySnapshot(snapshot);
+            RebuildSimulationOverlays();
+            Logger.Debug(
+                "ApplySelectionOverlay: bounds={Bounds} monitor={MonitorId} fullScreen={FullScreen} autoStart={AutoStart}",
+                snapshot.Bounds,
+                snapshot.MonitorId ?? string.Empty,
+                snapshot.IsFullScreen,
+                snapshot.AutoStart);
+            monitorPreviewDisplay?.Invalidate();
+        }
     }
 
     private async void ScheduleWindowPreviewRebuild(TimeSpan delay)
@@ -2441,14 +2454,9 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimulationOverlays()
     {
-        var hasPreviewDisplay = monitorPreviewDisplay is not null;
-        _logger.Debug(
-            "RebuildSimulationOverlays: enter hasPreviewDisplay={HasPreviewDisplay} // MIERUKA_FIX",
-            hasPreviewDisplay);
-
         if (monitorPreviewDisplay is null)
         {
-            _logger.Debug("RebuildSimulationOverlays: exit missing preview display // MIERUKA_FIX");
+            _logger.Debug("RebuildSimulationOverlays: skip missing preview display // MIERUKA_FIX");
             return;
         }
 
@@ -2456,7 +2464,7 @@ public partial class AppEditorForm : WinForms.Form
         if (monitor is null)
         {
             monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
-            _logger.Information("RebuildSimulationOverlays: exit no monitor selected // MIERUKA_FIX");
+            _logger.Debug("RebuildSimulationOverlays: exit no monitor selected // MIERUKA_FIX");
             return;
         }
 
@@ -2464,7 +2472,7 @@ public partial class AppEditorForm : WinForms.Form
         if (string.IsNullOrWhiteSpace(monitorId))
         {
             monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
-            _logger.Information(
+            _logger.Debug(
                 "RebuildSimulationOverlays: exit invalid monitor identifier monitor={MonitorName} // MIERUKA_FIX",
                 monitor.Name ?? string.Empty);
             return;
@@ -2562,12 +2570,48 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         monitorPreviewDisplay.SetSimulationRects(overlays);
-        _logger.Information(
+        _logger.Debug(
             "RebuildSimulationOverlays: exit monitorId={MonitorId} overlayCandidates={OverlayCandidates} overlaysRendered={OverlaysRendered} currentAppId={CurrentAppId} // MIERUKA_FIX",
             monitorId,
             overlayApps.Count,
             overlays.Count,
             current.Id ?? string.Empty);
+    }
+
+    private void CacheOverlaySnapshot(WindowPreviewSnapshot snapshot)
+    {
+        _lastOverlayBounds = snapshot.Bounds;
+        _lastOverlayMonitorId = snapshot.MonitorId;
+        _lastOverlayFullScreen = snapshot.IsFullScreen;
+        _hasCachedOverlayBounds = true;
+    }
+
+    private bool ShouldApplyOverlay(WindowPreviewSnapshot snapshot)
+    {
+        if (!_hasCachedOverlayBounds)
+        {
+            return true;
+        }
+
+        if (!string.Equals(snapshot.MonitorId, _lastOverlayMonitorId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (snapshot.IsFullScreen != _lastOverlayFullScreen)
+        {
+            return true;
+        }
+
+        return !AreBoundsClose(snapshot.Bounds, _lastOverlayBounds, 1);
+    }
+
+    private static bool AreBoundsClose(Drawing.Rectangle current, Drawing.Rectangle previous, int tolerance)
+    {
+        return Math.Abs(current.X - previous.X) <= tolerance &&
+               Math.Abs(current.Y - previous.Y) <= tolerance &&
+               Math.Abs(current.Width - previous.Width) <= tolerance &&
+               Math.Abs(current.Height - previous.Height) <= tolerance;
     }
 
     private MonitorInfo? ResolveMonitorForApp(ProgramaConfig app)
@@ -2693,6 +2737,22 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         return cboMonitores?.SelectedItem is MonitorOption option ? option.Monitor : null;
+    }
+
+    private void UpdatePreviewVisibility()
+    {
+        var preview = monitorPreviewDisplay;
+        if (preview is null || preview.IsDisposed)
+        {
+            return;
+        }
+
+        var previewTabSelected = tabEditor is { SelectedTab: { } selectedTab }
+            && tpJanela is not null
+            && ReferenceEquals(selectedTab, tpJanela)
+            && tabEditor.TabPages.Contains(tpJanela);
+
+        preview.SetPreviewVisibility(previewTabSelected);
     }
 
     private static WindowConfig ClampWindowBounds(WindowConfig window, MonitorInfo monitor)

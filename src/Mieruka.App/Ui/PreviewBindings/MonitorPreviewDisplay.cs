@@ -292,6 +292,24 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
     }
 
+    /// <summary>
+    /// Updates whether the underlying preview host should process frames based on visibility.
+    /// </summary>
+    /// <param name="isVisible">True when the preview is visible.</param>
+    public void SetPreviewVisibility(bool isVisible)
+    {
+        using var guard = new StackGuard(nameof(SetPreviewVisibility));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
+        if (_host is { } host)
+        {
+            host.IsVisible = isVisible;
+        }
+    }
+
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
