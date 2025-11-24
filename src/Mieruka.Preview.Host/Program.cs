@@ -66,7 +66,7 @@ internal static class Program
                     continue;
                 }
 
-                using (message)
+                await using (message)
                 {
                     if (message.Kind == PreviewIpcMessageKind.StopCommand)
                     {
