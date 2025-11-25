@@ -26,6 +26,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private readonly List<SimRect> _simRects;
     private readonly List<(Drawing.RectangleF Bounds, string Text)> _glyphRegions;
     private readonly WinForms.ToolTip _tooltip;
+    private bool _previewStarted;
     private MonitorPreviewHost? _host;
     private MonitorInfo? _monitor;
     private MonitorCoordinateMapper? _coordinateMapper;
@@ -133,7 +134,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     /// <param name="monitor">Monitor to display.</param>
     /// <param name="cadence">Optional frame cadence.</param>
-    public async Task BindAsync(MonitorInfo monitor, TimeSpan? cadence = null)
+    public async Task BindAsync(MonitorInfo monitor, bool autoStart = true, TimeSpan? cadence = null)
     {
         using var guard = new StackGuard(nameof(BindAsync));
         if (!guard.Entered)
@@ -146,6 +147,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         await UnbindAsync().ConfigureAwait(true);
         _monitor = monitor;
         _coordinateMapper = new MonitorCoordinateMapper(monitor);
+        _previewStarted = false;
 
         var monitorId = MonitorIdentifier.Create(monitor);
         var hostLogger = Log.ForContext<MonitorPreviewHost>();
@@ -161,6 +163,31 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             host.FrameThrottle = cadenceValue < TimeSpan.Zero ? TimeSpan.Zero : cadenceValue;
         }
 
+        _host = host;
+
+        if (autoStart)
+        {
+            var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
+
+            if (!started)
+            {
+                _monitor = null;
+                SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+            }
+            else
+            {
+                _previewStarted = true;
+                SetPlaceholder(null);
+            }
+        }
+        else
+        {
+            SetPlaceholder("Pré-visualização pausada — clique para iniciar");
+        }
+    }
+
+    private async Task<bool> StartPreviewHostAsync(MonitorPreviewHost host, string monitorId)
+    {
         // The editor always prefers the BitBlt path to avoid GPU capture glitches in nested previews.
         var started = false;
         try
@@ -169,20 +196,43 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
         catch (Exception ex)
         {
-            Logger.Warning(ex, "MonitorPreviewDisplay.Bind: failed to start preview host for {MonitorId}", monitorId);
+            Logger.Warning(ex, "MonitorPreviewDisplay: failed to start preview host for {MonitorId}", monitorId);
             started = false;
         }
 
-        _host = host;
+        return started;
+    }
 
-        if (!started)
+    public async Task EnsurePreviewStartedAsync()
+    {
+        using var guard = new StackGuard(nameof(EnsurePreviewStartedAsync));
+        if (!guard.Entered)
         {
-            _monitor = null;
-            SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+            return;
+        }
+
+        if (_previewStarted)
+        {
+            return;
+        }
+
+        var host = _host;
+        var monitorId = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
+        if (host is null || string.IsNullOrWhiteSpace(monitorId))
+        {
+            return;
+        }
+
+        var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
+        if (started)
+        {
+            _previewStarted = true;
+            SetPlaceholder(null);
         }
         else
         {
-            SetPlaceholder(null);
+            _monitor = null;
+            SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
         }
     }
 
@@ -198,6 +248,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         _host = null;
         _monitor = null;
         _coordinateMapper = null;
+        _previewStarted = false;
 
         SetPlaceholder(null);
 
