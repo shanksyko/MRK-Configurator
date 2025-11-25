@@ -648,11 +648,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            var wasPaused = Interlocked.Exchange(ref _paused, 1) == 1;
+            var wasPausedAfterSnapshot = Interlocked.Exchange(ref _paused, 1) == 1;
             var detached = await DisposeCaptureRetainingFrameAsync(resetPaused: false, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (!wasPaused || detached)
+            if (!wasPausedAfterSnapshot || detached)
             {
                 _logger.Information("PreviewPaused");
             }
