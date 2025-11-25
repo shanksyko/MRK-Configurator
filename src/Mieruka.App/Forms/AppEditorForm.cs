@@ -256,6 +256,10 @@ public partial class AppEditorForm : WinForms.Form
 
         previewControl.MouseMovedInMonitorSpace += MonitorPreviewDisplay_MouseMovedInMonitorSpace;
         previewControl.MonitorMouseLeft += MonitorPreviewDisplay_MonitorMouseLeft;
+        previewControl.Click += async (_, __) =>
+        {
+            await previewControl.EnsurePreviewStartedAsync().ConfigureAwait(true);
+        };
 
         janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
 
@@ -1747,7 +1751,7 @@ public partial class AppEditorForm : WinForms.Form
 
             if (monitorChanged && monitorPreviewDisplay is not null)
             {
-                await monitorPreviewDisplay.BindAsync(option.Monitor).ConfigureAwait(true);
+                await monitorPreviewDisplay.BindAsync(option.Monitor, autoStart: false).ConfigureAwait(true);
                 _monitorPreviewMonitorId = option.MonitorId;
             }
 

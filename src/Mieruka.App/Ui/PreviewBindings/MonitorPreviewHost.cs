@@ -76,6 +76,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly object _pendingFramesGate = new();
     private readonly List<Drawing.Bitmap> _pendingFrames = new();
     private const int PendingFrameLimit = 2;
+    private readonly Guid _previewSessionId = Guid.NewGuid();
     private Drawing.Bitmap? _previewPlaceholderBitmap;
     private bool _editorPreviewDisabledMode;
     private readonly EventHandler _frameAnimationHandler;
@@ -95,6 +96,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private DateTime _nextFrameAt;
     private bool _hasActiveSession;
     private bool _isGpuActive;
+    private Drawing.Rectangle _lastSelectionBounds = Drawing.Rectangle.Empty;
     private volatile bool _isSuspended;
     private int _resumeTicket;
     private int _paused;
@@ -1520,8 +1522,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (!RegisterPendingFrame(clone, out var pendingCount))
             {
-                ForEvent("FrameDroppedBackpressure").Debug(
-                    "Quadro de pré-visualização descartado por backpressure. Pendentes={PendingCount} Limite={Limit}.",
+                ForQueueEvent("FrameDroppedBackpressure").Debug(
+                    "Limite de fila atingido; descartando quadro recente para manter a UI responsiva. Pendentes={PendingCount} Limite={Limit}.",
                     pendingCount,
                     PendingFrameLimit);
                 clone.Dispose();
@@ -1756,6 +1758,12 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
 
         var targetSize = GetPlaceholderTargetSize();
+        var placeholderBounds = new Drawing.Rectangle(Drawing.Point.Empty, targetSize);
+        if (placeholderBounds == _lastSelectionBounds && IsPlaceholderImage(_target.Image))
+        {
+            return;
+        }
+
         EnsurePlaceholderBitmap(targetSize);
         var placeholder = _previewPlaceholderBitmap;
         if (placeholder is null)
@@ -1769,6 +1777,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
 
         _target.Image = placeholder;
+        _lastSelectionBounds = placeholderBounds;
 
         if (previous is not null && !ReferenceEquals(previous, placeholder) && !IsPlaceholderImage(previous))
         {
@@ -2185,6 +2194,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             }
             _currentFrame = null;
         }
+        _lastSelectionBounds = Drawing.Rectangle.Empty;
         ResetFrameThrottle();
     }
 
@@ -2195,6 +2205,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             return;
         }
+
+        _lastSelectionBounds = Drawing.Rectangle.Empty;
 
         try
         {
@@ -2462,8 +2474,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
             pendingCount = _pendingFrames.Count;
         }
 
-        ForEvent("FrameDroppedBackpressure").Debug(
-            "Limite de fila atingido; quadro mais recente será descartado. Pendentes={Pending} Limite={Limit}",
+        ForQueueEvent("FrameDroppedBackpressure").Debug(
+            "Limite de fila atingido; descartando frame sem bloquear UI. Pendentes={Pending} Limite={Limit}",
             pendingCount,
             PendingFrameLimit);
         return false;
@@ -2550,7 +2562,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
             _pendingFrames.Remove(frame);
             if (_pendingFrames.Count == 0 && previousCount > 0)
             {
-                ForEvent("FrameQueueIdle").Debug("Fila de frames vazia; preview ocioso.");
+                ForQueueEvent("FrameQueueIdle").Debug(
+                    "Fila de frames vazia; preview ocioso. Sessao={Session} Visivel={IsVisibleState}",
+                    _previewSessionId,
+                    IsVisible);
             }
         }
     }
@@ -2651,6 +2666,25 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
         return MonitorIdentifier.Create(key, descriptor.DeviceName);
     }
+
+    private string GetBackendLabel()
+    {
+        lock (_stateGate)
+        {
+            if (!_hasActiveSession)
+            {
+                return "Idle";
+            }
+
+            return _isGpuActive ? "GPU" : "GDI";
+        }
+    }
+
+    private ILogger ForQueueEvent(string eventId)
+        => ForEvent(eventId)
+            .ForContext("PreviewSessionId", _previewSessionId)
+            .ForContext("MonitorId", MonitorId)
+            .ForContext("Backend", GetBackendLabel());
 
     private ILogger ForEvent(string eventId)
         => _logger.ForContext("EventId", eventId);
