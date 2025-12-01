@@ -42,6 +42,7 @@ public partial class MainForm : WinForms.Form
     private readonly Dictionary<string, MonitorCardContext> _monitorCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _requestedPreviews = new(StringComparer.OrdinalIgnoreCase);
+    private WinForms.Control? _primaryPreviewBox;
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
@@ -60,6 +61,8 @@ public partial class MainForm : WinForms.Form
     private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
     private const string DefaultProfileId = "workspace";
     private static readonly TimeSpan MonitorPreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+
+    private Control PreviewBox => _primaryPreviewBox ?? throw new InvalidOperationException("Nenhum controle de preview foi inicializado.");
 
     public string? SelectedMonitorId { get; private set; }
 
@@ -539,7 +542,9 @@ public partial class MainForm : WinForms.Form
 
             var context = new MonitorCardContext(monitorId, monitor, card, host);
 
-            previewBox.Click += OnMonitorPreviewClicked;
+            _primaryPreviewBox ??= pictureBox;
+
+            pictureBox.Click += OnMonitorPreviewClicked;
             _monitorCardOrder.Add(context);
             _monitorCards[monitorId] = context;
             _monitorHosts.Add(host);
