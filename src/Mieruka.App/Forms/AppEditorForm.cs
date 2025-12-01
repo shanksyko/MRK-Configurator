@@ -235,8 +235,8 @@ public partial class AppEditorForm : WinForms.Form
         _tabEditCoordinator = new TabEditCoordinator(
             this,
             _bindingBatchService,
-            previewControl.Pause,
-            previewControl.Resume,
+            pausePreview: null,
+            resumePreview: null,
             Log.ForContext<TabEditCoordinator>().ForContext("EditSessionId", _editSessionId));
 
         ConfigureInstalledAppsSection(installedAppsList);
@@ -256,10 +256,6 @@ public partial class AppEditorForm : WinForms.Form
 
         previewControl.MouseMovedInMonitorSpace += MonitorPreviewDisplay_MouseMovedInMonitorSpace;
         previewControl.MonitorMouseLeft += MonitorPreviewDisplay_MonitorMouseLeft;
-        previewControl.Click += async (_, __) =>
-        {
-            await previewControl.EnsurePreviewStartedAsync().ConfigureAwait(true);
-        };
 
         janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
 

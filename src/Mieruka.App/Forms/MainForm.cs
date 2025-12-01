@@ -41,6 +41,7 @@ public partial class MainForm : WinForms.Form
     private readonly List<MonitorPreviewHost> _monitorHosts = new();
     private readonly Dictionary<string, MonitorCardContext> _monitorCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _manuallyStoppedMonitors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _requestedPreviews = new(StringComparer.OrdinalIgnoreCase);
     private IDisplayService? _displayService;
     private bool _previewsRequested;
     private readonly ProfileStore _profileStore = new();
@@ -237,6 +238,7 @@ public partial class MainForm : WinForms.Form
             var wasRunning = context.Host.Capture is not null;
             var shouldRestart = wasRunning
                 || (_previewsRequested
+                    && _requestedPreviews.Contains(context.MonitorId)
                     && !_manuallyStoppedMonitors.Contains(context.MonitorId)
                     && WindowState != WinForms.FormWindowState.Minimized);
 
@@ -418,7 +420,6 @@ public partial class MainForm : WinForms.Form
     private async void MainForm_Shown(object? sender, EventArgs e)
     {
         await RefreshMonitorCardsAsync().ConfigureAwait(true);
-        await StartAutomaticPreviewsAsync().ConfigureAwait(true);
     }
 
     private async void MainForm_Resize(object? sender, EventArgs e)
@@ -495,6 +496,8 @@ public partial class MainForm : WinForms.Form
 
         var expectedIds = new HashSet<string>(cardSources.Select(ResolveMonitorId), StringComparer.OrdinalIgnoreCase);
         _manuallyStoppedMonitors.RemoveWhere(id => !expectedIds.Contains(id));
+        _requestedPreviews.RemoveWhere(id => !expectedIds.Contains(id));
+        _previewsRequested = _requestedPreviews.Count > 0;
 
         var shouldRestart = _previewsRequested && WindowState != WinForms.FormWindowState.Minimized;
 
@@ -536,11 +539,14 @@ public partial class MainForm : WinForms.Form
 
             var context = new MonitorCardContext(monitorId, monitor, card, host);
 
+            previewBox.Click += OnMonitorPreviewClicked;
             _monitorCardOrder.Add(context);
             _monitorCards[monitorId] = context;
             _monitorHosts.Add(host);
 
-            if (shouldRestart && !_manuallyStoppedMonitors.Contains(monitorId))
+            if (shouldRestart
+                && _requestedPreviews.Contains(monitorId)
+                && !_manuallyStoppedMonitors.Contains(monitorId))
             {
                 try
                 {
@@ -854,6 +860,48 @@ public partial class MainForm : WinForms.Form
         }
     }
 
+    private async void OnMonitorPreviewClicked(object? sender, EventArgs e)
+    {
+        if (sender is not WinForms.Control control || control.Tag is not string monitorId)
+        {
+            return;
+        }
+
+        if (!_monitorCards.TryGetValue(monitorId, out var context))
+        {
+            return;
+        }
+
+        try
+        {
+            if (context.Host.IsPreviewRunning)
+            {
+                _requestedPreviews.Remove(monitorId);
+                _manuallyStoppedMonitors.Add(monitorId);
+                _previewsRequested = _requestedPreviews.Count > 0;
+                context.Host.SetPreviewRequestedByUser(false);
+                await context.Host.StopSafeAsync().ConfigureAwait(true);
+                return;
+            }
+
+            _manuallyStoppedMonitors.Remove(monitorId);
+            _requestedPreviews.Add(monitorId);
+            _previewsRequested = true;
+            context.Host.SetPreviewRequestedByUser(true);
+
+            var started = await context.Host.StartSafeAsync(preferGpu: ShouldPreferGpu()).ConfigureAwait(true);
+            if (!started)
+            {
+                _requestedPreviews.Remove(monitorId);
+                _telemetry.Warn($"Pré-visualização do monitor '{monitorId}' não pôde ser iniciada.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn($"Falha ao alternar pré-visualização para o monitor '{monitorId}'.", ex);
+        }
+    }
+
     private async void OnMonitorCardStopRequested(object? sender, EventArgs e)
     {
         if (sender is not WinForms.Control control || control.Tag is not string monitorId)
@@ -863,6 +911,9 @@ public partial class MainForm : WinForms.Form
 
         if (_monitorCards.TryGetValue(monitorId, out var context))
         {
+            _requestedPreviews.Remove(monitorId);
+            _previewsRequested = _requestedPreviews.Count > 0;
+            context.Host.SetPreviewRequestedByUser(false);
             await context.Host.StopSafeAsync().ConfigureAwait(true);
             await context.CloseTestWindowAsync().ConfigureAwait(true);
         }
@@ -885,13 +936,18 @@ public partial class MainForm : WinForms.Form
         try
         {
             _manuallyStoppedMonitors.Remove(monitorId);
+            _requestedPreviews.Add(monitorId);
+            _previewsRequested = true;
 
             context.Host.PreviewSafeModeEnabled = _graphicsOptions.Mode == PreviewGraphicsMode.Gdi;
             if (context.Host.Capture is null)
             {
+                context.Host.SetPreviewRequestedByUser(true);
                 var started = await context.Host.StartSafeAsync(preferGpu: ShouldPreferGpu()).ConfigureAwait(true);
                 if (!started)
                 {
+                    _requestedPreviews.Remove(monitorId);
+                    _previewsRequested = _requestedPreviews.Count > 0;
                     WinForms.MessageBox.Show(
                         this,
                         "Não foi possível iniciar o preview para este monitor.",
@@ -906,6 +962,8 @@ public partial class MainForm : WinForms.Form
         }
         catch (Exception ex)
         {
+            _requestedPreviews.Remove(monitorId);
+            _previewsRequested = _requestedPreviews.Count > 0;
             WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível abrir o preview: {ex.Message}",
@@ -1060,9 +1118,9 @@ public partial class MainForm : WinForms.Form
 
     private async Task StartAutomaticPreviewsAsync()
     {
-        _previewsRequested = true;
+        _previewsRequested = _requestedPreviews.Count > 0;
 
-        if (WindowState == WinForms.FormWindowState.Minimized)
+        if (!_previewsRequested || WindowState == WinForms.FormWindowState.Minimized)
         {
             return;
         }
@@ -1072,7 +1130,8 @@ public partial class MainForm : WinForms.Form
 
         foreach (var context in _monitorCardOrder)
         {
-            if (_manuallyStoppedMonitors.Contains(context.MonitorId))
+            if (_manuallyStoppedMonitors.Contains(context.MonitorId)
+                || !_requestedPreviews.Contains(context.MonitorId))
             {
                 continue;
             }
@@ -1103,6 +1162,7 @@ public partial class MainForm : WinForms.Form
         if (clearManualState)
         {
             _manuallyStoppedMonitors.Clear();
+            _requestedPreviews.Clear();
         }
     }
 

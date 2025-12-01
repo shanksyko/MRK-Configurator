@@ -86,6 +86,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private Drawing.Bitmap? _currentFrame;
     private Drawing.Bitmap? _editorSnapshotBitmap;
     private bool _editorSnapshotModeEnabled;
+    private bool _previewRequestedByUser;
+    private bool _previewRunning;
+    private bool _previewPaused;
     private int _stateRaw = (int)PreviewState.Stopped;
     private bool _disposed;
     private Drawing.Rectangle _monitorBounds;
@@ -210,6 +213,21 @@ public sealed partial class MonitorPreviewHost : IDisposable
     public bool IsPaused => Volatile.Read(ref _paused) == 1;
 
     /// <summary>
+    /// Gets a value indicating whether the preview was explicitly requested by the user.
+    /// </summary>
+    public bool PreviewRequestedByUser => Volatile.Read(ref _previewRequestedByUser);
+
+    /// <summary>
+    /// Gets a value indicating whether the preview pipeline is running.
+    /// </summary>
+    public bool IsPreviewRunning => Volatile.Read(ref _previewRunning);
+
+    /// <summary>
+    /// Gets a value indicating whether the preview was paused by the user.
+    /// </summary>
+    public bool IsUserPaused => Volatile.Read(ref _previewPaused);
+
+    /// <summary>
     /// Gets or sets a value indicating whether the preview is visible and should process frames.
     /// </summary>
     public bool IsVisible
@@ -240,6 +258,21 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             _logger.Information(
                 "EditorPreviewDisabled: saindo do modo placeholder, preview real pode ser retomado // MIERUKA_FIX");
+        }
+    }
+
+    public void SetPreviewRequestedByUser(bool requested)
+    {
+        Volatile.Write(ref _previewRequestedByUser, requested);
+
+        if (!requested)
+        {
+            Volatile.Write(ref _previewRunning, false);
+            Volatile.Write(ref _previewPaused, false);
+        }
+        else
+        {
+            Volatile.Write(ref _previewPaused, false);
         }
     }
 
@@ -621,6 +654,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             if (IsEditorPreviewDisabled)
             {
                 var wasPaused = Interlocked.Exchange(ref _paused, 1) == 1;
+                Volatile.Write(ref _previewPaused, true);
                 await StopCoreAsync(clearFrame: true, resetPaused: false, cancellationToken).ConfigureAwait(true);
                 ApplyPlaceholderFrame();
 
@@ -651,6 +685,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             }
 
             var wasPausedAfterSnapshot = Interlocked.Exchange(ref _paused, 1) == 1;
+            Volatile.Write(ref _previewPaused, true);
             var detached = await DisposeCaptureRetainingFrameAsync(resetPaused: false, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -668,6 +703,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
                     backend);
                 _logger.Information("EditorSnapshot: modo snapshot ativado, preview contínuo pausado // MIERUKA_FIX");
             }
+
+            Volatile.Write(ref _previewRunning, false);
         }
         finally
         {
@@ -712,6 +749,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
             var resumed = await StartCoreAsync(useGpu, CancellationToken.None).ConfigureAwait(false);
             if (resumed)
             {
+                Volatile.Write(ref _previewRunning, true);
+                Volatile.Write(ref _previewPaused, false);
                 if (snapshotWasActive)
                 {
                     _logger.Information(
@@ -985,6 +1024,12 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return false;
         }
 
+        if (!PreviewRequestedByUser)
+        {
+            _logger.Debug("PreviewStartSkippedUserRequest");
+            return false;
+        }
+
         if (PreviewSafeModeEnabled)
         {
             preferGpu = false;
@@ -1091,11 +1136,14 @@ public sealed partial class MonitorPreviewHost : IDisposable
             {
                 SetState(PreviewState.Running);
                 Volatile.Write(ref _lifecycleState, LifecycleRunning);
+                Volatile.Write(ref _previewRunning, true);
+                Volatile.Write(ref _previewPaused, false);
             }
             else
             {
                 SetState(previousState);
                 Volatile.Write(ref _lifecycleState, LifecycleStopped);
+                Volatile.Write(ref _previewRunning, false);
             }
 
             return started;
@@ -2302,6 +2350,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         if (resetPaused)
         {
             Interlocked.Exchange(ref _paused, 0);
+            Volatile.Write(ref _previewPaused, false);
         }
 
         if (clearFrame)
@@ -2314,6 +2363,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
 
         Volatile.Write(ref _lifecycleState, LifecycleStopped);
+        Volatile.Write(ref _previewRunning, false);
     }
 
     private async Task<bool> DisposeCaptureRetainingFrameAsync(bool resetPaused, CancellationToken cancellationToken)
