@@ -167,6 +167,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         if (autoStart)
         {
+            host.SetPreviewRequestedByUser(true);
             var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
 
             if (!started)
@@ -182,6 +183,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
         else
         {
+            host.SetPreviewRequestedByUser(false);
             SetPlaceholder("Pré-visualização pausada — clique para iniciar");
         }
     }
@@ -223,6 +225,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             return;
         }
 
+        host.SetPreviewRequestedByUser(true);
         var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
         if (started)
         {
@@ -259,6 +262,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         try
         {
+            host.SetPreviewRequestedByUser(false);
             await host.StopSafeAsync(cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)

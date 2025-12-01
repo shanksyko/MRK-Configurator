@@ -11,7 +11,7 @@ public sealed class PreviewSettings
 
     public double TargetFpsGpu { get; init; } = 60d;
 
-    public double TargetFpsGdi { get; init; } = 25d;
+    public double TargetFpsGdi { get; init; } = 18d;
 
     public static TimeSpan CalculateFrameInterval(double framesPerSecond)
     {
