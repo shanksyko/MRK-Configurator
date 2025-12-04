@@ -202,17 +202,40 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
 
     private Task CaptureFrameAsync(CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var bitmap = CaptureFrame();
-
-        if (cancellationToken.IsCancellationRequested)
+        try
         {
-            bitmap.Dispose();
             cancellationToken.ThrowIfCancellationRequested();
+
+            var bitmap = CaptureFrame();
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                bitmap.Dispose();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            DispatchFrame(bitmap);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var logger = _captureLogger ?? Logger;
+            logger.Error(ex, "Falha inesperada no loop de captura do backend {Backend} para monitor {MonitorId}.", Backend, _monitorId);
+
+            try
+            {
+                _ = StopAsync();
+            }
+            catch
+            {
+            }
+
+            throw;
         }
 
-        DispatchFrame(bitmap);
         return Task.CompletedTask;
     }
 

@@ -3861,7 +3861,7 @@ public partial class AppEditorForm : WinForms.Form
         {
             try
             {
-                await preview.UnbindAsync().ConfigureAwait(true);
+                await preview.StopPreviewAsync().ConfigureAwait(true);
             }
             catch (Exception ex)
             {
