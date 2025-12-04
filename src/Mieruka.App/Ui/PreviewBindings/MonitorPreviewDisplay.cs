@@ -67,6 +67,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         _glyphRegions = new List<(Drawing.RectangleF Bounds, string Text)>();
         _tooltip = ToolTipTamer.Create();
 
+        _pictureBox.MouseDown += PictureBoxOnMouseDown;
         _pictureBox.MouseMove += PictureBoxOnMouseMove;
         _pictureBox.MouseLeave += PictureBoxOnMouseLeave;
         _pictureBox.Paint += PictureBoxOnPaint;
@@ -212,6 +213,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         {
             return;
         }
+
+        var monitorIdForLog = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
+        Logger.Debug(
+            "MonitorPreviewDisplay: attempting to start preview for {MonitorId}",
+            string.IsNullOrWhiteSpace(monitorIdForLog) ? "<unknown>" : monitorIdForLog);
 
         if (_previewStarted)
         {
@@ -373,6 +379,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         if (disposing)
         {
             Unbind();
+            _pictureBox.MouseDown -= PictureBoxOnMouseDown;
             _pictureBox.MouseMove -= PictureBoxOnMouseMove;
             _pictureBox.MouseLeave -= PictureBoxOnMouseLeave;
             _pictureBox.Paint -= PictureBoxOnPaint;
@@ -489,6 +496,24 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
 
         return true;
+    }
+
+    private async void PictureBoxOnMouseDown(object? sender, WinForms.MouseEventArgs e)
+    {
+        using var guard = new StackGuard(nameof(PictureBoxOnMouseDown));
+        if (!guard.Entered)
+        {
+            Logger.Debug("MonitorPreviewDisplay: ignoring click, stack guard not entered");
+            return;
+        }
+
+        if (e.Button != WinForms.MouseButtons.Left)
+        {
+            Logger.Debug("MonitorPreviewDisplay: ignoring non-left click");
+            return;
+        }
+
+        await EnsurePreviewStartedAsync().ConfigureAwait(true);
     }
 
     private void PictureBoxOnMouseMove(object? sender, WinForms.MouseEventArgs e)
