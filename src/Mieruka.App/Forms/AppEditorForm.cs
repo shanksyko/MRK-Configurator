@@ -68,6 +68,9 @@ public partial class AppEditorForm : WinForms.Form
         bool AutoStart,
         string AppId);
 
+    private const int MinimumOverlayDimension = 10;
+    private const int MinimumPreviewSurface = 50;
+
     private readonly BindingList<SiteConfig> _sites;
     private readonly ProgramaConfig? _original;
     private readonly IReadOnlyList<MonitorInfo>? _providedMonitors;
@@ -2351,6 +2354,17 @@ public partial class AppEditorForm : WinForms.Form
         var now = _windowPreviewStopwatch.Elapsed;
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
+        var monitorBounds = ResolveMonitorBounds(monitor);
+
+        if (monitorId is not null && (monitorBounds.Width < MinimumOverlayDimension || monitorBounds.Height < MinimumOverlayDimension))
+        {
+            _logger.Warning(
+                "CaptureWindowPreviewSnapshot: monitor sem superfície válida width={Width} height={Height} monitorId={MonitorId} // MIERUKA_FIX",
+                monitorBounds.Width,
+                monitorBounds.Height,
+                monitorId);
+            monitorId = null;
+        }
 
         var autoStart = chkAutoStart?.Checked ?? false;
         var isFullScreen = chkJanelaTelaCheia?.Checked ?? false;
@@ -2404,12 +2418,107 @@ public partial class AppEditorForm : WinForms.Form
         return snapshot;
     }
 
+    private Drawing.Rectangle ResolveMonitorBounds(MonitorInfo? monitor)
+    {
+        if (monitor is null)
+        {
+            return Drawing.Rectangle.Empty;
+        }
+
+        if (monitor.Bounds.Width >= MinimumOverlayDimension && monitor.Bounds.Height >= MinimumOverlayDimension)
+        {
+            return monitor.Bounds;
+        }
+
+        if (TryGetDisplaySettings(monitor.DeviceName, out var rect))
+        {
+            _logger.Debug(
+                "CaptureWindowPreviewSnapshot: recalculou bounds via EnumDisplaySettings width={Width} height={Height} monitor={MonitorId} // MIERUKA_FIX",
+                rect.Width,
+                rect.Height,
+                monitor.DeviceName);
+            return rect;
+        }
+
+        try
+        {
+            foreach (var screen in WinForms.Screen.AllScreens)
+            {
+                if (string.Equals(screen.DeviceName, monitor.DeviceName, StringComparison.OrdinalIgnoreCase) &&
+                    screen.Bounds.Width >= MinimumOverlayDimension &&
+                    screen.Bounds.Height >= MinimumOverlayDimension)
+                {
+                    return screen.Bounds;
+                }
+            }
+        }
+        catch
+        {
+            // Best effort only; diagnostics will handle invalid bounds.
+        }
+
+        _logger.Debug(
+            "invalid_bounds_detected width={Width} height={Height} monitorId={MonitorId} source=capture_snapshot",
+            monitor.Bounds.Width,
+            monitor.Bounds.Height,
+            monitor.DeviceName ?? string.Empty);
+        return Drawing.Rectangle.Empty;
+    }
+
+    private static bool TryGetDisplaySettings(string? deviceName, out Drawing.Rectangle bounds)
+    {
+        bounds = Drawing.Rectangle.Empty;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(deviceName))
+        {
+            return false;
+        }
+
+        try
+        {
+            var mode = new DEVMODE
+            {
+                dmSize = (short)Marshal.SizeOf<DEVMODE>(),
+            };
+
+            if (!EnumDisplaySettings(deviceName, EnumCurrentSettings, ref mode))
+            {
+                return false;
+            }
+
+            bounds = new Drawing.Rectangle(mode.dmPositionX, mode.dmPositionY, mode.dmPelsWidth, mode.dmPelsHeight);
+            return bounds.Width >= MinimumOverlayDimension && bounds.Height >= MinimumOverlayDimension;
+        }
+        catch (DllNotFoundException)
+        {
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
     private void ApplyWindowPreviewSnapshot(WindowPreviewSnapshot snapshot, TimeSpan timestamp)
     {
         _windowPreviewSnapshot = snapshot;
         _hasWindowPreviewSnapshot = true;
         _lastWindowPreviewRebuild = timestamp;
         _windowPreviewRebuildScheduled = false;
+
+        if (snapshot.Bounds.Width < MinimumOverlayDimension || snapshot.Bounds.Height < MinimumOverlayDimension)
+        {
+            _logger.Debug(
+                "ApplySelectionOverlay: ignored_zero_bound_overlay bounds={Bounds} monitor={MonitorId} // MIERUKA_FIX",
+                snapshot.Bounds,
+                snapshot.MonitorId ?? string.Empty);
+            return;
+        }
 
         if (ShouldApplyOverlay(snapshot))
         {
@@ -2548,8 +2657,13 @@ public partial class AppEditorForm : WinForms.Form
             }
 
             var relativeBounds = CalculateMonitorRelativeBounds(app.Window, resolvedMonitor);
-            if (relativeBounds.Width <= 0 || relativeBounds.Height <= 0)
+            if (relativeBounds.Width < MinimumOverlayDimension || relativeBounds.Height < MinimumOverlayDimension)
             {
+                _logger.Debug(
+                    "RebuildSimulationOverlays: ignored_zero_bound_overlay bounds={Bounds} appId={AppId} monitorId={MonitorId}",
+                    relativeBounds,
+                    app.Id ?? string.Empty,
+                    monitorId);
                 continue;
             }
 

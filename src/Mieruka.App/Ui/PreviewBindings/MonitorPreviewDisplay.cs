@@ -38,6 +38,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private const string AskTooltipText = "Solicitar confirmação antes de iniciar.";
     private const string NetworkGlyph = "🌐";
     private const string NetworkTooltipText = "Requer conexão de rede para iniciar.";
+    private const int MinimumPreviewSurface = 50;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MonitorPreviewDisplay"/> class.
@@ -147,7 +148,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         await UnbindAsync().ConfigureAwait(true);
         _monitor = monitor;
-        _coordinateMapper = new MonitorCoordinateMapper(monitor);
+        RebuildCoordinateMapper(monitor);
         _previewStarted = false;
 
         var monitorId = MonitorIdentifier.Create(monitor);
@@ -174,7 +175,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             if (!started)
             {
                 _monitor = null;
-                SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                if (string.IsNullOrWhiteSpace(_placeholderMessage))
+                {
+                    SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                }
             }
             else
             {
@@ -191,6 +195,18 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     private async Task<bool> StartPreviewHostAsync(MonitorPreviewHost host, string monitorId)
     {
+        if (_monitor is { } monitor && !HasValidSurface(monitor))
+        {
+            Logger.Warning(
+                "MonitorPreviewDisplay: monitor sem superfície válida para captura width={Width} height={Height} monitorId={MonitorId}",
+                monitor.Bounds.Width,
+                monitor.Bounds.Height,
+                monitorId);
+            SetPlaceholder("Monitor sem superfície válida para captura");
+            _coordinateMapper = null;
+            return false;
+        }
+
         // The editor always prefers the BitBlt path to avoid GPU capture glitches in nested previews.
         var started = false;
         try
@@ -241,7 +257,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         else
         {
             _monitor = null;
-            SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+            if (string.IsNullOrWhiteSpace(_placeholderMessage))
+            {
+                SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+            }
         }
     }
 
@@ -911,6 +930,36 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             Logger.Debug(ex, "Imagem inválida ao inspecionar preview.");
             return false;
         }
+    }
+
+    private void RebuildCoordinateMapper(MonitorInfo monitor)
+    {
+        if (monitor.Bounds.Width < MinimumPreviewSurface || monitor.Bounds.Height < MinimumPreviewSurface)
+        {
+            _coordinateMapper = null;
+            Logger.Debug(
+                "MonitorPreviewDisplay: coordinate mapper disabled for monitorId={MonitorId} width={Width} height={Height}",
+                MonitorIdentifier.Create(monitor),
+                monitor.Bounds.Width,
+                monitor.Bounds.Height);
+            return;
+        }
+
+        _coordinateMapper = new MonitorCoordinateMapper(monitor);
+        Logger.Debug(
+            "MonitorPreviewDisplay: coordinate mapper rebuilt for monitorId={MonitorId} bounds={Bounds}",
+            MonitorIdentifier.Create(monitor),
+            monitor.Bounds);
+    }
+
+    private static bool HasValidSurface(MonitorInfo monitor)
+    {
+        if (monitor.Bounds.Width >= MinimumPreviewSurface && monitor.Bounds.Height >= MinimumPreviewSurface)
+        {
+            return true;
+        }
+
+        return monitor.Width >= MinimumPreviewSurface && monitor.Height >= MinimumPreviewSurface;
     }
 
     private void SetPlaceholder(string? message)
