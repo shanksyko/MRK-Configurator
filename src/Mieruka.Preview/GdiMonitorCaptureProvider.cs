@@ -19,6 +19,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private const string Backend = "GDI";
 
     private static readonly ILogger Logger = Log.ForContext<GdiMonitorCaptureProvider>();
+    private const int MinimumCaptureDimension = 50;
 
     private readonly PreviewFrameScheduler _frameScheduler;
     private CancellationTokenSource? _cts;
@@ -74,6 +75,10 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         }
 
         _monitorBounds = bounds;
+        if (!TryEnsureValidBounds(monitor))
+        {
+            throw new InvalidOperationException("Monitor sem superfície válida para captura.");
+        }
         _initialized = true;
         _previewResolution = monitor.GetPreviewResolution();
 
@@ -103,6 +108,63 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         _frameScheduler.Start(CaptureFrameAsync, _cts.Token);
 
         return Task.CompletedTask;
+    }
+
+    private bool TryEnsureValidBounds(MonitorInfo monitor)
+    {
+        if (_monitorBounds.Width >= MinimumCaptureDimension && _monitorBounds.Height >= MinimumCaptureDimension)
+        {
+            return true;
+        }
+
+        _captureLogger?.Warning(
+            "invalid_bounds_detected width={Width} height={Height} monitorId={MonitorId} provider=GDI",
+            _monitorBounds.Width,
+            _monitorBounds.Height,
+            monitor.Id);
+
+        if (TryRecoverBounds(monitor, out var recovered))
+        {
+            _monitorBounds = recovered;
+            _captureLogger?.Debug(
+                "Monitor bounds recuperados via fallback width={Width} height={Height} monitorId={MonitorId}",
+                _monitorBounds.Width,
+                _monitorBounds.Height,
+                monitor.Id);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryRecoverBounds(MonitorInfo monitor, out MonitorUtilities.RECT bounds)
+    {
+        if (monitor.Bounds.Width >= MinimumCaptureDimension && monitor.Bounds.Height >= MinimumCaptureDimension)
+        {
+            bounds = new MonitorUtilities.RECT
+            {
+                Left = monitor.Bounds.Left,
+                Top = monitor.Bounds.Top,
+                Right = monitor.Bounds.Right,
+                Bottom = monitor.Bounds.Bottom,
+            };
+            return true;
+        }
+
+        if (monitor.Width >= MinimumCaptureDimension && monitor.Height >= MinimumCaptureDimension)
+        {
+            bounds = new MonitorUtilities.RECT
+            {
+                Left = monitor.Bounds.Left,
+                Top = monitor.Bounds.Top,
+                Right = monitor.Bounds.Left + monitor.Width,
+                Bottom = monitor.Bounds.Top + monitor.Height,
+            };
+            return true;
+        }
+
+        bounds = default;
+        return false;
     }
 
     /// <inheritdoc />

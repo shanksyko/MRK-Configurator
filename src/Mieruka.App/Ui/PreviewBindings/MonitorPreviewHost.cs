@@ -30,6 +30,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private static readonly TimeSpan LifecycleWaitDelay = TimeSpan.FromMilliseconds(10);
     private static readonly TimeSpan GpuFallbackLogInterval = TimeSpan.FromSeconds(10);
     private static long _lastGpuFallbackLogTicks;
+    private const int MinimumCaptureSurface = 50;
 
     private sealed class ReentrancyGate
     {
@@ -1359,6 +1360,16 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
         if (!PopulateMetadataFromMonitor())
         {
+            return false;
+        }
+
+        if (_monitorBounds.Width < MinimumCaptureSurface || _monitorBounds.Height < MinimumCaptureSurface)
+        {
+            _logger.Warning(
+                "MonitorPreviewHost: monitor sem superfície válida para captura width={Width} height={Height} monitorId={MonitorId}",
+                _monitorBounds.Width,
+                _monitorBounds.Height,
+                MonitorId);
             return false;
         }
 

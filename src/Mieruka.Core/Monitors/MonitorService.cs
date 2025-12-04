@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Mieruka.Core.Models;
 using Mieruka.Core.WinAPI;
 using Serilog;
@@ -32,6 +33,8 @@ public sealed class MonitorDescriptor
 
 public sealed class MonitorService : IMonitorService
 {
+    private const int MinimumValidDimension = 200;
+
     private const int ErrorSuccess = 0;
     private static readonly ILogger Logger = Log.ForContext<MonitorService>();
     private static ILogger ForEvent(string eventId) => Logger.ForContext("EventId", eventId);
@@ -39,6 +42,7 @@ public sealed class MonitorService : IMonitorService
     private readonly Func<MonitorService, List<MonitorDescriptor>> _displayConfigProvider;
     private readonly Func<MonitorService, List<MonitorDescriptor>> _gdiProvider;
     private readonly Func<bool> _isWindows;
+    private static int _consecutiveDisplayConfigFailures;
 
     public MonitorService()
         : this(static service => service.EnumerateDisplayConfigInternal(), static service => service.EnumerateGdiInternal())
@@ -64,24 +68,35 @@ public sealed class MonitorService : IMonitorService
 
         try
         {
-            var monitors = _displayConfigProvider(this);
+            var monitors = NormalizeAndFilter(_displayConfigProvider(this), "DisplayConfig");
             if (monitors.Count > 0)
             {
+                Interlocked.Exchange(ref _consecutiveDisplayConfigFailures, 0);
                 return monitors;
             }
 
             ForEvent("MonitorFallback").Warning(
                 "QueryDisplayConfig não retornou monitores ativos; recorrendo à enumeração GDI.");
+            MaybeLogRepeatedDisplayConfigFailure();
         }
         catch (Exception ex)
         {
             ForEvent("MonitorFallback")
                 .Warning(ex, "Falha ao enumerar monitores via QueryDisplayConfig; recorrendo à enumeração GDI.");
+            MaybeLogRepeatedDisplayConfigFailure();
         }
 
         try
         {
-            return _gdiProvider(this);
+            var monitors = NormalizeAndFilter(_gdiProvider(this), "GDI");
+
+            if (monitors.Count == 0)
+            {
+                ForEvent("MonitorFallback")
+                    .Warning("Enumeração GDI não retornou monitores válidos; retornando lista vazia.");
+            }
+
+            return monitors;
         }
         catch (Exception ex)
         {
@@ -108,6 +123,74 @@ public sealed class MonitorService : IMonitorService
         }
 
         return monitors[0];
+    }
+
+    private List<MonitorDescriptor> NormalizeAndFilter(IEnumerable<MonitorDescriptor> descriptors, string provider)
+    {
+        var normalized = new List<MonitorDescriptor>();
+
+        foreach (var descriptor in descriptors)
+        {
+            if (descriptor is null)
+            {
+                continue;
+            }
+
+            if (descriptor.Bounds == Rectangle.Empty && descriptor.Width > 0 && descriptor.Height > 0)
+            {
+                descriptor.Bounds = new Rectangle(0, 0, descriptor.Width, descriptor.Height);
+            }
+
+            if (descriptor.WorkArea == Rectangle.Empty && descriptor.Bounds != Rectangle.Empty)
+            {
+                descriptor.WorkArea = descriptor.Bounds;
+            }
+
+            if (descriptor.Bounds != Rectangle.Empty)
+            {
+                descriptor.Width = descriptor.Bounds.Width;
+                descriptor.Height = descriptor.Bounds.Height;
+            }
+
+            if (descriptor.Width < MinimumValidDimension || descriptor.Height < MinimumValidDimension)
+            {
+                ForEvent("InvalidBoundsDetected")
+                    .Warning(
+                        "{Provider} retornou limites inválidos {Bounds} para o monitor '{DeviceName}'.",
+                        descriptor.Bounds,
+                        descriptor.DeviceName);
+
+                ForEvent("invalid_bounds_detected")
+                    .Debug(
+                        "invalid_bounds_detected width={Width} height={Height} monitorId={MonitorId} provider={Provider}",
+                        descriptor.Width,
+                        descriptor.Height,
+                        descriptor.DeviceName ?? string.Empty,
+                        provider);
+
+                continue;
+            }
+
+            normalized.Add(descriptor);
+        }
+
+        return normalized;
+    }
+
+    private static void MaybeLogRepeatedDisplayConfigFailure()
+    {
+        var consecutive = Interlocked.Increment(ref _consecutiveDisplayConfigFailures);
+
+        if (consecutive < 2)
+        {
+            return;
+        }
+
+        if (consecutive == 2)
+        {
+            ForEvent("MonitorFallback")
+                .Warning("QueryDisplayConfig falhou consecutivamente ({Count}x); reconstruindo topologia via fallback.", consecutive);
+        }
     }
 
     private List<MonitorDescriptor> EnumerateDisplayConfigInternal()
