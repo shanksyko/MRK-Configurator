@@ -230,6 +230,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public Guid? EditSessionId { get; set; }
 
+    public bool IsCoordinateAnalysisMode { get; set; }
+
     public sealed class MonitorMouseEventArgs : EventArgs
     {
         public MonitorMouseEventArgs(string monitorId, Drawing.PointF monitorPoint, WinForms.MouseButtons button)
@@ -323,7 +325,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         else
         {
             host.SetPreviewRequestedByUser(false);
-            SetPlaceholder("Pré-visualização pausada — clique para iniciar");
+            SetPlaceholder(GetPreviewDisabledPlaceholder());
         }
     }
 
@@ -430,10 +432,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             else
             {
                 _monitor = null;
-                NotifyPreviewFailed("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                var placeholder = GetUnavailablePlaceholder();
+                NotifyPreviewFailed(placeholder);
                 if (string.IsNullOrWhiteSpace(_placeholderMessage))
                 {
-                    SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                    SetPlaceholder(placeholder);
                 }
             }
         }
@@ -537,6 +540,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             host.SetEditorPreviewDisabledMode(true);
             await host.PauseAsync(cancellationToken).ConfigureAwait(true);
         }
+
+        SetPlaceholder(GetPreviewDisabledPlaceholder());
     }
 
     /// <summary>
@@ -1320,5 +1325,19 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         }
 
         _pictureBox.Invalidate();
+    }
+
+    private string GetPreviewDisabledPlaceholder()
+    {
+        return IsCoordinateAnalysisMode
+            ? "Análise de coordenadas do monitor selecionado (preview desativado)"
+            : "Pré-visualização pausada — clique para iniciar";
+    }
+
+    private string GetUnavailablePlaceholder()
+    {
+        return IsCoordinateAnalysisMode
+            ? "Análise de coordenadas do monitor selecionado (preview desativado)"
+            : "Pré-visualização indisponível. Monitor configurado não foi encontrado.";
     }
 }

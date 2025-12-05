@@ -37,8 +37,6 @@ partial class AppEditorForm
     internal TextBox txtCmdPreviewExe = null!;
     internal RadioButton rbExe = null!;
     internal RadioButton rbBrowser = null!;
-    internal GroupBox grpInstalledApps = null!;
-    internal ListView lvApps = null!;
     internal Button btnBrowseExe = null!;
     internal CheckBox chkAutoStart = null!;
     internal NumericUpDown nudJanelaX = null!;
@@ -49,6 +47,7 @@ partial class AppEditorForm
     internal ComboBox cboMonitores = null!;
     internal MonitorPreviewDisplay monitorPreviewDisplay = null!;
     internal TableLayoutPanel tlpMonitorPreview = null!;
+    internal Label lblCoordinateAnalysisTitle = null!;
     internal Label lblMonitorCoordinates = null!;
     internal TableLayoutPanel tlpCycle = null!;
     internal DataGridView dgvCycle = null!;
@@ -111,8 +110,6 @@ partial class AppEditorForm
         chkAutoStart = new CheckBox();
         rbExe = new RadioButton();
         rbBrowser = new RadioButton();
-        grpInstalledApps = new GroupBox();
-        lvApps = new ListView();
         btnBrowseExe = new Button();
         var flowAppType = new FlowLayoutPanel();
         var tlpExecutavel = new TableLayoutPanel();
@@ -121,6 +118,7 @@ partial class AppEditorForm
         var lblMonitor = new Label();
         cboMonitores = new ComboBox();
         monitorPreviewDisplay = new MonitorPreviewDisplay();
+        lblCoordinateAnalysisTitle = new Label();
         chkJanelaTelaCheia = new CheckBox();
         var lblX = new Label();
         nudJanelaX = new NumericUpDown();
@@ -146,7 +144,6 @@ partial class AppEditorForm
         var lblAvancado = new Label();
         errorProvider = new ErrorProvider(components);
         cycleToolTip = ToolTipTamer.Create(components);
-        grpInstalledApps.SuspendLayout();
         tlpExecutavel.SuspendLayout();
         flowAppType.SuspendLayout();
         ((ISupportInitialize)bsCycle).BeginInit();
@@ -219,15 +216,13 @@ partial class AppEditorForm
         //
         tlpAplicativos.ColumnCount = 1;
         tlpAplicativos.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tlpAplicativos.Controls.Add(grpInstalledApps, 0, 0);
-        tlpAplicativos.Controls.Add(appsTabControl, 0, 1);
+        tlpAplicativos.Controls.Add(appsTabControl, 0, 0);
         tlpAplicativos.Dock = DockStyle.Fill;
         tlpAplicativos.Location = new System.Drawing.Point(8, 8);
         tlpAplicativos.Margin = new Padding(0);
         tlpAplicativos.Name = "tlpAplicativos";
-        tlpAplicativos.RowCount = 2;
-        tlpAplicativos.RowStyles.Add(new RowStyle(SizeType.Percent, 45F));
-        tlpAplicativos.RowStyles.Add(new RowStyle(SizeType.Percent, 55F));
+        tlpAplicativos.RowCount = 1;
+        tlpAplicativos.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tlpAplicativos.Size = new System.Drawing.Size(1016, 604);
         tlpAplicativos.TabIndex = 0;
         //
@@ -324,35 +319,6 @@ partial class AppEditorForm
         rbBrowser.Text = "Navegador";
         rbBrowser.UseVisualStyleBackColor = true;
         rbBrowser.CheckedChanged += rbBrowser_CheckedChanged;
-        //
-        // grpInstalledApps
-        //
-        grpInstalledApps.Controls.Add(lvApps);
-        grpInstalledApps.Dock = DockStyle.Fill;
-        grpInstalledApps.Location = new System.Drawing.Point(0, 0);
-        grpInstalledApps.Margin = new Padding(0, 0, 0, 8);
-        grpInstalledApps.Name = "grpInstalledApps";
-        grpInstalledApps.Padding = new Padding(8);
-        grpInstalledApps.Size = new System.Drawing.Size(1016, 266);
-        grpInstalledApps.TabIndex = 0;
-        grpInstalledApps.TabStop = false;
-        grpInstalledApps.Text = "Aplicativos instalados";
-        //
-        // lvApps
-        //
-        lvApps.BackColor = System.Drawing.SystemColors.Window;
-        lvApps.Dock = DockStyle.Fill;
-        lvApps.ForeColor = System.Drawing.SystemColors.WindowText;
-        lvApps.FullRowSelect = true;
-        lvApps.HideSelection = false;
-        lvApps.Location = new System.Drawing.Point(8, 24);
-        lvApps.Margin = new Padding(0);
-        lvApps.Name = "lvApps";
-        lvApps.OwnerDraw = false;
-        lvApps.Size = new System.Drawing.Size(1000, 177);
-        lvApps.TabIndex = 0;
-        lvApps.UseCompatibleStateImageBehavior = false;
-        lvApps.View = View.Details;
         //
         // lblExecutavel
         //
@@ -524,15 +490,17 @@ partial class AppEditorForm
         //
         tlpMonitorPreview.ColumnCount = 1;
         tlpMonitorPreview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tlpMonitorPreview.Controls.Add(monitorPreviewDisplay, 0, 0);
-        tlpMonitorPreview.Controls.Add(lblMonitorCoordinates, 0, 1);
+        tlpMonitorPreview.Controls.Add(lblCoordinateAnalysisTitle, 0, 0);
+        tlpMonitorPreview.Controls.Add(monitorPreviewDisplay, 0, 1);
+        tlpMonitorPreview.Controls.Add(lblMonitorCoordinates, 0, 2);
         tlpMonitorPreview.Dock = DockStyle.Right;
         tlpMonitorPreview.Location = new System.Drawing.Point(592, 8);
         tlpMonitorPreview.Margin = new Padding(8, 0, 0, 8);
         tlpMonitorPreview.MinimumSize = new System.Drawing.Size(420, 0);
         tlpMonitorPreview.Name = "tlpMonitorPreview";
         tlpMonitorPreview.Padding = new Padding(8);
-        tlpMonitorPreview.RowCount = 2;
+        tlpMonitorPreview.RowCount = 3;
+        tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpMonitorPreview.Size = new System.Drawing.Size(440, 604);
@@ -542,23 +510,35 @@ partial class AppEditorForm
         //
         monitorPreviewDisplay.BackColor = System.Drawing.Color.FromArgb(176, 176, 176);
         monitorPreviewDisplay.Dock = DockStyle.Fill;
-        monitorPreviewDisplay.Location = new System.Drawing.Point(8, 8);
-        monitorPreviewDisplay.Margin = new Padding(0, 0, 0, 8);
+        monitorPreviewDisplay.Location = new System.Drawing.Point(8, 31);
+        monitorPreviewDisplay.Margin = new Padding(0, 8, 0, 8);
         monitorPreviewDisplay.Name = "monitorPreviewDisplay";
-        monitorPreviewDisplay.Size = new System.Drawing.Size(424, 552);
-        monitorPreviewDisplay.TabIndex = 6;
+        monitorPreviewDisplay.Size = new System.Drawing.Size(424, 519);
+        monitorPreviewDisplay.TabIndex = 7;
         monitorPreviewDisplay.TabStop = false;
+        //
+        // lblCoordinateAnalysisTitle
+        //
+        lblCoordinateAnalysisTitle.AutoSize = true;
+        lblCoordinateAnalysisTitle.Dock = DockStyle.Fill;
+        lblCoordinateAnalysisTitle.Location = new System.Drawing.Point(8, 8);
+        lblCoordinateAnalysisTitle.Margin = new Padding(0, 0, 0, 8);
+        lblCoordinateAnalysisTitle.Name = "lblCoordinateAnalysisTitle";
+        lblCoordinateAnalysisTitle.Size = new System.Drawing.Size(424, 15);
+        lblCoordinateAnalysisTitle.TabIndex = 6;
+        lblCoordinateAnalysisTitle.Text = "Análise de coordenadas do monitor selecionado";
+        lblCoordinateAnalysisTitle.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
         //
         // lblMonitorCoordinates
         //
         lblMonitorCoordinates.AutoSize = true;
         lblMonitorCoordinates.Dock = DockStyle.Fill;
-        lblMonitorCoordinates.Location = new System.Drawing.Point(8, 568);
+        lblMonitorCoordinates.Location = new System.Drawing.Point(8, 558);
         lblMonitorCoordinates.Margin = new Padding(0);
         lblMonitorCoordinates.Name = "lblMonitorCoordinates";
         lblMonitorCoordinates.Padding = new Padding(0, 4, 0, 0);
-        lblMonitorCoordinates.Size = new System.Drawing.Size(424, 28);
-        lblMonitorCoordinates.TabIndex = 7;
+        lblMonitorCoordinates.Size = new System.Drawing.Size(424, 38);
+        lblMonitorCoordinates.TabIndex = 8;
         lblMonitorCoordinates.Text = "X=–, Y=–";
         lblMonitorCoordinates.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
         //
@@ -1080,7 +1060,6 @@ partial class AppEditorForm
         painelRodape.PerformLayout();
         tlpGeral.ResumeLayout(false);
         tlpGeral.PerformLayout();
-        grpInstalledApps.ResumeLayout(false);
         tlpExecutavel.ResumeLayout(false);
         tlpExecutavel.PerformLayout();
         flowAppType.ResumeLayout(false);

@@ -27,6 +27,7 @@ public sealed class AppsTab : WinForms.UserControl
     private readonly WinForms.Button _btnTest;
     private readonly WinForms.TextBox _txtArgs;
     private readonly WinForms.TextBox _txtPreview;
+    private readonly WinForms.Label _statusLabel;
     private readonly BindingList<InstalledAppInfo> _allApps = new();
     private readonly BindingList<InstalledAppInfo> _filteredApps = new();
     private bool _suppressSelectionNotifications;
@@ -72,6 +73,10 @@ public sealed class AppsTab : WinForms.UserControl
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = false,
             AutoGenerateColumns = false,
+            AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Drawing.Color.FromArgb(245, 248, 255),
+            },
         };
 
         _grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -161,6 +166,7 @@ public sealed class AppsTab : WinForms.UserControl
 
         footer.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
         footer.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
+        footer.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
 
         var lblArgs = new WinForms.Label
         {
@@ -192,6 +198,16 @@ public sealed class AppsTab : WinForms.UserControl
         footer.Controls.Add(_txtArgs, 1, 0);
         footer.Controls.Add(lblPreview, 0, 1);
         footer.Controls.Add(_txtPreview, 1, 1);
+        _statusLabel = new WinForms.Label
+        {
+            Dock = WinForms.DockStyle.Fill,
+            AutoSize = true,
+            TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+            ForeColor = System.Drawing.SystemColors.GrayText,
+            Padding = new WinForms.Padding(0, 4, 0, 0),
+        };
+        footer.Controls.Add(_statusLabel, 0, 2);
+        footer.SetColumnSpan(_statusLabel, 2);
 
         layout.Controls.Add(footer, 0, 2);
         layout.SetColumnSpan(footer, 2);
@@ -421,6 +437,20 @@ public sealed class AppsTab : WinForms.UserControl
         }
         _filteredApps.RaiseListChangedEvents = true;
         _filteredApps.ResetBindings();
+
+        UpdateStatusLabel();
+    }
+
+    private void UpdateStatusLabel()
+    {
+        if (_statusLabel.IsDisposed)
+        {
+            return;
+        }
+
+        var count = _filteredApps.Count;
+        var suffix = count == 1 ? "aplicativo encontrado" : "aplicativos encontrados";
+        _statusLabel.Text = $"{count} {suffix}";
     }
 
     private void ClearGridSelection()
