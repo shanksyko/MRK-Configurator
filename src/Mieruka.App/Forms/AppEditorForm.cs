@@ -1866,9 +1866,21 @@ public partial class AppEditorForm : WinForms.Form
         }
     }
 
+    private MonitorPreviewDisplay? TryGetPreviewControl()
+    {
+        return monitorPreviewDisplay;
+    }
+
     private void MonitorPreviewDisplay_OnMonitorMouseMove(object? sender, MonitorPreviewDisplay.MonitorMouseEventArgs e)
     {
-        if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
+        var preview = TryGetPreviewControl();
+        if (preview == null)
+        {
+            _logger.Debug("Preview control null; ignoring mouse interaction.");
+            return;
+        }
+
+        if (preview.IsInteractionSuppressed)
         {
             return;
         }
@@ -1876,8 +1888,14 @@ public partial class AppEditorForm : WinForms.Form
         var monitorPoint = Drawing.Point.Round(e.MonitorPoint);
         UpdateMonitorCoordinateLabel(monitorPoint);
 
-        if (monitorPreviewDisplay.IsPreviewRunning)
+        if (preview.IsPreviewRunning)
         {
+            _logger.Debug("Action skipped because live preview is running.");
+
+            _windowBoundsDebounce?.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
+
             _hoverPendingPoint = null;
             return;
         }
@@ -1902,7 +1920,14 @@ public partial class AppEditorForm : WinForms.Form
 
     private void MonitorPreviewDisplay_OnMonitorMouseClick(object? sender, MonitorPreviewDisplay.MonitorMouseEventArgs e)
     {
-        if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
+        var preview = TryGetPreviewControl();
+        if (preview == null)
+        {
+            _logger.Debug("Preview control null; ignoring mouse interaction.");
+            return;
+        }
+
+        if (preview.IsInteractionSuppressed)
         {
             return;
         }
@@ -1910,8 +1935,14 @@ public partial class AppEditorForm : WinForms.Form
         var monitorPoint = Drawing.Point.Round(e.MonitorPoint);
         UpdateMonitorCoordinateLabel(monitorPoint);
 
-        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        if (preview.IsPreviewRunning)
         {
+            _logger.Debug("Action skipped because live preview is running.");
+
+            _windowBoundsDebounce?.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
+
             return;
         }
 
@@ -1924,6 +1955,13 @@ public partial class AppEditorForm : WinForms.Form
 
     private void MonitorPreviewDisplay_MonitorMouseLeft(object? sender, EventArgs e)
     {
+        var preview = TryGetPreviewControl();
+        if (preview == null)
+        {
+            _logger.Debug("Preview control null; ignoring mouse interaction.");
+            return;
+        }
+
         UpdateMonitorCoordinateLabel(null);
 
         _hoverPendingPoint = null;
@@ -1931,11 +1969,14 @@ public partial class AppEditorForm : WinForms.Form
         _hoverSw.Reset();
         CancelHoverThrottleTimer();
 
-        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        if (preview.IsPreviewRunning)
         {
-            _windowBoundsDebounce.Stop();
+            _logger.Debug("Action skipped because live preview is running.");
+
+            _windowBoundsDebounce?.Stop();
             _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
+
             return;
         }
 
@@ -2349,8 +2390,14 @@ public partial class AppEditorForm : WinForms.Form
 
     private void InvalidateWindowPreviewOverlay()
     {
-        var preview = monitorPreviewDisplay;
-        if (preview is null || preview.IsDisposed)
+        var preview = TryGetPreviewControl();
+        if (preview == null)
+        {
+            _logger.Debug("Preview control null; skipping window/overlay update.");
+            return;
+        }
+
+        if (preview.IsDisposed)
         {
             _windowBoundsDebounce.Stop();
             _windowBoundsDebouncePending = false;
@@ -2369,8 +2416,12 @@ public partial class AppEditorForm : WinForms.Form
 
         if (preview.IsPreviewRunning)
         {
-            Logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
+            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+            _windowBoundsDebounce?.Stop();
+            _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
+
             return;
         }
 
@@ -2419,10 +2470,18 @@ public partial class AppEditorForm : WinForms.Form
 
         _ = ClampWindowInputsToMonitor(null, allowFullScreen: true);
 
-        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        var preview = TryGetPreviewControl();
+        if (preview == null)
         {
-            Logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
-            _windowBoundsDebounce.Stop();
+            _logger.Debug("Preview control null; skipping window/overlay update.");
+            return;
+        }
+
+        if (preview.IsPreviewRunning)
+        {
+            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+            _windowBoundsDebounce?.Stop();
             _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
             return;
@@ -2465,9 +2524,18 @@ public partial class AppEditorForm : WinForms.Form
     {
         _windowBoundsDebounce.Stop();
 
-        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        var preview = TryGetPreviewControl();
+        if (preview == null)
         {
-            Logger.Debug("WindowBoundsDebounceOnTick skipped_due_to_live_preview");
+            _logger.Debug("Preview control null; skipping window/overlay update.");
+            return;
+        }
+
+        if (preview.IsPreviewRunning)
+        {
+            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+            _windowBoundsDebounce?.Stop();
             _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
             return;
@@ -2492,6 +2560,23 @@ public partial class AppEditorForm : WinForms.Form
 
     private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
     {
+        var preview = TryGetPreviewControl();
+        if (preview == null)
+        {
+            _logger.Debug("Preview control null; skipping snapshot.");
+            return _windowPreviewSnapshot;
+        }
+
+        if (preview.IsPreviewRunning)
+        {
+            _logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
+
+            _windowBoundsDebounce?.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
+            return _windowPreviewSnapshot;
+        }
+
         using var logicalDepth = new MonitorPreviewDisplay.PreviewLogicalScope(nameof(CaptureWindowPreviewSnapshot), _logger);
         if (!logicalDepth.Entered)
         {
@@ -2713,8 +2798,15 @@ public partial class AppEditorForm : WinForms.Form
 
     private async void ScheduleWindowPreviewRebuild(TimeSpan delay)
     {
-        var preview = monitorPreviewDisplay;
-        if (preview is null || preview.IsDisposed)
+        var preview = TryGetPreviewControl();
+        if (preview == null)
+        {
+            _logger.Debug("Preview control null; skipping window/overlay update.");
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
+
+        if (preview.IsDisposed)
         {
             _windowPreviewRebuildScheduled = false;
             return;
@@ -2722,8 +2814,9 @@ public partial class AppEditorForm : WinForms.Form
 
         if (preview.IsPreviewRunning)
         {
-            Logger.Debug("WindowPreviewRebuild skipped_due_to_live_preview");
-            _windowBoundsDebounce.Stop();
+            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+            _windowBoundsDebounce?.Stop();
             _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
             return;
@@ -2752,8 +2845,9 @@ public partial class AppEditorForm : WinForms.Form
 
         if (preview.IsPreviewRunning)
         {
-            Logger.Debug("WindowPreviewRebuild skipped_due_to_live_preview");
-            _windowBoundsDebounce.Stop();
+            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+            _windowBoundsDebounce?.Stop();
             _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
             return;
