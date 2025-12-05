@@ -128,6 +128,7 @@ public partial class AppEditorForm : WinForms.Form
     private bool _hasCachedOverlayBounds;
     private int _invalidSnapshotAttempts;
     private Drawing.PointF? _lastClickMonitorPoint;
+    private bool _settingCycleCurrentCell;
 
     private static int _simRectsDepth;
     private static int _simOverlaysDepth;
@@ -3711,6 +3712,34 @@ public partial class AppEditorForm : WinForms.Form
         btnCycleDown.Enabled = index >= 0 && index < dgvCycle.Rows.Count - 1;
     }
 
+    private void SetCycleCurrentCellSafe(DataGridViewCell? cell)
+    {
+        if (dgvCycle is null)
+        {
+            return;
+        }
+
+        if (cell is null || cell.DataGridView != dgvCycle)
+        {
+            return;
+        }
+
+        if (_settingCycleCurrentCell)
+        {
+            return;
+        }
+
+        try
+        {
+            _settingCycleCurrentCell = true;
+            dgvCycle.CurrentCell = cell;
+        }
+        finally
+        {
+            _settingCycleCurrentCell = false;
+        }
+    }
+
     private void SelectCycleItem(ProfileItemMetadata? item)
     {
         if (dgvCycle is null)
@@ -3735,7 +3764,7 @@ public partial class AppEditorForm : WinForms.Form
         try
         {
             dgvCycle.ClearSelection();
-            dgvCycle.CurrentCell = dgvCycle.Rows[index].Cells[0];
+            SetCycleCurrentCellSafe(dgvCycle.Rows[index].Cells[0]);
             dgvCycle.Rows[index].Selected = true;
         }
         finally
