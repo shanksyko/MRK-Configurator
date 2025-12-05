@@ -104,9 +104,6 @@ public partial class AppEditorForm : WinForms.Form
     private readonly SynchronizationContext? _uiContext;
     private readonly int _uiThreadId;
     private readonly IInstalledAppsProvider _installedAppsProvider = new RegistryInstalledAppsProvider();
-    private readonly List<InstalledAppInfo> _allApps = new();
-    private readonly WinForms.Label _installedAppsStatusLabel = new();
-    private WinForms.TextBox? _installedAppsSearchBox;
     private bool _appsListLoaded;
     private readonly Guid _editSessionId;
     private readonly IDisposable _logScope;
@@ -179,8 +176,6 @@ public partial class AppEditorForm : WinForms.Form
 
         _ = rbExe ?? throw new InvalidOperationException("O seletor de executável não foi carregado.");
         _ = rbBrowser ?? throw new InvalidOperationException("O seletor de navegador não foi carregado.");
-        _ = grpInstalledApps ?? throw new InvalidOperationException("O grupo de aplicativos instalados não foi carregado.");
-        var installedAppsList = lvApps ?? throw new InvalidOperationException("A lista de aplicativos instalados não foi carregada.");
         _ = btnBrowseExe ?? throw new InvalidOperationException("O botão de procurar executáveis não foi carregado.");
         _ = cmbBrowserEngine ?? throw new InvalidOperationException("O seletor de motor de navegador não foi carregado.");
         _ = lblBrowserDetected ?? throw new InvalidOperationException("O rótulo de navegadores detectados não foi carregado.");
@@ -188,6 +183,7 @@ public partial class AppEditorForm : WinForms.Form
 
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
+        previewControl.IsCoordinateAnalysisMode = true;
         previewControl.EditSessionId = _editSessionId;
         previewControl.PreviewStarted += MonitorPreviewDisplayOnPreviewStarted;
         previewControl.PreviewStopped += MonitorPreviewDisplayOnPreviewStopped;
@@ -250,8 +246,6 @@ public partial class AppEditorForm : WinForms.Form
             pausePreview: null,
             resumePreview: null,
             Log.ForContext<TabEditCoordinator>().ForContext("EditSessionId", _editSessionId));
-
-        ConfigureInstalledAppsSection(installedAppsList);
 
         appsTab.ExecutableChosen += AppsTab_ExecutableChosen;
         appsTab.ExecutableCleared += AppsTab_ExecutableCleared;
@@ -341,30 +335,6 @@ public partial class AppEditorForm : WinForms.Form
 
         ApplyAppTypeUI();
         UpdatePreviewVisibility();
-    }
-
-    private void ConfigureInstalledAppsSection(WinForms.ListView installedAppsList)
-    {
-        var statusLabel = _installedAppsStatusLabel;
-        statusLabel.Dock = WinForms.DockStyle.Bottom;
-        statusLabel.Height = 20;
-        statusLabel.TextAlign = ContentAlignment.MiddleLeft;
-        statusLabel.ForeColor = SystemColors.GrayText;
-        statusLabel.Padding = new WinForms.Padding(0, 4, 0, 0);
-        statusLabel.Visible = false;
-        grpInstalledApps.Controls.Add(statusLabel);
-
-        _installedAppsSearchBox = new WinForms.TextBox
-        {
-            Dock = WinForms.DockStyle.Top,
-            PlaceholderText = "Buscar aplicativos instalados...",
-        };
-        _installedAppsSearchBox.TextChanged += InstalledAppsSearch_TextChanged;
-        grpInstalledApps.Controls.Add(_installedAppsSearchBox);
-        grpInstalledApps.Controls.SetChildIndex(_installedAppsSearchBox, 0);
-        grpInstalledApps.Controls.SetChildIndex(installedAppsList, 1);
-
-        EnsureInstalledAppsColumns(installedAppsList);
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -606,27 +576,6 @@ public partial class AppEditorForm : WinForms.Form
             appsTabControl.Enabled = isExecutable;
         }
 
-        if (grpInstalledApps is not null)
-        {
-            grpInstalledApps.Visible = isExecutable;
-            grpInstalledApps.Enabled = isExecutable;
-            grpInstalledApps.Refresh();
-        }
-
-        if (_installedAppsSearchBox is not null)
-        {
-            _installedAppsSearchBox.Visible = isExecutable;
-            _installedAppsSearchBox.Enabled = isExecutable;
-            _installedAppsSearchBox.TabStop = isExecutable;
-        }
-
-        if (lvApps is not null)
-        {
-            lvApps.Visible = isExecutable;
-            lvApps.Enabled = isExecutable;
-            lvApps.TabStop = isExecutable;
-        }
-
         if (btnBrowseExe is not null)
         {
             btnBrowseExe.Visible = isExecutable;
@@ -646,11 +595,6 @@ public partial class AppEditorForm : WinForms.Form
             txtArgumentos.Enabled = isExecutable;
             txtArgumentos.ReadOnly = !isExecutable;
             txtArgumentos.TabStop = isExecutable;
-        }
-
-        if (!isExecutable)
-        {
-            SetInstalledAppsStatus(string.Empty, isError: false);
         }
 
         if (isBrowser)
@@ -697,13 +641,11 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         var selectedTabName = tabEditor?.SelectedTab?.Name ?? tabEditor?.SelectedTab?.Text ?? string.Empty;
-        var installedAppsVisible = grpInstalledApps?.Visible ?? false;
         _logger.Information(
-            "ApplyAppTypeUI: exit selectedTab={SelectedTab} isExecutable={IsExecutable} isBrowser={IsBrowser} installedAppsVisible={InstalledAppsVisible} // MIERUKA_FIX",
+            "ApplyAppTypeUI: exit selectedTab={SelectedTab} isExecutable={IsExecutable} isBrowser={IsBrowser} // MIERUKA_FIX",
             selectedTabName,
             isExecutable,
-            isBrowser,
-            installedAppsVisible);
+            isBrowser);
     }
 
     private static void SetTabVisibility(TabControl tabControl, TabPage tabPage, int originalIndex, bool visible)
@@ -736,7 +678,6 @@ public partial class AppEditorForm : WinForms.Form
     {
         if (rbExe?.Checked != true)
         {
-            SetInstalledAppsStatus(string.Empty, isError: false);
             return;
         }
 
@@ -758,21 +699,12 @@ public partial class AppEditorForm : WinForms.Form
 
         try
         {
-            SetInstalledAppsStatus("Carregando aplicativos instalados...", isError: false);
             var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
-            _allApps.Clear();
-            _allApps.AddRange(apps);
-
-            PopulateInstalledApps(_allApps);
             appsTabControl?.SetInstalledApps(apps);
-            SetInstalledAppsStatus(string.Empty, isError: false);
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
-            _allApps.Clear();
-            PopulateInstalledApps(Array.Empty<InstalledAppInfo>());
-            SetInstalledAppsStatus("Não foi possível carregar a lista de aplicativos instalados.", isError: true);
             _appsListLoaded = false;
         }
         finally
@@ -920,106 +852,6 @@ public partial class AppEditorForm : WinForms.Form
                 ? Installation.DisplayName
                 : $"{Installation.DisplayName} (não encontrado)";
         }
-    }
-
-    private void InstalledAppsSearch_TextChanged(object? sender, EventArgs e)
-    {
-        if (lvApps is null)
-        {
-            return;
-        }
-
-        var term = _installedAppsSearchBox?.Text;
-        if (string.IsNullOrWhiteSpace(term))
-        {
-            PopulateInstalledApps(_allApps);
-            return;
-        }
-
-        var filtered = _allApps
-            .Where(app =>
-                app.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                (!string.IsNullOrWhiteSpace(app.Vendor) && app.Vendor.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                app.ExecutablePath.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                (!string.IsNullOrWhiteSpace(app.Source) && app.Source.Contains(term, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        PopulateInstalledApps(filtered);
-    }
-
-    private void PopulateInstalledApps(IReadOnlyList<InstalledAppInfo> apps)
-    {
-        if (lvApps is null)
-        {
-            return;
-        }
-
-        EnsureInstalledAppsColumns(lvApps);
-
-        lvApps.BeginUpdate();
-        try
-        {
-            lvApps.Items.Clear();
-            foreach (var app in apps)
-            {
-                lvApps.Items.Add(CreateListViewItem(app));
-            }
-
-            lvApps.SelectedItems.Clear();
-        }
-        finally
-        {
-            lvApps.EndUpdate();
-        }
-
-        if (lvApps.Columns.Count > 0)
-        {
-            lvApps.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-        }
-    }
-
-    private static WinForms.ListViewItem CreateListViewItem(InstalledAppInfo app)
-    {
-        var item = new WinForms.ListViewItem(app.Name)
-        {
-            Tag = app,
-        };
-
-        item.SubItems.Add(app.Version ?? string.Empty);
-        item.SubItems.Add(app.Vendor ?? string.Empty);
-        item.SubItems.Add(app.ExecutablePath);
-        item.SubItems.Add(app.Source);
-
-        return item;
-    }
-
-    private void SetInstalledAppsStatus(string? message, bool isError)
-    {
-        if (_installedAppsStatusLabel is null)
-        {
-            return;
-        }
-
-        var text = message ?? string.Empty;
-        var hasText = !string.IsNullOrWhiteSpace(text);
-
-        _installedAppsStatusLabel.Text = text;
-        _installedAppsStatusLabel.ForeColor = isError ? Drawing.Color.Maroon : SystemColors.GrayText;
-        _installedAppsStatusLabel.Visible = hasText && (rbExe?.Checked ?? false);
-    }
-
-    private static void EnsureInstalledAppsColumns(WinForms.ListView listView)
-    {
-        if (listView.Columns.Count > 0)
-        {
-            return;
-        }
-
-        listView.Columns.Add("Nome", 200, HorizontalAlignment.Left);
-        listView.Columns.Add("Versão", 80, HorizontalAlignment.Left);
-        listView.Columns.Add("Fornecedor", 120, HorizontalAlignment.Left);
-        listView.Columns.Add("Caminho", 320, HorizontalAlignment.Left);
-        listView.Columns.Add("Origem", 80, HorizontalAlignment.Left);
     }
 
     private void Sites_ListChanged(object? sender, ListChangedEventArgs e)
@@ -1859,7 +1691,7 @@ public partial class AppEditorForm : WinForms.Form
 
         var text = coordinates is null
             ? "X=–, Y=–"
-            : FormattableString.Invariant($"X={coordinates.Value.X:F1}, Y={coordinates.Value.Y:F1}");
+            : $"X={coordinates.Value.X}, Y={coordinates.Value.Y}";
 
         if (!string.Equals(label.Text, text, StringComparison.Ordinal))
         {
