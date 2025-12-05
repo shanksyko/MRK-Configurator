@@ -23,6 +23,7 @@ using Mieruka.App.Services.Ui;
 using Mieruka.App.Simulation;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Config;
+using Mieruka.Core.InstalledApps;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Contracts;
@@ -32,7 +33,7 @@ using Serilog.Context;
 
 namespace Mieruka.App.Forms;
 
-public partial class AppEditorForm : WinForms.Form
+public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 {
     private static readonly ILogger Logger = Log.ForContext<AppEditorForm>();
     private readonly ILogger _logger = Log.ForContext<AppEditorForm>(); // MIERUKA_FIX
@@ -77,6 +78,7 @@ public partial class AppEditorForm : WinForms.Form
     private readonly List<MonitorInfo> _monitors;
     private readonly string? _preferredMonitorId;
     private readonly IAppRunner _appRunner;
+    private readonly AppTestRunner _appTestRunner;
     private readonly IList<ProgramaConfig>? _profileApps;
     private readonly BindingList<ProfileItemMetadata> _profileItems = new();
     private ProfileItemMetadata? _editingMetadata;
@@ -209,6 +211,7 @@ public partial class AppEditorForm : WinForms.Form
         _appRunner = appRunner ?? new AppRunner();
         _appRunner.BeforeMoveWindow += AppRunnerOnBeforeMoveWindow;
         _appRunner.AfterMoveWindow += AppRunnerOnAfterMoveWindow;
+        _appTestRunner = new AppTestRunner(this, _appRunner);
         _providedMonitors = monitors;
         _monitors = new List<MonitorInfo>();
         _preferredMonitorId = selectedMonitorId;
@@ -334,6 +337,7 @@ public partial class AppEditorForm : WinForms.Form
             rbExe.Checked = !isBrowser;
         }
 
+        BindInstalledBrowsers();
         ApplyAppTypeUI();
         UpdatePreviewVisibility();
     }
@@ -342,7 +346,12 @@ public partial class AppEditorForm : WinForms.Form
 
     public BindingList<SiteConfig> ResultadoSites => new(_sites.Select(site => site with { }).ToList());
 
-    public string? SelectedMonitorId => _selectedMonitorId;
+    public string? SelectedMonitorId => _selectedMonitorId ?? (_selectedMonitorInfo is null ? null : MonitorIdentifier.Create(_selectedMonitorInfo));
+
+    IReadOnlyList<MonitorInfo> IMonitorSelectionProvider.GetAvailableMonitors()
+    {
+        return _monitors.ToList();
+    }
 
     private IEnumerable<ProgramaConfig> CurrentProfileItems()
     {
@@ -716,6 +725,30 @@ public partial class AppEditorForm : WinForms.Form
         }
     }
 
+    private void BindInstalledBrowsers()
+    {
+        if (cmbNavegadores is null)
+        {
+            return;
+        }
+
+        var browsers = BrowserDiscovery.GetInstalledBrowsers().ToList();
+
+        cmbNavegadores.DisplayMember = nameof(BrowserInfo.Name);
+        cmbNavegadores.ValueMember = nameof(BrowserInfo.ExecutablePath);
+        cmbNavegadores.DataSource = browsers;
+        cmbNavegadores.Enabled = browsers.Count > 0;
+
+        if (browsers.Count > 0)
+        {
+            cmbNavegadores.SelectedIndex = 0;
+        }
+        else
+        {
+            cmbNavegadores.SelectedIndex = -1;
+        }
+    }
+
     private void BindDetectedBrowsers()
     {
         if (cmbBrowserEngine is null || lblBrowserDetected is null || pnlBrowserPanel is null)
@@ -772,6 +805,27 @@ public partial class AppEditorForm : WinForms.Form
         {
             sitesEditorControl.Enabled = hasSupported;
         }
+    }
+
+    private void cmbNavegadores_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (cmbNavegadores?.SelectedItem is not BrowserInfo browser)
+        {
+            return;
+        }
+
+        if (txtExecutavel is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(browser.ExecutablePath))
+        {
+            return;
+        }
+
+        txtExecutavel.Text = browser.ExecutablePath;
+        txtExecutavel.SelectionStart = txtExecutavel.TextLength;
     }
 
     private static string BuildBrowserDetectionMessage(IReadOnlyList<BrowserRegistry.BrowserInstallation> detections)
@@ -3206,22 +3260,6 @@ public partial class AppEditorForm : WinForms.Form
 
     private async void btnTestReal_Click(object? sender, EventArgs e)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            WinForms.MessageBox.Show(
-                this,
-                "O teste de posicionamento está disponível apenas no Windows.",
-                "Teste de aplicativo",
-                WinForms.MessageBoxButtons.OK,
-                WinForms.MessageBoxIcon.Information);
-            return;
-        }
-
-        if (!TryBuildCurrentApp("Teste de aplicativo", out var app, out var monitor, out var bounds))
-        {
-            return;
-        }
-
         var button = btnTestReal;
         if (button is not null)
         {
@@ -3248,7 +3286,8 @@ public partial class AppEditorForm : WinForms.Form
             }
             OnBeforeMoveWindowUI();
 
-            await _appRunner.RunAndPositionAsync(app, monitor, bounds).ConfigureAwait(true);
+            var app = ConstruirPrograma();
+            await _appTestRunner.RunTestAsync(app, this).ConfigureAwait(true);
         }
         catch (Exception ex)
         {

@@ -28,12 +28,13 @@ using Drawing = System.Drawing;
 
 namespace Mieruka.App.Forms;
 
-public partial class MainForm : WinForms.Form
+public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 {
     private readonly BindingList<ProgramaConfig> _programas = new();
     private readonly ITelemetry _telemetry = new UiTelemetry();
     private readonly Orchestrator _orchestrator;
     private readonly IAppRunner _appRunner;
+    private readonly AppTestRunner _appTestRunner;
     private bool _busy;
     private readonly List<MonitorInfo> _monitorSnapshot = new();
     private readonly List<MonitorCardContext> _monitorCardOrder = new();
@@ -66,6 +67,13 @@ public partial class MainForm : WinForms.Form
 
     public string? SelectedMonitorId { get; private set; }
 
+    IReadOnlyList<MonitorInfo> IMonitorSelectionProvider.GetAvailableMonitors()
+    {
+        return _monitorSnapshot.Count > 0
+            ? _monitorSnapshot.ToList()
+            : CaptureMonitorSnapshot();
+    }
+
     public event EventHandler<string>? MonitorSelected;
 
     public MainForm()
@@ -84,6 +92,7 @@ public partial class MainForm : WinForms.Form
         _appRunner = new AppRunner();
         _appRunner.BeforeMoveWindow += AppRunnerOnBeforeMoveWindow;
         _appRunner.AfterMoveWindow += AppRunnerOnAfterMoveWindow;
+        _appTestRunner = new AppTestRunner(this, _appRunner);
 
         UpdateStatusText("Pronto");
 
@@ -1232,7 +1241,20 @@ public partial class MainForm : WinForms.Form
 
     private void btnAdicionar_Click(object? sender, EventArgs e)
     {
-        AbrirEditor(null);
+        var novoPrograma = new ProgramaConfig
+        {
+            Id = GerarIdentificadorUnico("novo_programa"),
+            Name = "Novo aplicativo",
+            AutoStart = true,
+            Window = new WindowConfig
+            {
+                FullScreen = true,
+                Monitor = ResolveDefaultMonitorKey(),
+            },
+            TargetMonitorStableId = SelectedMonitorId ?? string.Empty,
+        };
+
+        AbrirEditor(null, novoPrograma);
     }
 
     private void btnEditar_Click(object? sender, EventArgs e)
@@ -1369,8 +1391,7 @@ public partial class MainForm : WinForms.Form
             return;
         }
 
-        var profile = ProfileFromSelection(selecionado);
-        await RunProfileAsync(profile).ConfigureAwait(true);
+        await _appTestRunner.RunTestAsync(selecionado, this).ConfigureAwait(true);
     }
 
     private void menuPerfisSalvar_Click(object? sender, EventArgs e)
@@ -1972,13 +1993,35 @@ public partial class MainForm : WinForms.Form
         return id;
     }
 
-    private void AbrirEditor(ProgramaConfig? selected)
+    private MonitorKey ResolveDefaultMonitorKey()
+    {
+        if (!string.IsNullOrWhiteSpace(SelectedMonitorId))
+        {
+            var normalized = MonitorIdentifier.Normalize(SelectedMonitorId);
+            var selectedMonitor = _monitorSnapshot.FirstOrDefault(m =>
+                string.Equals(MonitorIdentifier.Normalize(MonitorIdentifier.Create(m)), normalized, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(MonitorIdentifier.Normalize(m.StableId), normalized, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedMonitor is not null)
+            {
+                return selectedMonitor.Key;
+            }
+        }
+
+        return _monitorSnapshot.FirstOrDefault(m => m.IsPrimary)?.Key
+            ?? _monitorSnapshot.FirstOrDefault()?.Key
+            ?? new MonitorKey();
+    }
+
+    private void AbrirEditor(ProgramaConfig? selected, ProgramaConfig? template = null)
     {
         var monitors = _monitorSnapshot.Count > 0
             ? _monitorSnapshot.ToList()
             : CaptureMonitorSnapshot().ToList();
 
-        using var editor = new AppEditorForm(selected, monitors, SelectedMonitorId, _appRunner, _programas);
+        var programaParaEdicao = template ?? selected;
+
+        using var editor = new AppEditorForm(programaParaEdicao, monitors, SelectedMonitorId, _appRunner, _programas);
         var resultado = editor.ShowDialog(this);
         if (resultado != WinForms.DialogResult.OK)
         {
