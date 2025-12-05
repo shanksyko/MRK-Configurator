@@ -130,6 +130,7 @@ public partial class AppEditorForm : WinForms.Form
     private bool _lastOverlayFullScreen;
     private bool _hasCachedOverlayBounds;
     private int _invalidSnapshotAttempts;
+    private Drawing.PointF? _lastClickMonitorPoint;
 
     private static int _simRectsDepth;
     private static int _simOverlaysDepth;
@@ -1849,7 +1850,7 @@ public partial class AppEditorForm : WinForms.Form
         }
     }
 
-    private void UpdateMonitorCoordinateLabel(Drawing.Point? coordinates)
+    private void UpdateMonitorCoordinateLabel(Drawing.PointF? coordinates)
     {
         if (lblMonitorCoordinates is not { IsDisposed: false } label)
         {
@@ -1858,7 +1859,7 @@ public partial class AppEditorForm : WinForms.Form
 
         var text = coordinates is null
             ? "X=–, Y=–"
-            : FormattableString.Invariant($"X={coordinates.Value.X}, Y={coordinates.Value.Y}");
+            : FormattableString.Invariant($"X={coordinates.Value.X:F1}, Y={coordinates.Value.Y:F1}");
 
         if (!string.Equals(label.Text, text, StringComparison.Ordinal))
         {
@@ -1885,37 +1886,7 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
-        var monitorPoint = Drawing.Point.Round(e.MonitorPoint);
-        UpdateMonitorCoordinateLabel(monitorPoint);
-
-        if (preview.IsPreviewRunning)
-        {
-            _logger.Debug("Action skipped because live preview is running.");
-
-            _windowBoundsDebounce?.Stop();
-            _windowBoundsDebouncePending = false;
-            _windowPreviewRebuildScheduled = false;
-
-            _hoverPendingPoint = null;
-            return;
-        }
-
-        _hoverPendingPoint = monitorPoint;
-
-        if (!_hoverSw.IsRunning)
-        {
-            _hoverSw.Start();
-        }
-
-        if (_hoverAppliedPoint is null || _hoverSw.Elapsed >= HoverThrottleInterval)
-        {
-            CancelHoverThrottleTimer();
-            ApplyPendingHoverPoint(enforceInterval: false);
-            return;
-        }
-
-        var remaining = HoverThrottleInterval - _hoverSw.Elapsed;
-        ScheduleHoverPointUpdate(remaining);
+        UpdateMonitorCoordinateLabel(e.MonitorPoint);
     }
 
     private void MonitorPreviewDisplay_OnMonitorMouseClick(object? sender, MonitorPreviewDisplay.MonitorMouseEventArgs e)
@@ -1932,25 +1903,8 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
-        var monitorPoint = Drawing.Point.Round(e.MonitorPoint);
-        UpdateMonitorCoordinateLabel(monitorPoint);
-
-        if (preview.IsPreviewRunning)
-        {
-            _logger.Debug("Action skipped because live preview is running.");
-
-            _windowBoundsDebounce?.Stop();
-            _windowBoundsDebouncePending = false;
-            _windowPreviewRebuildScheduled = false;
-
-            return;
-        }
-
-        _hoverPendingPoint = monitorPoint;
-        _hoverAppliedPoint = null;
-        _hoverSw.Reset();
-        CancelHoverThrottleTimer();
-        ApplyPendingHoverPoint(enforceInterval: false);
+        UpdateMonitorCoordinateLabel(e.MonitorPoint);
+        _lastClickMonitorPoint = e.MonitorPoint;
     }
 
     private void MonitorPreviewDisplay_MonitorMouseLeft(object? sender, EventArgs e)
