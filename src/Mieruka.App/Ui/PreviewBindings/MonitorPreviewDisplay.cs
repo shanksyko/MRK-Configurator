@@ -26,6 +26,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private readonly List<SimRect> _simRects;
     private readonly List<(Drawing.RectangleF Bounds, string Text)> _glyphRegions;
     private readonly WinForms.ToolTip _tooltip;
+    private bool _isStartingPreview;
+    private bool _isStoppingPreview;
     private bool _previewStarted;
     private bool _previewRunning;
     private MonitorPreviewHost? _host;
@@ -40,6 +42,53 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private const string NetworkGlyph = "🌐";
     private const string NetworkTooltipText = "Requer conexão de rede para iniciar.";
     private const int MinimumPreviewSurface = 50;
+    private const int PreviewDepthLimit = 64;
+
+    internal readonly struct PreviewCallScope : IDisposable
+    {
+        private readonly ILogger _logger;
+        private readonly bool _entered;
+
+        public PreviewCallScope(string scope, ILogger logger)
+        {
+            Scope = scope;
+            _logger = logger;
+            var depth = Interlocked.Increment(ref PreviewCallDepth);
+            if (depth > PreviewDepthLimit)
+            {
+                _entered = false;
+                Interlocked.Decrement(ref PreviewCallDepth);
+                _logger.Error(
+                    "PreviewCallDepthLimitReached: scope={Scope} depth={Depth} limit={Limit} stack={Stack}",
+                    Scope,
+                    depth,
+                    PreviewDepthLimit,
+                    Environment.StackTrace);
+            }
+            else
+            {
+                _entered = true;
+            }
+        }
+
+        public string Scope { get; }
+
+        public bool Entered => _entered;
+
+        public void Dispose()
+        {
+            if (_entered)
+            {
+                var depth = Interlocked.Decrement(ref PreviewCallDepth);
+                if (depth < 0)
+                {
+                    Interlocked.Exchange(ref PreviewCallDepth, 0);
+                }
+            }
+        }
+    }
+
+    internal static int PreviewCallDepth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MonitorPreviewDisplay"/> class.
@@ -233,46 +282,66 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     public async Task EnsurePreviewStartedAsync()
     {
+        using var depth = new PreviewCallScope(nameof(EnsurePreviewStartedAsync), Logger);
+        if (!depth.Entered)
+        {
+            return;
+        }
+
         using var guard = new StackGuard(nameof(EnsurePreviewStartedAsync));
         if (!guard.Entered)
         {
             return;
         }
 
-        var monitorIdForLog = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
-        Logger.Debug(
-            "MonitorPreviewDisplay: attempting to start preview for {MonitorId}",
-            string.IsNullOrWhiteSpace(monitorIdForLog) ? "<unknown>" : monitorIdForLog);
-
-        if (_previewStarted)
+        if (_isStartingPreview)
         {
+            Logger.Debug("EnsurePreviewStartedAsync: start already in progress");
             return;
         }
 
-        var host = _host;
-        var monitorId = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
-        if (host is null || string.IsNullOrWhiteSpace(monitorId))
+        _isStartingPreview = true;
+        try
         {
-            NotifyPreviewFailed("Pré-visualização indisponível.");
-            return;
-        }
+            var monitorIdForLog = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
+            Logger.Debug(
+                "MonitorPreviewDisplay: attempting to start preview for {MonitorId}",
+                string.IsNullOrWhiteSpace(monitorIdForLog) ? "<unknown>" : monitorIdForLog);
 
-        host.SetPreviewRequestedByUser(true);
-        var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
-        if (started)
-        {
-            _previewStarted = true;
-            _previewRunning = true;
-            SetPlaceholder(null);
-        }
-        else
-        {
-            _monitor = null;
-            NotifyPreviewFailed("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
-            if (string.IsNullOrWhiteSpace(_placeholderMessage))
+            if (_previewStarted || _previewRunning)
             {
-                SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                return;
             }
+
+            var host = _host;
+            var monitorId = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
+            if (host is null || string.IsNullOrWhiteSpace(monitorId))
+            {
+                NotifyPreviewFailed("Pré-visualização indisponível.");
+                return;
+            }
+
+            host.SetPreviewRequestedByUser(true);
+            var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
+            if (started)
+            {
+                _previewStarted = true;
+                _previewRunning = true;
+                SetPlaceholder(null);
+            }
+            else
+            {
+                _monitor = null;
+                NotifyPreviewFailed("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                if (string.IsNullOrWhiteSpace(_placeholderMessage))
+                {
+                    SetPlaceholder("Pré-visualização indisponível. Monitor configurado não foi encontrado.");
+                }
+            }
+        }
+        finally
+        {
+            _isStartingPreview = false;
         }
     }
 
@@ -539,6 +608,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             return;
         }
 
+        if (_isStartingPreview || _isStoppingPreview)
+        {
+            Logger.Debug("MonitorPreviewDisplay: ignoring click while transition in progress");
+            return;
+        }
+
         if (e.Button != WinForms.MouseButtons.Left)
         {
             Logger.Debug("MonitorPreviewDisplay: ignoring non-left click");
@@ -557,53 +632,73 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     public async Task StopPreviewAsync(CancellationToken cancellationToken = default)
     {
+        using var depth = new PreviewCallScope(nameof(StopPreviewAsync), Logger);
+        if (!depth.Entered)
+        {
+            return;
+        }
+
         using var guard = new StackGuard(nameof(StopPreviewAsync));
         if (!guard.Entered)
         {
             return;
         }
 
-        if (!_previewRunning && !_previewStarted)
+        if (_isStoppingPreview)
         {
+            Logger.Debug("StopPreviewAsync: stop already in progress");
             return;
         }
 
-        var host = _host;
-        if (host is not null)
-        {
-            try
-            {
-                await host.StopSafeAsync(cancellationToken).ConfigureAwait(true);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Logger.Warning(ex, "MonitorPreviewDisplay: failed to stop preview host safely");
-                NotifyPreviewFailed("Falha ao encerrar a pré-visualização.");
-            }
-        }
-
-        if (_pictureBox.IsDisposed)
-        {
-            _previewRunning = false;
-            _previewStarted = false;
-            return;
-        }
-
+        _isStoppingPreview = true;
         try
         {
-            _pictureBox.Image?.Dispose();
-        }
-        catch
-        {
-        }
+            if (!_previewRunning && !_previewStarted)
+            {
+                return;
+            }
 
-        _pictureBox.Image = null;
-        SetPlaceholder("Pré-visualização pausada — clique para iniciar");
-        _previewRunning = false;
-        _previewStarted = false;
+            var host = _host;
+            if (host is not null)
+            {
+                try
+                {
+                    await host.StopSafeAsync(cancellationToken).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning(ex, "MonitorPreviewDisplay: failed to stop preview host safely");
+                    NotifyPreviewFailed("Falha ao encerrar a pré-visualização.");
+                }
+            }
+
+            if (_pictureBox.IsDisposed)
+            {
+                _previewRunning = false;
+                _previewStarted = false;
+                return;
+            }
+
+            try
+            {
+                _pictureBox.Image?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _pictureBox.Image = null;
+            SetPlaceholder("Pré-visualização pausada — clique para iniciar");
+            _previewRunning = false;
+            _previewStarted = false;
+        }
+        finally
+        {
+            _isStoppingPreview = false;
+        }
     }
 
     private void NotifyPreviewFailed(string reason)

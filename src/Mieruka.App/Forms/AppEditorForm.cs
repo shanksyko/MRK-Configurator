@@ -90,6 +90,8 @@ public partial class AppEditorForm : WinForms.Form
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
     private bool _suppressWindowInputHandlers;
+    private bool _inRebuildSimRects;
+    private bool _inRebuildSimulationOverlays;
     private readonly AppCycleSimulator _cycleSimulator = new();
     private readonly List<SimRectDisplay> _cycleDisplays = new();
     private CancellationTokenSource? _cycleSimulationCts;
@@ -1018,6 +1020,22 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimRects()
     {
+        using var depth = new MonitorPreviewDisplay.PreviewCallScope(nameof(RebuildSimRects), _logger);
+        if (!depth.Entered)
+        {
+            _logger.Error("RebuildSimRects: depth limit reached; aborting rebuild");
+            return;
+        }
+
+        if (_inRebuildSimRects)
+        {
+            _logger.Debug("RebuildSimRects: recursion blocked // MIERUKA_FIX");
+            return;
+        }
+
+        _inRebuildSimRects = true;
+        try
+        {
         _logger.Debug(
             "RebuildSimRects: enter isDisposed={IsDisposed} simulationActive={SimulationActive} // MIERUKA_FIX",
             IsDisposed,
@@ -1100,6 +1118,11 @@ public partial class AppEditorForm : WinForms.Form
             "RebuildSimRects: exit createdDisplays={DisplayCount} totalItems={ItemCount} // MIERUKA_FIX",
             _cycleDisplays.Count,
             items.Count);
+        }
+        finally
+        {
+            _inRebuildSimRects = false;
+        }
     }
 
     private IReadOnlyList<AppCycleSimulator.SimRect> BuildSimRectList()
@@ -2351,6 +2374,13 @@ public partial class AppEditorForm : WinForms.Form
 
     private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
     {
+        using var depth = new MonitorPreviewDisplay.PreviewCallScope(nameof(CaptureWindowPreviewSnapshot), _logger);
+        if (!depth.Entered)
+        {
+            _logger.Error("CaptureWindowPreviewSnapshot: depth limit reached; aborting snapshot");
+            return _windowPreviewSnapshot;
+        }
+
         var now = _windowPreviewStopwatch.Elapsed;
         var monitor = GetSelectedMonitor();
         var monitorId = monitor is null ? null : MonitorIdentifier.Create(monitor);
@@ -2563,6 +2593,22 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimulationOverlays()
     {
+        using var depth = new MonitorPreviewDisplay.PreviewCallScope(nameof(RebuildSimulationOverlays), _logger);
+        if (!depth.Entered)
+        {
+            _logger.Error("RebuildSimulationOverlays: depth limit reached; aborting rebuild");
+            return;
+        }
+
+        if (_inRebuildSimulationOverlays)
+        {
+            _logger.Debug("RebuildSimulationOverlays: recursion blocked // MIERUKA_FIX");
+            return;
+        }
+
+        _inRebuildSimulationOverlays = true;
+        try
+        {
         if (monitorPreviewDisplay is null)
         {
             _logger.Debug("RebuildSimulationOverlays: skip missing preview display // MIERUKA_FIX");
@@ -2690,6 +2736,11 @@ public partial class AppEditorForm : WinForms.Form
             overlayApps.Count,
             overlays.Count,
             current.Id ?? string.Empty);
+        }
+        finally
+        {
+            _inRebuildSimulationOverlays = false;
+        }
     }
 
     private void CacheOverlaySnapshot(WindowPreviewSnapshot snapshot)
