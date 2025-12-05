@@ -203,6 +203,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// </summary>
     public bool IsPaused => _host?.IsPaused ?? false;
 
+    public bool IsPreviewRunning => _previewRunning;
+
     /// <summary>
     /// Gets or sets the ambient edit session identifier used for logging correlation.
     /// </summary>

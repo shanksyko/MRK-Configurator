@@ -2319,6 +2319,12 @@ public partial class AppEditorForm : WinForms.Form
         _windowBoundsDebounce.Stop();
         _windowBoundsDebouncePending = false;
 
+        if (preview.IsPreviewRunning)
+        {
+            Logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
+            return;
+        }
+
         var snapshot = CaptureWindowPreviewSnapshot();
         var now = _windowPreviewStopwatch.Elapsed;
 
@@ -2363,6 +2369,12 @@ public partial class AppEditorForm : WinForms.Form
         }
 
         _ = ClampWindowInputsToMonitor(null, allowFullScreen: true);
+
+        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        {
+            Logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
+            return;
+        }
 
         var snapshot = CaptureWindowPreviewSnapshot();
         var bounds = snapshot.Bounds;
