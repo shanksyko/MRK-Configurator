@@ -47,7 +47,6 @@ partial class AppEditorForm
     internal ComboBox cboMonitores = null!;
     internal MonitorPreviewDisplay monitorPreviewDisplay = null!;
     internal TableLayoutPanel tlpMonitorPreview = null!;
-    internal Label lblCoordinateAnalysisTitle = null!;
     internal Label lblMonitorCoordinates = null!;
     internal TableLayoutPanel tlpCycle = null!;
     internal DataGridView dgvCycle = null!;
@@ -118,7 +117,6 @@ partial class AppEditorForm
         var lblMonitor = new Label();
         cboMonitores = new ComboBox();
         monitorPreviewDisplay = new MonitorPreviewDisplay();
-        lblCoordinateAnalysisTitle = new Label();
         chkJanelaTelaCheia = new CheckBox();
         var lblX = new Label();
         nudJanelaX = new NumericUpDown();
@@ -491,17 +489,15 @@ partial class AppEditorForm
         //
         tlpMonitorPreview.ColumnCount = 1;
         tlpMonitorPreview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tlpMonitorPreview.Controls.Add(lblCoordinateAnalysisTitle, 0, 0);
-        tlpMonitorPreview.Controls.Add(monitorPreviewDisplay, 0, 1);
-        tlpMonitorPreview.Controls.Add(lblMonitorCoordinates, 0, 2);
+        tlpMonitorPreview.Controls.Add(monitorPreviewDisplay, 0, 0);
+        tlpMonitorPreview.Controls.Add(lblMonitorCoordinates, 0, 1);
         tlpMonitorPreview.Dock = DockStyle.Right;
         tlpMonitorPreview.Location = new System.Drawing.Point(592, 8);
         tlpMonitorPreview.Margin = new Padding(8, 0, 0, 8);
         tlpMonitorPreview.MinimumSize = new System.Drawing.Size(420, 0);
         tlpMonitorPreview.Name = "tlpMonitorPreview";
         tlpMonitorPreview.Padding = new Padding(8);
-        tlpMonitorPreview.RowCount = 3;
-        tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpMonitorPreview.RowCount = 2;
         tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tlpMonitorPreview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         tlpMonitorPreview.Size = new System.Drawing.Size(440, 604);
@@ -511,34 +507,22 @@ partial class AppEditorForm
         //
         monitorPreviewDisplay.BackColor = System.Drawing.Color.FromArgb(176, 176, 176);
         monitorPreviewDisplay.Dock = DockStyle.Fill;
-        monitorPreviewDisplay.Location = new System.Drawing.Point(8, 31);
-        monitorPreviewDisplay.Margin = new Padding(0, 8, 0, 8);
+        monitorPreviewDisplay.Location = new System.Drawing.Point(8, 8);
+        monitorPreviewDisplay.Margin = new Padding(0, 0, 0, 8);
         monitorPreviewDisplay.Name = "monitorPreviewDisplay";
-        monitorPreviewDisplay.Size = new System.Drawing.Size(424, 519);
+        monitorPreviewDisplay.Size = new System.Drawing.Size(424, 546);
         monitorPreviewDisplay.TabIndex = 7;
         monitorPreviewDisplay.TabStop = false;
-        //
-        // lblCoordinateAnalysisTitle
-        //
-        lblCoordinateAnalysisTitle.AutoSize = true;
-        lblCoordinateAnalysisTitle.Dock = DockStyle.Fill;
-        lblCoordinateAnalysisTitle.Location = new System.Drawing.Point(8, 8);
-        lblCoordinateAnalysisTitle.Margin = new Padding(0, 0, 0, 8);
-        lblCoordinateAnalysisTitle.Name = "lblCoordinateAnalysisTitle";
-        lblCoordinateAnalysisTitle.Size = new System.Drawing.Size(424, 15);
-        lblCoordinateAnalysisTitle.TabIndex = 6;
-        lblCoordinateAnalysisTitle.Text = "Análise de coordenadas do monitor selecionado";
-        lblCoordinateAnalysisTitle.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
         //
         // lblMonitorCoordinates
         //
         lblMonitorCoordinates.AutoSize = true;
         lblMonitorCoordinates.Dock = DockStyle.Fill;
-        lblMonitorCoordinates.Location = new System.Drawing.Point(8, 558);
+        lblMonitorCoordinates.Location = new System.Drawing.Point(8, 562);
         lblMonitorCoordinates.Margin = new Padding(0);
         lblMonitorCoordinates.Name = "lblMonitorCoordinates";
         lblMonitorCoordinates.Padding = new Padding(0, 4, 0, 0);
-        lblMonitorCoordinates.Size = new System.Drawing.Size(424, 38);
+        lblMonitorCoordinates.Size = new System.Drawing.Size(424, 34);
         lblMonitorCoordinates.TabIndex = 8;
         lblMonitorCoordinates.Text = "X=–, Y=–";
         lblMonitorCoordinates.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
