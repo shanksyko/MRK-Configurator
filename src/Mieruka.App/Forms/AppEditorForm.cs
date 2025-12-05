@@ -188,6 +188,7 @@ public partial class AppEditorForm : WinForms.Form
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
         previewControl.EditSessionId = _editSessionId;
+        previewControl.PreviewStopped += MonitorPreviewDisplayOnPreviewStopped;
         _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
         var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
 
@@ -2322,6 +2323,7 @@ public partial class AppEditorForm : WinForms.Form
         if (preview.IsPreviewRunning)
         {
             Logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
+            _windowPreviewRebuildScheduled = false;
             return;
         }
 
@@ -2372,7 +2374,10 @@ public partial class AppEditorForm : WinForms.Form
 
         if (monitorPreviewDisplay is { IsPreviewRunning: true })
         {
-            Logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
+            Logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+            _windowBoundsDebounce.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
             return;
         }
 
@@ -2394,6 +2399,15 @@ public partial class AppEditorForm : WinForms.Form
         _windowBoundsDebouncePending = true;
         _windowBoundsDebounce.Stop();
         _windowBoundsDebounce.Start();
+    }
+
+    private void MonitorPreviewDisplayOnPreviewStopped(object? sender, EventArgs e)
+    {
+        _logger.Debug("monitor_preview_stopped: re-enabling snapshot pipeline");
+        _windowBoundsDebounce.Stop();
+        _windowBoundsDebouncePending = false;
+        _windowPreviewRebuildScheduled = false;
+        InvalidateWindowPreviewOverlay();
     }
 
     private void WindowBoundsDebounceOnTick(object? sender, EventArgs e)
