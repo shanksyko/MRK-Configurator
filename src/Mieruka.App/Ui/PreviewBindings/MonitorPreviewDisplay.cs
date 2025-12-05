@@ -193,6 +193,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     public event EventHandler<string>? PreviewFailed;
 
     /// <summary>
+    /// Occurs when the preview stops running.
+    /// </summary>
+    public event EventHandler? PreviewStopped;
+
+    /// <summary>
     /// Gets a value indicating whether user interactions should be ignored due to the host being paused or busy.
     /// </summary>
     public bool IsInteractionSuppressed
@@ -421,6 +426,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         _host = null;
         _monitor = null;
         _coordinateMapper = null;
+        var wasRunning = _previewRunning;
         _previewStarted = false;
         _previewRunning = false;
 
@@ -448,6 +454,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         _pictureBox.Image = null;
         SetSimulationRects(Array.Empty<SimRect>());
+
+        if (wasRunning)
+        {
+            PreviewStopped?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public async Task SuspendCaptureAsync(CancellationToken cancellationToken = default)
@@ -747,8 +758,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
             if (_pictureBox.IsDisposed)
             {
-                _previewRunning = false;
-                _previewStarted = false;
+                TransitionToStopped();
                 return;
             }
 
@@ -762,8 +772,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
             _pictureBox.Image = null;
             SetPlaceholder("Pré-visualização pausada — clique para iniciar");
-            _previewRunning = false;
-            _previewStarted = false;
+            TransitionToStopped();
         }
         finally
         {
@@ -773,8 +782,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     private void NotifyPreviewFailed(string reason)
     {
-        _previewRunning = false;
-        _previewStarted = false;
+        TransitionToStopped();
         PreviewFailed?.Invoke(this, reason);
         if (!_pictureBox.IsDisposed)
         {
@@ -806,6 +814,18 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         var monitorPoint = mapper.UiToMonitor(e.Location, displayRect);
         MouseMovedInMonitorSpace?.Invoke(this, monitorPoint);
+    }
+
+    private void TransitionToStopped()
+    {
+        var wasRunning = _previewRunning;
+        _previewRunning = false;
+        _previewStarted = false;
+
+        if (wasRunning)
+        {
+            PreviewStopped?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void PictureBoxOnMouseLeave(object? sender, EventArgs e)
