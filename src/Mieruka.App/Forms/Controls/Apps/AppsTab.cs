@@ -31,6 +31,7 @@ public sealed class AppsTab : WinForms.UserControl
     private readonly BindingList<InstalledAppInfo> _allApps = new();
     private readonly BindingList<InstalledAppInfo> _filteredApps = new();
     private bool _suppressSelectionNotifications;
+    private bool _settingCurrentCell;
     private string _currentExecutablePath = string.Empty;
     private InstalledAppInfo? _selectedApp;
 
@@ -112,6 +113,7 @@ public sealed class AppsTab : WinForms.UserControl
         _grid.DataSource = _filteredApps;
         _grid.SelectionChanged += (_, _) => NotifySelection();
         _grid.CellDoubleClick += (_, _) => ApplySelection();
+        _grid.DataBindingComplete += Grid_DataBindingComplete;
 
         layout.Controls.Add(_grid, 0, 1);
 
@@ -461,7 +463,72 @@ public sealed class AppsTab : WinForms.UserControl
         }
 
         _grid.ClearSelection();
-        _grid.CurrentCell = null;
+        ClearGridCurrentCellSafe();
+    }
+
+    private void Grid_DataBindingComplete(object? sender, DataGridViewBindingCompleteEventArgs e)
+    {
+        EnsureInitialSelection();
+    }
+
+    private void EnsureInitialSelection()
+    {
+        if (_grid.Rows.Count > 0 && _grid.CurrentCell == null)
+        {
+            SetGridCurrentCellSafe(_grid.Rows[0].Cells[0]);
+
+            BeginInvoke(new Action(() =>
+            {
+                if (_grid.Rows.Count > 0 && _grid.CurrentCell == null)
+                {
+                    SetGridCurrentCellSafe(_grid.Rows[0].Cells[0]);
+                }
+            }));
+        }
+    }
+
+    // CurrentCell changes are centralized to avoid reentrancy issues:
+    // - ClearGridSelection() clears via ClearGridCurrentCellSafe().
+    // - EnsureInitialSelection() sets the first row during DataBindingComplete and via BeginInvoke fallback.
+    private void ClearGridCurrentCellSafe()
+    {
+        if (_settingCurrentCell)
+        {
+            return;
+        }
+
+        try
+        {
+            _settingCurrentCell = true;
+            _grid.CurrentCell = null;
+        }
+        finally
+        {
+            _settingCurrentCell = false;
+        }
+    }
+
+    private void SetGridCurrentCellSafe(DataGridViewCell? cell)
+    {
+        if (_settingCurrentCell)
+        {
+            return;
+        }
+
+        if (cell is null || cell.DataGridView is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _settingCurrentCell = true;
+            cell.DataGridView.CurrentCell = cell;
+        }
+        finally
+        {
+            _settingCurrentCell = false;
+        }
     }
 
     private void FocusArgs()
