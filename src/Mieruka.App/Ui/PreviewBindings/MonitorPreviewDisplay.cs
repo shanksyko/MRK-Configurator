@@ -43,8 +43,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private const string NetworkGlyph = "🌐";
     private const string NetworkTooltipText = "Requer conexão de rede para iniciar.";
     private const int MinimumPreviewSurface = 50;
-    private const int PreviewDepthLimit = 64;
+    private const int PreviewDepthLimit = 32;
     private const int PreviewLogicalDepthLimit = 32;
+    private static readonly ThreadLocal<int> PreviewCallDepth = new(() => 0);
+    private static readonly ThreadLocal<int> PreviewLogicalDepth = new(() => 0);
 
     internal readonly struct PreviewLogicalScope : IDisposable
     {
@@ -55,12 +57,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         {
             _logger = logger;
             Scope = scope;
-            var depth = Interlocked.Increment(ref PreviewLogicalDepth);
+            var depth = PreviewLogicalDepth.Value + 1;
             if (depth > PreviewLogicalDepthLimit)
             {
                 _entered = false;
-                Interlocked.Decrement(ref PreviewLogicalDepth);
-                _logger.Error(
+                _logger.Warning(
                     "PreviewLogicalDepthLimitReached: scope={Scope} depth={Depth} limit={Limit} stack={Stack}",
                     Scope,
                     depth,
@@ -69,6 +70,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             }
             else
             {
+                PreviewLogicalDepth.Value = depth;
                 _entered = true;
             }
         }
@@ -81,11 +83,8 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         {
             if (_entered)
             {
-                var depth = Interlocked.Decrement(ref PreviewLogicalDepth);
-                if (depth < 0)
-                {
-                    Interlocked.Exchange(ref PreviewLogicalDepth, 0);
-                }
+                var depth = PreviewLogicalDepth.Value - 1;
+                PreviewLogicalDepth.Value = Math.Max(0, depth);
             }
         }
     }
@@ -99,12 +98,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         {
             Scope = scope;
             _logger = logger;
-            var depth = Interlocked.Increment(ref PreviewCallDepth);
+            var depth = PreviewCallDepth.Value + 1;
             if (depth > PreviewDepthLimit)
             {
                 _entered = false;
-                Interlocked.Decrement(ref PreviewCallDepth);
-                _logger.Error(
+                _logger.Warning(
                     "PreviewCallDepthLimitReached: scope={Scope} depth={Depth} limit={Limit} stack={Stack}",
                     Scope,
                     depth,
@@ -113,6 +111,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             }
             else
             {
+                PreviewCallDepth.Value = depth;
                 _entered = true;
             }
         }
@@ -125,17 +124,11 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         {
             if (_entered)
             {
-                var depth = Interlocked.Decrement(ref PreviewCallDepth);
-                if (depth < 0)
-                {
-                    Interlocked.Exchange(ref PreviewCallDepth, 0);
-                }
+                var depth = PreviewCallDepth.Value - 1;
+                PreviewCallDepth.Value = Math.Max(0, depth);
             }
         }
     }
-
-    internal static int PreviewCallDepth;
-    internal static int PreviewLogicalDepth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MonitorPreviewDisplay"/> class.
