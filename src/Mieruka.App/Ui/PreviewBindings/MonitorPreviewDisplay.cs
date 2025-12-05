@@ -193,9 +193,24 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     public event EventHandler<string>? PreviewFailed;
 
     /// <summary>
+    /// Occurs when the preview starts running.
+    /// </summary>
+    public event EventHandler? PreviewStarted;
+
+    /// <summary>
     /// Occurs when the preview stops running.
     /// </summary>
     public event EventHandler? PreviewStopped;
+
+    /// <summary>
+    /// Occurs when the mouse moves inside the preview using monitor coordinates.
+    /// </summary>
+    public event EventHandler<MonitorMouseEventArgs>? MonitorMouseMove;
+
+    /// <summary>
+    /// Occurs when the mouse is clicked inside the preview using monitor coordinates.
+    /// </summary>
+    public event EventHandler<MonitorMouseEventArgs>? MonitorMouseClick;
 
     /// <summary>
     /// Gets a value indicating whether user interactions should be ignored due to the host being paused or busy.
@@ -214,6 +229,22 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// Gets or sets the ambient edit session identifier used for logging correlation.
     /// </summary>
     public Guid? EditSessionId { get; set; }
+
+    public sealed class MonitorMouseEventArgs : EventArgs
+    {
+        public MonitorMouseEventArgs(string? monitorId, Drawing.PointF monitorPoint, Drawing.Point clientPoint)
+        {
+            MonitorId = monitorId;
+            MonitorPoint = monitorPoint;
+            ClientPoint = clientPoint;
+        }
+
+        public string? MonitorId { get; }
+
+        public Drawing.PointF MonitorPoint { get; }
+
+        public Drawing.Point ClientPoint { get; }
+    }
 
     /// <summary>
     /// Represents a simulated rectangle drawn on top of the monitor preview.
@@ -285,8 +316,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             }
             else
             {
-                _previewStarted = true;
-                _previewRunning = true;
+                TransitionToRunning();
                 SetPlaceholder(null);
             }
         }
@@ -394,8 +424,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             var started = await StartPreviewHostAsync(host, monitorId).ConfigureAwait(true);
             if (started)
             {
-                _previewStarted = true;
-                _previewRunning = true;
+                TransitionToRunning();
                 SetPlaceholder(null);
             }
             else
@@ -695,6 +724,16 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             return;
         }
 
+        if (TryGetMonitorPoint(e.Location, out var monitorPoint))
+        {
+            MonitorMouseClick?.Invoke(
+                this,
+                new MonitorMouseEventArgs(
+                    _monitor is null ? null : MonitorIdentifier.Create(_monitor),
+                    monitorPoint,
+                    e.Location));
+        }
+
         if (!_previewRunning)
         {
             await EnsurePreviewStartedAsync().ConfigureAwait(true);
@@ -800,20 +839,18 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         UpdateGlyphTooltip(e.Location);
 
-        var mapper = _coordinateMapper;
-        if (mapper is null)
+        if (!TryGetMonitorPoint(e.Location, out var monitorPoint))
         {
             return;
         }
 
-        var displayRect = GetImageDisplayRectangle(_pictureBox);
-        if (displayRect.Width <= 0 || displayRect.Height <= 0 || !displayRect.Contains(e.Location))
-        {
-            return;
-        }
-
-        var monitorPoint = mapper.UiToMonitor(e.Location, displayRect);
-        MouseMovedInMonitorSpace?.Invoke(this, monitorPoint);
+        MouseMovedInMonitorSpace?.Invoke(this, Drawing.Point.Round(monitorPoint));
+        MonitorMouseMove?.Invoke(
+            this,
+            new MonitorMouseEventArgs(
+                _monitor is null ? null : MonitorIdentifier.Create(_monitor),
+                monitorPoint,
+                e.Location));
     }
 
     private void TransitionToStopped()
@@ -1115,6 +1152,44 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         return new Drawing.RectangleF(x, y, width, height);
     }
 
+    public Drawing.PointF ClientToMonitor(Drawing.Point clientPoint)
+    {
+        return TryGetMonitorPoint(clientPoint, out var monitorPoint) ? monitorPoint : Drawing.PointF.Empty;
+    }
+
+    private bool TryGetMonitorPoint(Drawing.Point clientPoint, out Drawing.PointF monitorPoint)
+    {
+        monitorPoint = Drawing.PointF.Empty;
+        var mapper = _coordinateMapper;
+        if (mapper is null)
+        {
+            return false;
+        }
+
+        var displayRect = GetDisplayRectangleForMapping(_pictureBox);
+        if (displayRect.Width <= 0 || displayRect.Height <= 0 || !displayRect.Contains(clientPoint))
+        {
+            return false;
+        }
+
+        monitorPoint = mapper.UiToMonitor(clientPoint, displayRect);
+        return true;
+    }
+
+    private static Drawing.RectangleF GetDisplayRectangleForMapping(WinForms.PictureBox pictureBox)
+    {
+        var displayRect = GetImageDisplayRectangle(pictureBox);
+        if (displayRect.Width > 0 && displayRect.Height > 0)
+        {
+            return displayRect;
+        }
+
+        var clientRect = pictureBox.ClientRectangle;
+        return clientRect.Width > 0 && clientRect.Height > 0
+            ? new Drawing.RectangleF(clientRect.X, clientRect.Y, clientRect.Width, clientRect.Height)
+            : Drawing.RectangleF.Empty;
+    }
+
     private static bool TryGetImageSize(Drawing.Image? image, out int width, out int height)
     {
         if (image is null)
@@ -1217,6 +1292,18 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             "MonitorPreviewDisplay: coordinate mapper rebuilt for monitorId={MonitorId} bounds={Bounds}",
             MonitorIdentifier.Create(monitor),
             monitor.Bounds);
+    }
+
+    private void TransitionToRunning()
+    {
+        var wasRunning = _previewRunning;
+        _previewStarted = true;
+        _previewRunning = true;
+
+        if (!wasRunning)
+        {
+            PreviewStarted?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private static bool HasValidSurface(MonitorInfo monitor)

@@ -129,7 +129,7 @@ public partial class AppEditorForm : WinForms.Form
     private string? _lastOverlayMonitorId;
     private bool _lastOverlayFullScreen;
     private bool _hasCachedOverlayBounds;
-    private int _invalidSnapshotCount;
+    private int _invalidSnapshotAttempts;
 
     private static int _simRectsDepth;
     private static int _simOverlaysDepth;
@@ -188,6 +188,7 @@ public partial class AppEditorForm : WinForms.Form
         _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
         var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
         previewControl.EditSessionId = _editSessionId;
+        previewControl.PreviewStarted += MonitorPreviewDisplayOnPreviewStarted;
         previewControl.PreviewStopped += MonitorPreviewDisplayOnPreviewStopped;
         _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
         var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
@@ -264,7 +265,8 @@ public partial class AppEditorForm : WinForms.Form
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
 
-        previewControl.MouseMovedInMonitorSpace += MonitorPreviewDisplay_MouseMovedInMonitorSpace;
+        previewControl.MonitorMouseMove += MonitorPreviewDisplay_OnMonitorMouseMove;
+        previewControl.MonitorMouseClick += MonitorPreviewDisplay_OnMonitorMouseClick;
         previewControl.MonitorMouseLeft += MonitorPreviewDisplay_MonitorMouseLeft;
 
         janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
@@ -412,6 +414,7 @@ public partial class AppEditorForm : WinForms.Form
 
     private void CarregarPrograma(ProgramaConfig programa)
     {
+        ResetSnapshotPipelineState();
         txtId.Text = programa.Id;
         txtExecutavel.Text = programa.ExecutablePath;
         txtArgumentos.Text = programa.Arguments ?? string.Empty;
@@ -1799,6 +1802,7 @@ public partial class AppEditorForm : WinForms.Form
 
             if (monitorChanged && monitorPreviewDisplay is not null)
             {
+                ResetSnapshotPipelineState();
                 await monitorPreviewDisplay.BindAsync(option.Monitor, autoStart: false).ConfigureAwait(true);
                 _monitorPreviewMonitorId = option.MonitorId;
             }
@@ -1862,16 +1866,23 @@ public partial class AppEditorForm : WinForms.Form
         }
     }
 
-    private void MonitorPreviewDisplay_MouseMovedInMonitorSpace(object? sender, Drawing.Point point)
+    private void MonitorPreviewDisplay_OnMonitorMouseMove(object? sender, MonitorPreviewDisplay.MonitorMouseEventArgs e)
     {
         if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
         {
             return;
         }
 
-        UpdateMonitorCoordinateLabel(point);
+        var monitorPoint = Drawing.Point.Round(e.MonitorPoint);
+        UpdateMonitorCoordinateLabel(monitorPoint);
 
-        _hoverPendingPoint = point;
+        if (monitorPreviewDisplay.IsPreviewRunning)
+        {
+            _hoverPendingPoint = null;
+            return;
+        }
+
+        _hoverPendingPoint = monitorPoint;
 
         if (!_hoverSw.IsRunning)
         {
@@ -1889,6 +1900,28 @@ public partial class AppEditorForm : WinForms.Form
         ScheduleHoverPointUpdate(remaining);
     }
 
+    private void MonitorPreviewDisplay_OnMonitorMouseClick(object? sender, MonitorPreviewDisplay.MonitorMouseEventArgs e)
+    {
+        if (monitorPreviewDisplay?.IsInteractionSuppressed == true)
+        {
+            return;
+        }
+
+        var monitorPoint = Drawing.Point.Round(e.MonitorPoint);
+        UpdateMonitorCoordinateLabel(monitorPoint);
+
+        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        {
+            return;
+        }
+
+        _hoverPendingPoint = monitorPoint;
+        _hoverAppliedPoint = null;
+        _hoverSw.Reset();
+        CancelHoverThrottleTimer();
+        ApplyPendingHoverPoint(enforceInterval: false);
+    }
+
     private void MonitorPreviewDisplay_MonitorMouseLeft(object? sender, EventArgs e)
     {
         UpdateMonitorCoordinateLabel(null);
@@ -1897,6 +1930,14 @@ public partial class AppEditorForm : WinForms.Form
         _hoverAppliedPoint = null;
         _hoverSw.Reset();
         CancelHoverThrottleTimer();
+
+        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        {
+            _windowBoundsDebounce.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
 
         _ = ClampWindowInputsToMonitor(null);
         InvalidateWindowPreviewOverlay();
@@ -2320,6 +2361,12 @@ public partial class AppEditorForm : WinForms.Form
         _windowBoundsDebounce.Stop();
         _windowBoundsDebouncePending = false;
 
+        if (_invalidSnapshotAttempts >= 5)
+        {
+            _logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_invalid_bounds_limit");
+            return;
+        }
+
         if (preview.IsPreviewRunning)
         {
             Logger.Debug("CaptureWindowPreviewSnapshot skipped_due_to_live_preview");
@@ -2401,18 +2448,30 @@ public partial class AppEditorForm : WinForms.Form
         _windowBoundsDebounce.Start();
     }
 
+    private void MonitorPreviewDisplayOnPreviewStarted(object? sender, EventArgs e)
+    {
+        _logger.Debug("monitor_preview_started: disabling snapshot pipeline");
+        ResetSnapshotPipelineState();
+    }
+
     private void MonitorPreviewDisplayOnPreviewStopped(object? sender, EventArgs e)
     {
         _logger.Debug("monitor_preview_stopped: re-enabling snapshot pipeline");
-        _windowBoundsDebounce.Stop();
-        _windowBoundsDebouncePending = false;
-        _windowPreviewRebuildScheduled = false;
+        ResetSnapshotPipelineState();
         InvalidateWindowPreviewOverlay();
     }
 
     private void WindowBoundsDebounceOnTick(object? sender, EventArgs e)
     {
         _windowBoundsDebounce.Stop();
+
+        if (monitorPreviewDisplay is { IsPreviewRunning: true })
+        {
+            Logger.Debug("WindowBoundsDebounceOnTick skipped_due_to_live_preview");
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
 
         if (!_windowBoundsDebouncePending)
         {
@@ -2421,6 +2480,14 @@ public partial class AppEditorForm : WinForms.Form
 
         _windowBoundsDebouncePending = false;
         InvalidateWindowPreviewOverlay();
+    }
+
+    private void ResetSnapshotPipelineState()
+    {
+        _invalidSnapshotAttempts = 0;
+        _windowBoundsDebounce.Stop();
+        _windowBoundsDebouncePending = false;
+        _windowPreviewRebuildScheduled = false;
     }
 
     private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
@@ -2473,24 +2540,25 @@ public partial class AppEditorForm : WinForms.Form
 
         if (bounds.Width < MinimumOverlayDimension || bounds.Height < MinimumOverlayDimension)
         {
-            _invalidSnapshotCount++;
-            if (_invalidSnapshotCount > 20)
-            {
-                _logger.Warning(
-                    "snapshot_invalid_limit_reached bounds={Bounds} attempts={Attempts}",
-                    bounds,
-                    _invalidSnapshotCount);
-                return _windowPreviewSnapshot;
-            }
-
+            _invalidSnapshotAttempts++;
             _logger.Debug(
                 "snapshot_invalid_bounds bounds={Bounds} attempts={Attempts}",
                 bounds,
-                _invalidSnapshotCount);
+                _invalidSnapshotAttempts);
+
+            if (_invalidSnapshotAttempts >= 5)
+            {
+                _windowBoundsDebounce.Stop();
+                _windowBoundsDebouncePending = false;
+                _windowPreviewRebuildScheduled = false;
+                _logger.Warning(
+                    "snapshot_invalid_bounds_limit_reached; disabling snapshot pipeline until reset.");
+            }
+
             return _windowPreviewSnapshot;
         }
 
-        _invalidSnapshotCount = 0;
+        _invalidSnapshotAttempts = 0;
 
         var currentPoint = bounds.Location;
         if (_hasWindowPreviewSnapshot)
@@ -2645,6 +2713,22 @@ public partial class AppEditorForm : WinForms.Form
 
     private async void ScheduleWindowPreviewRebuild(TimeSpan delay)
     {
+        var preview = monitorPreviewDisplay;
+        if (preview is null || preview.IsDisposed)
+        {
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
+
+        if (preview.IsPreviewRunning)
+        {
+            Logger.Debug("WindowPreviewRebuild skipped_due_to_live_preview");
+            _windowBoundsDebounce.Stop();
+            _windowBoundsDebouncePending = false;
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
+
         try
         {
             if (delay < TimeSpan.Zero)
@@ -2662,6 +2746,15 @@ public partial class AppEditorForm : WinForms.Form
 
         if (IsDisposed)
         {
+            _windowPreviewRebuildScheduled = false;
+            return;
+        }
+
+        if (preview.IsPreviewRunning)
+        {
+            Logger.Debug("WindowPreviewRebuild skipped_due_to_live_preview");
+            _windowBoundsDebounce.Stop();
+            _windowBoundsDebouncePending = false;
             _windowPreviewRebuildScheduled = false;
             return;
         }
