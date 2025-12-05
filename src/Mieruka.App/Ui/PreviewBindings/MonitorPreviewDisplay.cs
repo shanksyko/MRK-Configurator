@@ -232,18 +232,18 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     public sealed class MonitorMouseEventArgs : EventArgs
     {
-        public MonitorMouseEventArgs(string? monitorId, Drawing.PointF monitorPoint, Drawing.Point clientPoint)
+        public MonitorMouseEventArgs(string monitorId, Drawing.PointF monitorPoint, WinForms.MouseButtons button)
         {
             MonitorId = monitorId;
             MonitorPoint = monitorPoint;
-            ClientPoint = clientPoint;
+            Button = button;
         }
 
-        public string? MonitorId { get; }
+        public string MonitorId { get; }
 
         public Drawing.PointF MonitorPoint { get; }
 
-        public Drawing.Point ClientPoint { get; }
+        public WinForms.MouseButtons Button { get; }
     }
 
     /// <summary>
@@ -703,7 +703,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         return true;
     }
 
-    private async void PictureBoxOnMouseDown(object? sender, WinForms.MouseEventArgs e)
+    private void PictureBoxOnMouseDown(object? sender, WinForms.MouseEventArgs e)
     {
         using var guard = new StackGuard(nameof(PictureBoxOnMouseDown));
         if (!guard.Entered)
@@ -724,23 +724,14 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             return;
         }
 
-        if (TryGetMonitorPoint(e.Location, out var monitorPoint))
+        if (TryClientToMonitor(e.Location, out var monitorPoint))
         {
             MonitorMouseClick?.Invoke(
                 this,
                 new MonitorMouseEventArgs(
-                    _monitor is null ? null : MonitorIdentifier.Create(_monitor),
+                    _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor),
                     monitorPoint,
-                    e.Location));
-        }
-
-        if (!_previewRunning)
-        {
-            await EnsurePreviewStartedAsync().ConfigureAwait(true);
-        }
-        else
-        {
-            await StopPreviewAsync().ConfigureAwait(true);
+                    e.Button));
         }
     }
 
@@ -839,7 +830,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         UpdateGlyphTooltip(e.Location);
 
-        if (!TryGetMonitorPoint(e.Location, out var monitorPoint))
+        if (!TryClientToMonitor(e.Location, out var monitorPoint))
         {
             return;
         }
@@ -848,9 +839,9 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         MonitorMouseMove?.Invoke(
             this,
             new MonitorMouseEventArgs(
-                _monitor is null ? null : MonitorIdentifier.Create(_monitor),
+                _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor),
                 monitorPoint,
-                e.Location));
+                e.Button));
     }
 
     private void TransitionToStopped()
@@ -1154,12 +1145,13 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     public Drawing.PointF ClientToMonitor(Drawing.Point clientPoint)
     {
-        return TryGetMonitorPoint(clientPoint, out var monitorPoint) ? monitorPoint : Drawing.PointF.Empty;
+        return TryClientToMonitor(clientPoint, out var monitorPoint) ? monitorPoint : Drawing.PointF.Empty;
     }
 
-    private bool TryGetMonitorPoint(Drawing.Point clientPoint, out Drawing.PointF monitorPoint)
+    public bool TryClientToMonitor(Drawing.Point clientPoint, out Drawing.PointF monitorPoint)
     {
         monitorPoint = Drawing.PointF.Empty;
+
         var mapper = _coordinateMapper;
         if (mapper is null)
         {
