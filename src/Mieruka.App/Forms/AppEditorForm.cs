@@ -129,6 +129,10 @@ public partial class AppEditorForm : WinForms.Form
     private string? _lastOverlayMonitorId;
     private bool _lastOverlayFullScreen;
     private bool _hasCachedOverlayBounds;
+    private int _invalidSnapshotCount;
+
+    private static int _simRectsDepth;
+    private static int _simOverlaysDepth;
 
     private static readonly TimeSpan WindowPreviewRebuildInterval = TimeSpan.FromMilliseconds(1000d / 60d);
     private static readonly TimeSpan WindowPreviewSnapshotThrottleInterval = TimeSpan.FromMilliseconds(75);
@@ -1020,6 +1024,13 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimRects()
     {
+        using var logicalDepth = new MonitorPreviewDisplay.PreviewLogicalScope(nameof(RebuildSimRects), _logger);
+        if (!logicalDepth.Entered)
+        {
+            _logger.Error("RebuildSimRects: preview logical depth limit reached; aborting rebuild");
+            return;
+        }
+
         using var depth = new MonitorPreviewDisplay.PreviewCallScope(nameof(RebuildSimRects), _logger);
         if (!depth.Entered)
         {
@@ -1027,101 +1038,115 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
+        var currentDepth = Interlocked.Increment(ref _simRectsDepth);
+        if (currentDepth > 8)
+        {
+            _logger.Error("sim_rects_depth_limit_reached depth={Depth} limit={Limit}", currentDepth, 8);
+            Interlocked.Decrement(ref _simRectsDepth);
+            return;
+        }
+
         if (_inRebuildSimRects)
         {
             _logger.Debug("RebuildSimRects: recursion blocked // MIERUKA_FIX");
+            Interlocked.Decrement(ref _simRectsDepth);
             return;
         }
 
         _inRebuildSimRects = true;
         try
         {
-        _logger.Debug(
-            "RebuildSimRects: enter isDisposed={IsDisposed} simulationActive={SimulationActive} // MIERUKA_FIX",
-            IsDisposed,
-            _cycleSimulationCts is not null);
+            _logger.Debug(
+                "RebuildSimRects: enter isDisposed={IsDisposed} simulationActive={SimulationActive} // MIERUKA_FIX",
+                IsDisposed,
+                _cycleSimulationCts is not null);
 
-        if (IsDisposed)
-        {
-            _logger.Debug("RebuildSimRects: exit form disposed // MIERUKA_FIX");
-            return;
-        }
-
-        if (_cycleSimulationCts is not null)
-        {
-            StopCycleSimulation();
-
-            if (IsHandleCreated)
+            if (IsDisposed)
             {
-                BeginInvoke(new Action(RebuildSimRects));
+                _logger.Debug("RebuildSimRects: exit form disposed // MIERUKA_FIX");
+                return;
             }
 
-            _logger.Information("RebuildSimRects: exit deferred due to active simulation // MIERUKA_FIX");
-            return;
-        }
-
-        _nextSimRectIndex = 0;
-        ClearActiveSimRect();
-
-        if (flowCycleItems is null)
-        {
-            _logger.Information("RebuildSimRects: exit missing cycle container // MIERUKA_FIX");
-            return;
-        }
-
-        flowCycleItems.SuspendLayout();
-        try
-        {
-            flowCycleItems.Controls.Clear();
-        }
-        finally
-        {
-            flowCycleItems.ResumeLayout(false);
-        }
-
-        DisposeSimRectDisplays();
-
-        var items = BuildSimRectList();
-        if (items.Count == 0)
-        {
-            var placeholder = new WinForms.Label
+            if (_cycleSimulationCts is not null)
             {
-                AutoSize = true,
-                Margin = new WinForms.Padding(12),
-                Text = "Nenhum item disponível para simulação.",
-            };
+                StopCycleSimulation();
 
-            flowCycleItems.Controls.Add(placeholder);
+                if (IsHandleCreated)
+                {
+                    BeginInvoke(new Action(RebuildSimRects));
+                }
+
+                _logger.Information("RebuildSimRects: exit deferred due to active simulation // MIERUKA_FIX");
+                return;
+            }
+
+            _nextSimRectIndex = 0;
+            ClearActiveSimRect();
+
+            if (flowCycleItems is null)
+            {
+                _logger.Information("RebuildSimRects: exit missing cycle container // MIERUKA_FIX");
+                return;
+            }
+
+            flowCycleItems.SuspendLayout();
+            try
+            {
+                flowCycleItems.Controls.Clear();
+            }
+            finally
+            {
+                flowCycleItems.ResumeLayout(false);
+            }
+
+            DisposeSimRectDisplays();
+
+            var items = BuildSimRectList();
+            if (items.Count == 0)
+            {
+                var placeholder = new WinForms.Label
+                {
+                    AutoSize = true,
+                    Margin = new WinForms.Padding(12),
+                    Text = "Nenhum item disponível para simulação.",
+                };
+
+                flowCycleItems.Controls.Add(placeholder);
+                UpdateCycleControlsState();
+                _logger.Information("RebuildSimRects: exit no items generated // MIERUKA_FIX");
+                return;
+            }
+
+            flowCycleItems.SuspendLayout();
+            try
+            {
+                foreach (var rect in items)
+                {
+                    var display = CreateSimRectDisplay(rect);
+                    _cycleDisplays.Add(display);
+                    flowCycleItems.Controls.Add(display.Panel);
+                    ApplySimRectTooltip(display);
+                }
+            }
+            finally
+            {
+                flowCycleItems.ResumeLayout(false);
+            }
+
             UpdateCycleControlsState();
-            _logger.Information("RebuildSimRects: exit no items generated // MIERUKA_FIX");
-            return;
-        }
-
-        flowCycleItems.SuspendLayout();
-        try
-        {
-            foreach (var rect in items)
-            {
-                var display = CreateSimRectDisplay(rect);
-                _cycleDisplays.Add(display);
-                flowCycleItems.Controls.Add(display.Panel);
-                ApplySimRectTooltip(display);
-            }
-        }
-        finally
-        {
-            flowCycleItems.ResumeLayout(false);
-        }
-
-        UpdateCycleControlsState();
-        _logger.Information(
-            "RebuildSimRects: exit createdDisplays={DisplayCount} totalItems={ItemCount} // MIERUKA_FIX",
-            _cycleDisplays.Count,
-            items.Count);
+            _logger.Information(
+                "RebuildSimRects: exit createdDisplays={DisplayCount} totalItems={ItemCount} // MIERUKA_FIX",
+                _cycleDisplays.Count,
+                items.Count);
         }
         finally
         {
             _inRebuildSimRects = false;
+            var depthAfter = Interlocked.Decrement(ref _simRectsDepth);
+            if (depthAfter < 0)
+            {
+                Interlocked.Exchange(ref _simRectsDepth, 0);
+            }
         }
     }
 
@@ -2374,6 +2399,13 @@ public partial class AppEditorForm : WinForms.Form
 
     private WindowPreviewSnapshot CaptureWindowPreviewSnapshot()
     {
+        using var logicalDepth = new MonitorPreviewDisplay.PreviewLogicalScope(nameof(CaptureWindowPreviewSnapshot), _logger);
+        if (!logicalDepth.Entered)
+        {
+            _logger.Error("CaptureWindowPreviewSnapshot: preview logical depth limit reached; aborting snapshot");
+            return _windowPreviewSnapshot;
+        }
+
         using var depth = new MonitorPreviewDisplay.PreviewCallScope(nameof(CaptureWindowPreviewSnapshot), _logger);
         if (!depth.Entered)
         {
@@ -2412,6 +2444,27 @@ public partial class AppEditorForm : WinForms.Form
                 (int)nudJanelaLargura.Value,
                 (int)nudJanelaAltura.Value);
         }
+
+        if (bounds.Width < MinimumOverlayDimension || bounds.Height < MinimumOverlayDimension)
+        {
+            _invalidSnapshotCount++;
+            if (_invalidSnapshotCount > 20)
+            {
+                _logger.Warning(
+                    "snapshot_invalid_limit_reached bounds={Bounds} attempts={Attempts}",
+                    bounds,
+                    _invalidSnapshotCount);
+                return _windowPreviewSnapshot;
+            }
+
+            _logger.Debug(
+                "snapshot_invalid_bounds bounds={Bounds} attempts={Attempts}",
+                bounds,
+                _invalidSnapshotCount);
+            return _windowPreviewSnapshot;
+        }
+
+        _invalidSnapshotCount = 0;
 
         var currentPoint = bounds.Location;
         if (_hasWindowPreviewSnapshot)
@@ -2593,6 +2646,13 @@ public partial class AppEditorForm : WinForms.Form
 
     private void RebuildSimulationOverlays()
     {
+        using var logicalDepth = new MonitorPreviewDisplay.PreviewLogicalScope(nameof(RebuildSimulationOverlays), _logger);
+        if (!logicalDepth.Entered)
+        {
+            _logger.Error("RebuildSimulationOverlays: preview logical depth limit reached; aborting rebuild");
+            return;
+        }
+
         using var depth = new MonitorPreviewDisplay.PreviewCallScope(nameof(RebuildSimulationOverlays), _logger);
         if (!depth.Entered)
         {
@@ -2600,146 +2660,160 @@ public partial class AppEditorForm : WinForms.Form
             return;
         }
 
+        var currentDepth = Interlocked.Increment(ref _simOverlaysDepth);
+        if (currentDepth > 8)
+        {
+            _logger.Error("sim_overlays_depth_limit_reached depth={Depth} limit={Limit}", currentDepth, 8);
+            Interlocked.Decrement(ref _simOverlaysDepth);
+            return;
+        }
+
         if (_inRebuildSimulationOverlays)
         {
             _logger.Debug("RebuildSimulationOverlays: recursion blocked // MIERUKA_FIX");
+            Interlocked.Decrement(ref _simOverlaysDepth);
             return;
         }
 
         _inRebuildSimulationOverlays = true;
         try
         {
-        if (monitorPreviewDisplay is null)
-        {
-            _logger.Debug("RebuildSimulationOverlays: skip missing preview display // MIERUKA_FIX");
-            return;
-        }
-
-        var monitor = GetSelectedMonitor();
-        if (monitor is null)
-        {
-            monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
-            _logger.Debug("RebuildSimulationOverlays: exit no monitor selected // MIERUKA_FIX");
-            return;
-        }
-
-        var monitorId = MonitorIdentifier.Create(monitor);
-        if (string.IsNullOrWhiteSpace(monitorId))
-        {
-            monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
-            _logger.Debug(
-                "RebuildSimulationOverlays: exit invalid monitor identifier monitor={MonitorName} // MIERUKA_FIX",
-                monitor.Name ?? string.Empty);
-            return;
-        }
-
-        var current = ConstruirPrograma();
-        var overlayApps = new List<ProgramaConfig>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var app in CurrentProfileItems())
-        {
-            if (app is null)
+            if (monitorPreviewDisplay is null)
             {
-                continue;
+                _logger.Debug("RebuildSimulationOverlays: skip missing preview display // MIERUKA_FIX");
+                return;
             }
 
-            var candidate = app;
-            if (!string.IsNullOrWhiteSpace(current.Id) &&
-                string.Equals(app.Id, current.Id, StringComparison.OrdinalIgnoreCase))
+            var monitor = GetSelectedMonitor();
+            if (monitor is null)
             {
-                candidate = current;
+                monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+                _logger.Debug("RebuildSimulationOverlays: exit no monitor selected // MIERUKA_FIX");
+                return;
             }
 
-            if (string.IsNullOrWhiteSpace(candidate.Id) || !seen.Add(candidate.Id))
+            var monitorId = MonitorIdentifier.Create(monitor);
+            if (string.IsNullOrWhiteSpace(monitorId))
             {
-                continue;
+                monitorPreviewDisplay.SetSimulationRects(Array.Empty<MonitorPreviewDisplay.SimRect>());
+                _logger.Debug(
+                    "RebuildSimulationOverlays: exit invalid monitor identifier monitor={MonitorName} // MIERUKA_FIX",
+                    monitor.Name ?? string.Empty);
+                return;
             }
 
-            overlayApps.Add(candidate);
-        }
+            var current = ConstruirPrograma();
+            var overlayApps = new List<ProgramaConfig>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (!string.IsNullOrWhiteSpace(current.Id))
-        {
-            if (seen.Add(current.Id))
+            foreach (var app in CurrentProfileItems())
+            {
+                if (app is null)
+                {
+                    continue;
+                }
+
+                var candidate = app;
+                if (!string.IsNullOrWhiteSpace(current.Id) &&
+                    string.Equals(app.Id, current.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    candidate = current;
+                }
+
+                if (string.IsNullOrWhiteSpace(candidate.Id) || !seen.Add(candidate.Id))
+                {
+                    continue;
+                }
+
+                overlayApps.Add(candidate);
+            }
+
+            if (!string.IsNullOrWhiteSpace(current.Id))
+            {
+                if (seen.Add(current.Id))
+                {
+                    overlayApps.Add(current);
+                }
+            }
+            else
             {
                 overlayApps.Add(current);
             }
-        }
-        else
-        {
-            overlayApps.Add(current);
-        }
 
-        var overlays = new List<MonitorPreviewDisplay.SimRect>();
-        var order = 1;
+            var overlays = new List<MonitorPreviewDisplay.SimRect>();
+            var order = 1;
 
-        foreach (var app in overlayApps)
-        {
-            var isCurrent = !string.IsNullOrWhiteSpace(current.Id) &&
-                string.Equals(app.Id, current.Id, StringComparison.OrdinalIgnoreCase);
-
-            if (!app.AutoStart && !isCurrent)
+            foreach (var app in overlayApps)
             {
-                continue;
+                var isCurrent = !string.IsNullOrWhiteSpace(current.Id) &&
+                    string.Equals(app.Id, current.Id, StringComparison.OrdinalIgnoreCase);
+
+                if (!app.AutoStart && !isCurrent)
+                {
+                    continue;
+                }
+
+                var resolvedMonitor = ResolveMonitorForApp(app);
+                if (resolvedMonitor is null && isCurrent)
+                {
+                    resolvedMonitor = monitor;
+                }
+
+                if (resolvedMonitor is null)
+                {
+                    continue;
+                }
+
+                var resolvedId = MonitorIdentifier.Create(resolvedMonitor);
+                if (string.IsNullOrWhiteSpace(resolvedId) ||
+                    !string.Equals(resolvedId, monitorId, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var relativeBounds = CalculateMonitorRelativeBounds(app.Window, resolvedMonitor);
+                if (relativeBounds.Width < MinimumOverlayDimension || relativeBounds.Height < MinimumOverlayDimension)
+                {
+                    _logger.Debug(
+                        "RebuildSimulationOverlays: ignored_zero_bound_overlay bounds={Bounds} appId={AppId} monitorId={MonitorId}",
+                        relativeBounds,
+                        app.Id ?? string.Empty,
+                        monitorId);
+                    continue;
+                }
+
+                var baseColor = ResolveSimulationColor(app.Id);
+                var label = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
+
+                overlays.Add(new MonitorPreviewDisplay.SimRect
+                {
+                    MonRel = relativeBounds,
+                    Color = baseColor,
+                    Order = order,
+                    Title = label ?? string.Empty,
+                    RequiresNetwork = app.RequiresNetwork,
+                    AskBefore = app.AskBeforeLaunch,
+                });
+
+                order++;
             }
 
-            var resolvedMonitor = ResolveMonitorForApp(app);
-            if (resolvedMonitor is null && isCurrent)
-            {
-                resolvedMonitor = monitor;
-            }
-
-            if (resolvedMonitor is null)
-            {
-                continue;
-            }
-
-            var resolvedId = MonitorIdentifier.Create(resolvedMonitor);
-            if (string.IsNullOrWhiteSpace(resolvedId) ||
-                !string.Equals(resolvedId, monitorId, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var relativeBounds = CalculateMonitorRelativeBounds(app.Window, resolvedMonitor);
-            if (relativeBounds.Width < MinimumOverlayDimension || relativeBounds.Height < MinimumOverlayDimension)
-            {
-                _logger.Debug(
-                    "RebuildSimulationOverlays: ignored_zero_bound_overlay bounds={Bounds} appId={AppId} monitorId={MonitorId}",
-                    relativeBounds,
-                    app.Id ?? string.Empty,
-                    monitorId);
-                continue;
-            }
-
-            var baseColor = ResolveSimulationColor(app.Id);
-            var label = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
-
-            overlays.Add(new MonitorPreviewDisplay.SimRect
-            {
-                MonRel = relativeBounds,
-                Color = baseColor,
-                Order = order,
-                Title = label ?? string.Empty,
-                RequiresNetwork = app.RequiresNetwork,
-                AskBefore = app.AskBeforeLaunch,
-            });
-
-            order++;
-        }
-
-        monitorPreviewDisplay.SetSimulationRects(overlays);
-        _logger.Debug(
-            "RebuildSimulationOverlays: exit monitorId={MonitorId} overlayCandidates={OverlayCandidates} overlaysRendered={OverlaysRendered} currentAppId={CurrentAppId} // MIERUKA_FIX",
-            monitorId,
-            overlayApps.Count,
-            overlays.Count,
-            current.Id ?? string.Empty);
+            monitorPreviewDisplay.SetSimulationRects(overlays);
+            _logger.Debug(
+                "RebuildSimulationOverlays: exit monitorId={MonitorId} overlayCandidates={OverlayCandidates} overlaysRendered={OverlaysRendered} currentAppId={CurrentAppId} // MIERUKA_FIX",
+                monitorId,
+                overlayApps.Count,
+                overlays.Count,
+                current.Id ?? string.Empty);
         }
         finally
         {
             _inRebuildSimulationOverlays = false;
+            var depthAfter = Interlocked.Decrement(ref _simOverlaysDepth);
+            if (depthAfter < 0)
+            {
+                Interlocked.Exchange(ref _simOverlaysDepth, 0);
+            }
         }
     }
 

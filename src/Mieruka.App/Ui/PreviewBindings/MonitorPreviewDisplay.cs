@@ -26,6 +26,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private readonly List<SimRect> _simRects;
     private readonly List<(Drawing.RectangleF Bounds, string Text)> _glyphRegions;
     private readonly WinForms.ToolTip _tooltip;
+    private readonly Queue<DateTime> _previewStartHistory = new();
     private bool _isStartingPreview;
     private bool _isStoppingPreview;
     private bool _previewStarted;
@@ -43,6 +44,51 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private const string NetworkTooltipText = "Requer conexão de rede para iniciar.";
     private const int MinimumPreviewSurface = 50;
     private const int PreviewDepthLimit = 64;
+    private const int PreviewLogicalDepthLimit = 32;
+
+    internal readonly struct PreviewLogicalScope : IDisposable
+    {
+        private readonly ILogger _logger;
+        private readonly bool _entered;
+
+        public PreviewLogicalScope(string scope, ILogger logger)
+        {
+            _logger = logger;
+            Scope = scope;
+            var depth = Interlocked.Increment(ref PreviewLogicalDepth);
+            if (depth > PreviewLogicalDepthLimit)
+            {
+                _entered = false;
+                Interlocked.Decrement(ref PreviewLogicalDepth);
+                _logger.Error(
+                    "PreviewLogicalDepthLimitReached: scope={Scope} depth={Depth} limit={Limit} stack={Stack}",
+                    Scope,
+                    depth,
+                    PreviewLogicalDepthLimit,
+                    Environment.StackTrace);
+            }
+            else
+            {
+                _entered = true;
+            }
+        }
+
+        public string Scope { get; }
+
+        public bool Entered => _entered;
+
+        public void Dispose()
+        {
+            if (_entered)
+            {
+                var depth = Interlocked.Decrement(ref PreviewLogicalDepth);
+                if (depth < 0)
+                {
+                    Interlocked.Exchange(ref PreviewLogicalDepth, 0);
+                }
+            }
+        }
+    }
 
     internal readonly struct PreviewCallScope : IDisposable
     {
@@ -89,6 +135,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     }
 
     internal static int PreviewCallDepth;
+    internal static int PreviewLogicalDepth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MonitorPreviewDisplay"/> class.
@@ -282,6 +329,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     public async Task EnsurePreviewStartedAsync()
     {
+        using var logicalDepth = new PreviewLogicalScope(nameof(EnsurePreviewStartedAsync), Logger);
+        if (!logicalDepth.Entered)
+        {
+            return;
+        }
+
         using var depth = new PreviewCallScope(nameof(EnsurePreviewStartedAsync), Logger);
         if (!depth.Entered)
         {
@@ -296,13 +349,29 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         if (_isStartingPreview)
         {
-            Logger.Debug("EnsurePreviewStartedAsync: start already in progress");
+            Logger.Debug("preview_start_rejected_reentrancy");
             return;
         }
 
         _isStartingPreview = true;
         try
         {
+            var now = DateTime.UtcNow;
+            while (_previewStartHistory.Count > 0 && (now - _previewStartHistory.Peek()) > TimeSpan.FromSeconds(10))
+            {
+                _previewStartHistory.Dequeue();
+            }
+
+            if (_previewStartHistory.Count >= 5)
+            {
+                Logger.Warning(
+                    "preview_start_rate_limited: previewStartsLast10s={PreviewStartsLast10s}",
+                    _previewStartHistory.Count);
+                SetPlaceholder("Pré-visualização temporariamente bloqueada. Aguarde alguns segundos.");
+                return;
+            }
+
+            _previewStartHistory.Enqueue(now);
             var monitorIdForLog = _monitor is null ? string.Empty : MonitorIdentifier.Create(_monitor);
             Logger.Debug(
                 "MonitorPreviewDisplay: attempting to start preview for {MonitorId}",
@@ -632,6 +701,12 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     public async Task StopPreviewAsync(CancellationToken cancellationToken = default)
     {
+        using var logicalDepth = new PreviewLogicalScope(nameof(StopPreviewAsync), Logger);
+        if (!logicalDepth.Entered)
+        {
+            return;
+        }
+
         using var depth = new PreviewCallScope(nameof(StopPreviewAsync), Logger);
         if (!depth.Entered)
         {
@@ -646,7 +721,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         if (_isStoppingPreview)
         {
-            Logger.Debug("StopPreviewAsync: stop already in progress");
+            Logger.Debug("preview_stop_rejected_reentrancy");
             return;
         }
 
