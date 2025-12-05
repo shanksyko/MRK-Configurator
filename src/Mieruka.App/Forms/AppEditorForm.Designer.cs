@@ -216,6 +216,7 @@ partial class AppEditorForm
         //
         tlpAplicativos.ColumnCount = 1;
         tlpAplicativos.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpAplicativos.RowStyles.Clear();
         tlpAplicativos.Controls.Add(appsTabControl, 0, 0);
         tlpAplicativos.Dock = DockStyle.Fill;
         tlpAplicativos.Location = new System.Drawing.Point(8, 8);
