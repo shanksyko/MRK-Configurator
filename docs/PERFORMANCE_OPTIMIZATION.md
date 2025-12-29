@@ -97,8 +97,18 @@ ReadOnlySpan<T> items = collection.AsSpan();
 // ✅ Use ArrayPool para buffers
 private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
 
-// ✅ Implemente object pooling
-private static readonly ObjectPool<Bitmap> BitmapPool = new();
+var buffer = BufferPool.Rent(1024);
+try 
+{
+    // Use buffer
+}
+finally
+{
+    BufferPool.Return(buffer);
+}
+
+// ✅ Implemente object pooling customizado
+private static readonly ConcurrentBag<Bitmap> BitmapPool = new();
 
 // ✅ Use using statements consistentemente
 using var bitmap = new Bitmap(width, height);
@@ -295,13 +305,24 @@ var result = $"Value: {value}, Count: {count}";
 
 **Exemplo:**
 ```csharp
-// ❌ Cria array desnecessário
-byte[] buffer = new byte[1024];
-ProcessData(buffer);
-
-// ✅ Stack allocation para buffers pequenos
+// ❌ Stack allocation pode causar stack overflow em buffers grandes
 Span<byte> buffer = stackalloc byte[1024];
-ProcessData(buffer);
+
+// ✅ Use ArrayPool para buffers > 512 bytes
+var buffer = ArrayPool<byte>.Shared.Rent(1024);
+try
+{
+    Span<byte> span = buffer.AsSpan(0, 1024);
+    ProcessData(span);
+}
+finally
+{
+    ArrayPool<byte>.Shared.Return(buffer);
+}
+
+// ✅ Stack allocation OK para buffers pequenos (< 512 bytes)
+Span<byte> smallBuffer = stackalloc byte[256];
+ProcessSmallData(smallBuffer);
 ```
 
 **Benefício:**

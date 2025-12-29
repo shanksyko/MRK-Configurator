@@ -20,7 +20,7 @@
 **Arquivo modificado**: `Directory.Build.props`
 
 **O que foi adicionado**:
-- Compilation otimizada para Release
+- Compilação otimizada para Release
 - ReadyToRun compilation (R2R)
 - Tiered JIT compilation
 - Debug symbols desabilitados em Release

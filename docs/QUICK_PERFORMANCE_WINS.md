@@ -155,6 +155,13 @@ using System.Drawing;
 
 namespace Mieruka.Preview;
 
+/// <summary>
+/// Provides a thread-safe object pool for Bitmap instances to reduce GC pressure.
+/// </summary>
+/// <remarks>
+/// This pool reduces memory allocations by reusing Bitmap objects of a fixed size.
+/// Thread-safe for concurrent rent/return operations.
+/// </remarks>
 public sealed class BitmapPool : IDisposable
 {
     private readonly ConcurrentBag<Bitmap> _pool = new();

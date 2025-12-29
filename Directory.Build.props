@@ -13,6 +13,10 @@
     <Optimize>true</Optimize>
     <TieredCompilation>true</TieredCompilation>
     <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
+  </PropertyGroup>
+
+  <!-- Publish optimizations (use with dotnet publish) -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishReadyToRun>true</PublishReadyToRun>
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
