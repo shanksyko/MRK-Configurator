@@ -1,0 +1,893 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0-windows10.0.19041": {
+      "Microsoft.Win32.SystemEvents/8.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/Microsoft.Win32.SystemEvents.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net8.0/Microsoft.Win32.SystemEvents.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "Selenium.WebDriver/4.35.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/WebDriver.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/WebDriver.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/netstandard2.0/Selenium.WebDriver.targets": {}
+        },
+        "runtimeTargets": {
+          "runtimes/linux/native/selenium-manager": {
+            "assetType": "native",
+            "rid": "linux"
+          },
+          "runtimes/osx/native/selenium-manager": {
+            "assetType": "native",
+            "rid": "osx"
+          },
+          "runtimes/win/native/selenium-manager.exe": {
+            "assetType": "native",
+            "rid": "win"
+          }
+        }
+      },
+      "Serilog/3.1.1": {
+        "type": "package",
+        "compile": {
+          "lib/net7.0/Serilog.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net7.0/Serilog.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Serilog.Enrichers.Thread/3.1.0": {
+        "type": "package",
+        "dependencies": {
+          "Serilog": "2.3.0"
+        },
+        "compile": {
+          "lib/netstandard2.0/Serilog.Enrichers.Thread.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Serilog.Enrichers.Thread.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Serilog.Sinks.Console/5.0.1": {
+        "type": "package",
+        "dependencies": {
+          "Serilog": "3.1.1"
+        },
+        "compile": {
+          "lib/net7.0/Serilog.Sinks.Console.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net7.0/Serilog.Sinks.Console.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Serilog.Sinks.File/5.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Serilog": "2.10.0"
+        },
+        "compile": {
+          "lib/net5.0/Serilog.Sinks.File.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/Serilog.Sinks.File.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "SharpGen.Runtime/2.2.0-beta": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/SharpGen.Runtime.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/SharpGen.Runtime.dll": {}
+        },
+        "build": {
+          "build/_._": {}
+        },
+        "buildMultiTargeting": {
+          "buildMultiTargeting/_._": {}
+        }
+      },
+      "SharpGen.Runtime.COM/2.2.0-beta": {
+        "type": "package",
+        "dependencies": {
+          "SharpGen.Runtime": "2.2.0-beta"
+        },
+        "compile": {
+          "lib/net8.0/SharpGen.Runtime.COM.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/SharpGen.Runtime.COM.dll": {}
+        },
+        "build": {
+          "build/_._": {}
+        },
+        "buildMultiTargeting": {
+          "buildMultiTargeting/_._": {}
+        }
+      },
+      "System.Drawing.Common/7.0.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "7.0.0"
+        },
+        "compile": {
+          "lib/net7.0/System.Drawing.Common.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net7.0/System.Drawing.Common.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net7.0/System.Drawing.Common.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "System.Security.Cryptography.ProtectedData/8.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/System.Security.Cryptography.ProtectedData.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/System.Security.Cryptography.ProtectedData.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        }
+      },
+      "System.Windows.Extensions/8.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/System.Windows.Extensions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/System.Windows.Extensions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/win/lib/net8.0/System.Windows.Extensions.dll": {
+            "assetType": "runtime",
+            "rid": "win"
+          }
+        }
+      },
+      "Vortice.Direct3D11/3.6.2": {
+        "type": "package",
+        "dependencies": {
+          "SharpGen.Runtime": "2.2.0-beta",
+          "Vortice.DXGI": "3.6.2"
+        },
+        "compile": {
+          "lib/net8.0/Vortice.Direct3D11.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/Vortice.Direct3D11.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/_._": {}
+        },
+        "buildMultiTargeting": {
+          "buildMultiTargeting/_._": {}
+        }
+      },
+      "Vortice.DirectX/3.6.2": {
+        "type": "package",
+        "dependencies": {
+          "SharpGen.Runtime": "2.2.0-beta",
+          "SharpGen.Runtime.COM": "2.2.0-beta",
+          "Vortice.Mathematics": "1.9.2"
+        },
+        "compile": {
+          "lib/net8.0-windows10.0.19041/Vortice.DirectX.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0-windows10.0.19041/Vortice.DirectX.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/_._": {}
+        },
+        "buildMultiTargeting": {
+          "buildMultiTargeting/_._": {}
+        }
+      },
+      "Vortice.DXGI/3.6.2": {
+        "type": "package",
+        "dependencies": {
+          "SharpGen.Runtime": "2.2.0-beta",
+          "Vortice.DirectX": "3.6.2"
+        },
+        "compile": {
+          "lib/net8.0-windows10.0.19041/Vortice.DXGI.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0-windows10.0.19041/Vortice.DXGI.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/_._": {}
+        },
+        "buildMultiTargeting": {
+          "buildMultiTargeting/_._": {}
+        }
+      },
+      "Vortice.Mathematics/1.9.2": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0-windows10.0.19041/Vortice.Mathematics.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0-windows10.0.19041/Vortice.Mathematics.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "Mieruka.Automation/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Mieruka.Core": "1.0.0",
+          "Selenium.WebDriver": "4.35.0"
+        },
+        "compile": {
+          "bin/placeholder/Mieruka.Automation.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Mieruka.Automation.dll": {}
+        }
+      },
+      "Mieruka.Core/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "8.0.0",
+          "Selenium.WebDriver": "4.35.0",
+          "Serilog": "3.1.1",
+          "Serilog.Sinks.Console": "5.0.1",
+          "Serilog.Sinks.File": "5.0.0",
+          "System.Security.Cryptography.ProtectedData": "8.0.0",
+          "System.Windows.Extensions": "8.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Mieruka.Core.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Mieruka.Core.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WindowsForms"
+        ]
+      },
+      "Mieruka.Preview/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Mieruka.Core": "1.0.0",
+          "System.Drawing.Common": "7.0.0",
+          "Vortice.DXGI": "3.6.2",
+          "Vortice.Direct3D11": "3.6.2"
+        },
+        "compile": {
+          "bin/placeholder/Mieruka.Preview.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Mieruka.Preview.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WindowsForms"
+        ]
+      },
+      "Mieruka.Preview.Ipc/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Mieruka.Preview": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Mieruka.Preview.Ipc.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Mieruka.Preview.Ipc.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Microsoft.Win32.SystemEvents/8.0.0": {
+      "sha512": "9opKRyOKMCi2xJ7Bj7kxtZ1r9vbzosMvRrdEhVhDz8j8MoBGgB+WmC94yH839NPH+BclAjtQ/pyagvi/8gDLkw==",
+      "type": "package",
+      "path": "microsoft.win32.systemevents/8.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Win32.SystemEvents.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Win32.SystemEvents.targets",
+        "lib/net462/Microsoft.Win32.SystemEvents.dll",
+        "lib/net462/Microsoft.Win32.SystemEvents.xml",
+        "lib/net6.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/net6.0/Microsoft.Win32.SystemEvents.xml",
+        "lib/net7.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/net7.0/Microsoft.Win32.SystemEvents.xml",
+        "lib/net8.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/net8.0/Microsoft.Win32.SystemEvents.xml",
+        "lib/netstandard2.0/Microsoft.Win32.SystemEvents.dll",
+        "lib/netstandard2.0/Microsoft.Win32.SystemEvents.xml",
+        "microsoft.win32.systemevents.8.0.0.nupkg.sha512",
+        "microsoft.win32.systemevents.nuspec",
+        "runtimes/win/lib/net6.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/net6.0/Microsoft.Win32.SystemEvents.xml",
+        "runtimes/win/lib/net7.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/net7.0/Microsoft.Win32.SystemEvents.xml",
+        "runtimes/win/lib/net8.0/Microsoft.Win32.SystemEvents.dll",
+        "runtimes/win/lib/net8.0/Microsoft.Win32.SystemEvents.xml",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "Selenium.WebDriver/4.35.0": {
+      "sha512": "C9OrObS2KLyUQDJNRY883JAc4n5q58pBYmY954hf+lGMQQcsz4Ias2mk91lHkLXFX+2qMttya4df9lGP1SLiGQ==",
+      "type": "package",
+      "path": "selenium.webdriver/4.35.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "build/netstandard2.0/Selenium.WebDriver.targets",
+        "buildTransitive/netstandard2.0/Selenium.WebDriver.targets",
+        "icon.png",
+        "lib/net8.0/WebDriver.dll",
+        "lib/net8.0/WebDriver.xml",
+        "lib/netstandard2.0/WebDriver.dll",
+        "lib/netstandard2.0/WebDriver.xml",
+        "runtimes/linux/native/selenium-manager",
+        "runtimes/osx/native/selenium-manager",
+        "runtimes/win/native/selenium-manager.exe",
+        "selenium.webdriver.4.35.0.nupkg.sha512",
+        "selenium.webdriver.nuspec"
+      ]
+    },
+    "Serilog/3.1.1": {
+      "sha512": "P6G4/4Kt9bT635bhuwdXlJ2SCqqn2nhh4gqFqQueCOr9bK/e7W9ll/IoX1Ter948cV2Z/5+5v8pAfJYUISY03A==",
+      "type": "package",
+      "path": "serilog/3.1.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "icon.png",
+        "lib/net462/Serilog.dll",
+        "lib/net462/Serilog.xml",
+        "lib/net471/Serilog.dll",
+        "lib/net471/Serilog.xml",
+        "lib/net5.0/Serilog.dll",
+        "lib/net5.0/Serilog.xml",
+        "lib/net6.0/Serilog.dll",
+        "lib/net6.0/Serilog.xml",
+        "lib/net7.0/Serilog.dll",
+        "lib/net7.0/Serilog.xml",
+        "lib/netstandard2.0/Serilog.dll",
+        "lib/netstandard2.0/Serilog.xml",
+        "lib/netstandard2.1/Serilog.dll",
+        "lib/netstandard2.1/Serilog.xml",
+        "serilog.3.1.1.nupkg.sha512",
+        "serilog.nuspec"
+      ]
+    },
+    "Serilog.Enrichers.Thread/3.1.0": {
+      "sha512": "85lWsGRJpRxvKT6j/H67no55SUBsBIvp556TKuBTGhjtoPeq+L7j/sDWbgAtvT0p7u7/phJyX6j35PQ4Vtqw0g==",
+      "type": "package",
+      "path": "serilog.enrichers.thread/3.1.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net45/Serilog.Enrichers.Thread.dll",
+        "lib/net45/Serilog.Enrichers.Thread.xml",
+        "lib/netstandard1.0/Serilog.Enrichers.Thread.dll",
+        "lib/netstandard1.0/Serilog.Enrichers.Thread.xml",
+        "lib/netstandard2.0/Serilog.Enrichers.Thread.dll",
+        "lib/netstandard2.0/Serilog.Enrichers.Thread.xml",
+        "serilog.enrichers.thread.3.1.0.nupkg.sha512",
+        "serilog.enrichers.thread.nuspec"
+      ]
+    },
+    "Serilog.Sinks.Console/5.0.1": {
+      "sha512": "6Jt8jl9y2ey8VV7nVEUAyjjyxjAQuvd5+qj4XYAT9CwcsvR70HHULGBeD+K2WCALFXf7CFsNQT4lON6qXcu2AA==",
+      "type": "package",
+      "path": "serilog.sinks.console/5.0.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "icon.png",
+        "lib/net462/Serilog.Sinks.Console.dll",
+        "lib/net462/Serilog.Sinks.Console.xml",
+        "lib/net471/Serilog.Sinks.Console.dll",
+        "lib/net471/Serilog.Sinks.Console.xml",
+        "lib/net5.0/Serilog.Sinks.Console.dll",
+        "lib/net5.0/Serilog.Sinks.Console.xml",
+        "lib/net6.0/Serilog.Sinks.Console.dll",
+        "lib/net6.0/Serilog.Sinks.Console.xml",
+        "lib/net7.0/Serilog.Sinks.Console.dll",
+        "lib/net7.0/Serilog.Sinks.Console.xml",
+        "lib/netstandard2.0/Serilog.Sinks.Console.dll",
+        "lib/netstandard2.0/Serilog.Sinks.Console.xml",
+        "lib/netstandard2.1/Serilog.Sinks.Console.dll",
+        "lib/netstandard2.1/Serilog.Sinks.Console.xml",
+        "serilog.sinks.console.5.0.1.nupkg.sha512",
+        "serilog.sinks.console.nuspec"
+      ]
+    },
+    "Serilog.Sinks.File/5.0.0": {
+      "sha512": "uwV5hdhWPwUH1szhO8PJpFiahqXmzPzJT/sOijH/kFgUx+cyoDTMM8MHD0adw9+Iem6itoibbUXHYslzXsLEAg==",
+      "type": "package",
+      "path": "serilog.sinks.file/5.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "images/icon.png",
+        "lib/net45/Serilog.Sinks.File.dll",
+        "lib/net45/Serilog.Sinks.File.pdb",
+        "lib/net45/Serilog.Sinks.File.xml",
+        "lib/net5.0/Serilog.Sinks.File.dll",
+        "lib/net5.0/Serilog.Sinks.File.pdb",
+        "lib/net5.0/Serilog.Sinks.File.xml",
+        "lib/netstandard1.3/Serilog.Sinks.File.dll",
+        "lib/netstandard1.3/Serilog.Sinks.File.pdb",
+        "lib/netstandard1.3/Serilog.Sinks.File.xml",
+        "lib/netstandard2.0/Serilog.Sinks.File.dll",
+        "lib/netstandard2.0/Serilog.Sinks.File.pdb",
+        "lib/netstandard2.0/Serilog.Sinks.File.xml",
+        "lib/netstandard2.1/Serilog.Sinks.File.dll",
+        "lib/netstandard2.1/Serilog.Sinks.File.pdb",
+        "lib/netstandard2.1/Serilog.Sinks.File.xml",
+        "serilog.sinks.file.5.0.0.nupkg.sha512",
+        "serilog.sinks.file.nuspec"
+      ]
+    },
+    "SharpGen.Runtime/2.2.0-beta": {
+      "sha512": "pqf/lAf4jy1iWqkm37JmhoQhBMPVudI/F9qp2zVvzjWAPeSggRIuxGMVEZQ4UQiqtJ1Rf/+j3MVAONGYyCEDzQ==",
+      "type": "package",
+      "path": "sharpgen.runtime/2.2.0-beta",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/Mapping.xml",
+        "build/SharpGen.Runtime.props",
+        "buildMultiTargeting/SharpGen.Runtime.props",
+        "lib/net461/SharpGen.Runtime.dll",
+        "lib/net471/SharpGen.Runtime.dll",
+        "lib/net7.0/SharpGen.Runtime.dll",
+        "lib/net8.0/SharpGen.Runtime.dll",
+        "lib/netcoreapp3.1/SharpGen.Runtime.dll",
+        "lib/netstandard2.0/SharpGen.Runtime.dll",
+        "lib/netstandard2.1/SharpGen.Runtime.dll",
+        "sharpgen.runtime.2.2.0-beta.nupkg.sha512",
+        "sharpgen.runtime.nuspec"
+      ]
+    },
+    "SharpGen.Runtime.COM/2.2.0-beta": {
+      "sha512": "4vsXC8ohyVslcUDVBoVXLDkjKprqujh3GWy+DqqULjyZ3GCx7nwRAV5DdrXZxX70iEiKyI3TxW3Qhf/oOXeC1Q==",
+      "type": "package",
+      "path": "sharpgen.runtime.com/2.2.0-beta",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/SharpGen.Runtime.COM.BindMapping.xml",
+        "build/SharpGen.Runtime.COM.props",
+        "buildMultiTargeting/SharpGen.Runtime.COM.props",
+        "lib/net461/SharpGen.Runtime.COM.dll",
+        "lib/net471/SharpGen.Runtime.COM.dll",
+        "lib/net7.0/SharpGen.Runtime.COM.dll",
+        "lib/net8.0/SharpGen.Runtime.COM.dll",
+        "lib/netcoreapp3.1/SharpGen.Runtime.COM.dll",
+        "lib/netstandard2.0/SharpGen.Runtime.COM.dll",
+        "lib/netstandard2.1/SharpGen.Runtime.COM.dll",
+        "sharpgen.runtime.com.2.2.0-beta.nupkg.sha512",
+        "sharpgen.runtime.com.nuspec"
+      ]
+    },
+    "System.Drawing.Common/7.0.0": {
+      "sha512": "KIX+oBU38pxkKPxvLcLfIkOV5Ien8ReN78wro7OF5/erwcmortzeFx+iBswlh2Vz6gVne0khocQudGwaO1Ey6A==",
+      "type": "package",
+      "path": "system.drawing.common/7.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.Drawing.Common.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/System.Drawing.Common.targets",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net462/System.Drawing.Common.dll",
+        "lib/net462/System.Drawing.Common.xml",
+        "lib/net6.0/System.Drawing.Common.dll",
+        "lib/net6.0/System.Drawing.Common.xml",
+        "lib/net7.0/System.Drawing.Common.dll",
+        "lib/net7.0/System.Drawing.Common.xml",
+        "lib/netstandard2.0/System.Drawing.Common.dll",
+        "lib/netstandard2.0/System.Drawing.Common.xml",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "runtimes/win/lib/net6.0/System.Drawing.Common.dll",
+        "runtimes/win/lib/net6.0/System.Drawing.Common.xml",
+        "runtimes/win/lib/net7.0/System.Drawing.Common.dll",
+        "runtimes/win/lib/net7.0/System.Drawing.Common.xml",
+        "system.drawing.common.7.0.0.nupkg.sha512",
+        "system.drawing.common.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "System.Security.Cryptography.ProtectedData/8.0.0": {
+      "sha512": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg==",
+      "type": "package",
+      "path": "system.security.cryptography.protecteddata/8.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.Security.Cryptography.ProtectedData.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/System.Security.Cryptography.ProtectedData.targets",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net462/System.Security.Cryptography.ProtectedData.dll",
+        "lib/net462/System.Security.Cryptography.ProtectedData.xml",
+        "lib/net6.0/System.Security.Cryptography.ProtectedData.dll",
+        "lib/net6.0/System.Security.Cryptography.ProtectedData.xml",
+        "lib/net7.0/System.Security.Cryptography.ProtectedData.dll",
+        "lib/net7.0/System.Security.Cryptography.ProtectedData.xml",
+        "lib/net8.0/System.Security.Cryptography.ProtectedData.dll",
+        "lib/net8.0/System.Security.Cryptography.ProtectedData.xml",
+        "lib/netstandard2.0/System.Security.Cryptography.ProtectedData.dll",
+        "lib/netstandard2.0/System.Security.Cryptography.ProtectedData.xml",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "system.security.cryptography.protecteddata.8.0.0.nupkg.sha512",
+        "system.security.cryptography.protecteddata.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "System.Windows.Extensions/8.0.0": {
+      "sha512": "Obg3a90MkOw9mYKxrardLpY2u0axDMrSmy4JCdq2cYbelM2cUwmUir5Bomvd1yxmPL9h5LVHU1tuKBZpUjfASg==",
+      "type": "package",
+      "path": "system.windows.extensions/8.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net6.0/System.Windows.Extensions.dll",
+        "lib/net6.0/System.Windows.Extensions.xml",
+        "lib/net7.0/System.Windows.Extensions.dll",
+        "lib/net7.0/System.Windows.Extensions.xml",
+        "lib/net8.0/System.Windows.Extensions.dll",
+        "lib/net8.0/System.Windows.Extensions.xml",
+        "runtimes/win/lib/net6.0/System.Windows.Extensions.dll",
+        "runtimes/win/lib/net6.0/System.Windows.Extensions.xml",
+        "runtimes/win/lib/net7.0/System.Windows.Extensions.dll",
+        "runtimes/win/lib/net7.0/System.Windows.Extensions.xml",
+        "runtimes/win/lib/net8.0/System.Windows.Extensions.dll",
+        "runtimes/win/lib/net8.0/System.Windows.Extensions.xml",
+        "system.windows.extensions.8.0.0.nupkg.sha512",
+        "system.windows.extensions.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "Vortice.Direct3D11/3.6.2": {
+      "sha512": "+tXkwV4YVFgox3NjLGBOPmEHK8Jd/8ElI3X8aX7xq4JhsC3J9BqpUhpI+4LOKeCGN+XCORhyFq0ow+pB44YQTg==",
+      "type": "package",
+      "path": "vortice.direct3d11/3.6.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/Vortice.Direct3D11.BindMapping.xml",
+        "build/Vortice.Direct3D11.props",
+        "buildMultiTargeting/Vortice.Direct3D11.props",
+        "lib/net8.0/Vortice.Direct3D11.dll",
+        "lib/net8.0/Vortice.Direct3D11.xml",
+        "vortice.direct3d11.3.6.2.nupkg.sha512",
+        "vortice.direct3d11.nuspec"
+      ]
+    },
+    "Vortice.DirectX/3.6.2": {
+      "sha512": "pa/97U5IHascS/UJzMWFSKIs3wxh36zc8JpI+fzi/JLQk4wfTZur0n/Y9Lcp8i7hsf613Vu/6n6IImWSc9wupw==",
+      "type": "package",
+      "path": "vortice.directx/3.6.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/Vortice.DirectX.BindMapping.xml",
+        "build/Vortice.DirectX.props",
+        "buildMultiTargeting/Vortice.DirectX.props",
+        "lib/net8.0-windows10.0.19041/Vortice.DirectX.dll",
+        "lib/net8.0-windows10.0.19041/Vortice.DirectX.xml",
+        "lib/net8.0/Vortice.DirectX.dll",
+        "lib/net8.0/Vortice.DirectX.xml",
+        "vortice.directx.3.6.2.nupkg.sha512",
+        "vortice.directx.nuspec"
+      ]
+    },
+    "Vortice.DXGI/3.6.2": {
+      "sha512": "SPnBb1x3+CEqq7L5SEejElD2tMjkdE+bqN4c/eSNHj9WEpRPvAO0QFSEN8d9LiRDt9i9geD8m7E4s8sLMgz2qQ==",
+      "type": "package",
+      "path": "vortice.dxgi/3.6.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "build/Vortice.DXGI.BindMapping.xml",
+        "build/Vortice.DXGI.props",
+        "buildMultiTargeting/Vortice.DXGI.props",
+        "lib/net8.0-windows10.0.19041/Vortice.DXGI.dll",
+        "lib/net8.0-windows10.0.19041/Vortice.DXGI.xml",
+        "lib/net8.0/Vortice.DXGI.dll",
+        "lib/net8.0/Vortice.DXGI.xml",
+        "vortice.dxgi.3.6.2.nupkg.sha512",
+        "vortice.dxgi.nuspec"
+      ]
+    },
+    "Vortice.Mathematics/1.9.2": {
+      "sha512": "+fS68BN4Kn1g+Roh7qnuBdXnVrfpr9DpwPMsqe27J04nDCFUuhEvo+T5PqXU1lZwn8sLlNayWCx/U6w4gWCvuA==",
+      "type": "package",
+      "path": "vortice.mathematics/1.9.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net8.0-windows10.0.19041/Vortice.Mathematics.dll",
+        "lib/net8.0-windows10.0.19041/Vortice.Mathematics.pdb",
+        "lib/net8.0-windows10.0.19041/Vortice.Mathematics.xml",
+        "lib/net8.0/Vortice.Mathematics.dll",
+        "lib/net8.0/Vortice.Mathematics.pdb",
+        "lib/net8.0/Vortice.Mathematics.xml",
+        "lib/net9.0-windows10.0.19041/Vortice.Mathematics.dll",
+        "lib/net9.0-windows10.0.19041/Vortice.Mathematics.pdb",
+        "lib/net9.0-windows10.0.19041/Vortice.Mathematics.xml",
+        "lib/net9.0/Vortice.Mathematics.dll",
+        "lib/net9.0/Vortice.Mathematics.pdb",
+        "lib/net9.0/Vortice.Mathematics.xml",
+        "vortice.mathematics.1.9.2.nupkg.sha512",
+        "vortice.mathematics.nuspec"
+      ]
+    },
+    "Mieruka.Automation/1.0.0": {
+      "type": "project",
+      "path": "../Mieruka.Automation/Mieruka.Automation.csproj",
+      "msbuildProject": "../Mieruka.Automation/Mieruka.Automation.csproj"
+    },
+    "Mieruka.Core/1.0.0": {
+      "type": "project",
+      "path": "../Mieruka.Core/Mieruka.Core.csproj",
+      "msbuildProject": "../Mieruka.Core/Mieruka.Core.csproj"
+    },
+    "Mieruka.Preview/1.0.0": {
+      "type": "project",
+      "path": "../Mieruka.Preview/Mieruka.Preview.csproj",
+      "msbuildProject": "../Mieruka.Preview/Mieruka.Preview.csproj"
+    },
+    "Mieruka.Preview.Ipc/1.0.0": {
+      "type": "project",
+      "path": "../Mieruka.Preview.Ipc/Mieruka.Preview.Ipc.csproj",
+      "msbuildProject": "../Mieruka.Preview.Ipc/Mieruka.Preview.Ipc.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0-windows10.0.19041": [
+      "Mieruka.Automation >= 1.0.0",
+      "Mieruka.Core >= 1.0.0",
+      "Mieruka.Preview >= 1.0.0",
+      "Mieruka.Preview.Ipc >= 1.0.0",
+      "Serilog >= 3.1.1",
+      "Serilog.Enrichers.Thread >= 3.1.0"
+    ]
+  },
+  "packageFolders": {
+    "/home/runner/.nuget/packages/": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.App/Mieruka.App.csproj",
+      "projectName": "Mieruka.App",
+      "projectPath": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.App/Mieruka.App.csproj",
+      "packagesPath": "/home/runner/.nuget/packages/",
+      "outputPath": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.App/obj/",
+      "projectStyle": "PackageReference",
+      "centralPackageVersionsManagementEnabled": true,
+      "configFilePaths": [
+        "/home/runner/.nuget/NuGet/NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0-windows10.0.19041.0"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0-windows10.0.19041": {
+          "targetAlias": "net8.0-windows10.0.19041.0",
+          "projectReferences": {
+            "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Automation/Mieruka.Automation.csproj": {
+              "projectPath": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Automation/Mieruka.Automation.csproj"
+            },
+            "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Core/Mieruka.Core.csproj": {
+              "projectPath": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Core/Mieruka.Core.csproj"
+            },
+            "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview.Ipc/Mieruka.Preview.Ipc.csproj": {
+              "projectPath": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview.Ipc/Mieruka.Preview.Ipc.csproj"
+            },
+            "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/Mieruka.Preview.csproj": {
+              "projectPath": "/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/Mieruka.Preview.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "allWarningsAsErrors": true,
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.100"
+    },
+    "frameworks": {
+      "net8.0-windows10.0.19041": {
+        "targetAlias": "net8.0-windows10.0.19041.0",
+        "dependencies": {
+          "Serilog": {
+            "target": "Package",
+            "version": "[3.1.1, )",
+            "versionCentrallyManaged": true
+          },
+          "Serilog.Enrichers.Thread": {
+            "target": "Package",
+            "version": "[3.1.0, )",
+            "versionCentrallyManaged": true
+          }
+        },
+        "centralPackageVersions": {
+          "Microsoft.CodeAnalysis.NetAnalyzers": "8.0.0",
+          "Microsoft.NET.Test.Sdk": "17.11.1",
+          "Microsoft.Win32.SystemEvents": "8.0.0",
+          "Microsoft.Windows.SDK.Contracts": "10.0.22621.2428",
+          "Newtonsoft.Json": "13.0.3",
+          "Selenium.WebDriver": "4.35.0",
+          "Serilog": "3.1.1",
+          "Serilog.Enrichers.Thread": "3.1.0",
+          "Serilog.Sinks.Console": "5.0.1",
+          "Serilog.Sinks.File": "5.0.0",
+          "System.Drawing.Common": "7.0.0",
+          "System.Security.Cryptography.ProtectedData": "8.0.0",
+          "System.Windows.Extensions": "8.0.0",
+          "Vortice.Direct3D11": "3.6.2",
+          "Vortice.DXGI": "3.6.2",
+          "xunit": "2.9.3",
+          "xunit.runner.visualstudio": "3.1.4"
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.Windows.SDK.NET.Ref",
+            "version": "[10.0.19041.57, 10.0.19041.57]"
+          },
+          {
+            "name": "Microsoft.WindowsDesktop.App.Ref",
+            "version": "[8.0.22, 8.0.22]"
+          }
+        ],
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          },
+          "Microsoft.Windows.SDK.NET.Ref.Windows": {
+            "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App.WindowsForms": {
+            "privateAssets": "none"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.101/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

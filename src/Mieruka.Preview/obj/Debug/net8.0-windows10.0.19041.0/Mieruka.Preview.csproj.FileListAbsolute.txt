@@ -1,0 +1,16 @@
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/bin/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.deps.json
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/bin/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.dll
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/bin/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.pdb
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/bin/Debug/net8.0-windows10.0.19041.0/Mieruka.Core.dll
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/bin/Debug/net8.0-windows10.0.19041.0/Mieruka.Core.pdb
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.csproj.AssemblyReference.cache
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.GeneratedMSBuildEditorConfig.editorconfig
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.AssemblyInfoInputs.cache
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.AssemblyInfo.cs
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.csproj.CoreCompileInputs.cache
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.sourcelink.json
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka..D52B0066.Up2Date
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.dll
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/refint/Mieruka.Preview.dll
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/Mieruka.Preview.pdb
+/home/runner/work/MRK-Configurator/MRK-Configurator/src/Mieruka.Preview/obj/Debug/net8.0-windows10.0.19041.0/ref/Mieruka.Preview.dll
