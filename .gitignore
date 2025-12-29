@@ -1,6 +1,4 @@
 ## .NET Build artifacts
-bin/
-obj/
 [Dd]ebug/
 [Rr]elease/
 [Bb]in/
