@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Mieruka.Core.Models;
 
 namespace Mieruka.Preview
@@ -8,6 +9,41 @@ namespace Mieruka.Preview
     /// </summary>
     public static class GdiMonitorCapture
     {
+        /// <summary>
+        /// Creates and starts a GDI capture session asynchronously.
+        /// </summary>
+        public static async Task<IMonitorCapture> CreateAsync(string monitorId)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                throw new PlatformNotSupportedException("Monitor preview is only supported on Windows.");
+            }
+
+            var monitor = MonitorLocator.Find(monitorId)
+                ?? throw new InvalidOperationException($"Monitor '{monitorId}' não foi encontrado.");
+
+            var capture = new GdiMonitorCaptureProvider();
+            try
+            {
+                if (!capture.IsSupported)
+                {
+                    throw new PlatformNotSupportedException("Captura GDI não suportada neste sistema.");
+                }
+
+                await capture.StartAsync(monitor).ConfigureAwait(false);
+                return capture;
+            }
+            catch
+            {
+                await SafeDisposeAsync(capture).ConfigureAwait(false);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Creates and starts a GDI capture session synchronously.
+        /// </summary>
+        /// <remarks>Prefer CreateAsync when possible to avoid blocking the calling thread.</remarks>
         public static IMonitorCapture Create(string monitorId)
         {
             if (!OperatingSystem.IsWindows())
@@ -26,7 +62,8 @@ namespace Mieruka.Preview
                     throw new PlatformNotSupportedException("Captura GDI não suportada neste sistema.");
                 }
 
-                StartCapture(capture, monitor);
+                // Use Task.Run to avoid blocking if StartAsync is truly async
+                Task.Run(async () => await capture.StartAsync(monitor).ConfigureAwait(false)).GetAwaiter().GetResult();
                 return capture;
             }
             catch
@@ -36,12 +73,15 @@ namespace Mieruka.Preview
             }
         }
 
-        private static void StartCapture(IMonitorCapture capture, MonitorInfo monitor)
+        private static async Task SafeDisposeAsync(IMonitorCapture capture)
         {
-            var task = capture.StartAsync(monitor);
-            if (!task.IsCompleted)
+            try
             {
-                task.GetAwaiter().GetResult();
+                await capture.DisposeAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                // Ignore cleanup exceptions when failing to create the capture.
             }
         }
 

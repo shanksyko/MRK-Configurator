@@ -74,7 +74,20 @@ namespace Mieruka.Preview
             return GpuAsync(monitorId).GetAwaiter().GetResult();
         }
 
+        /// <summary>Cria captura GDI (fallback) para o monitor informado de forma assíncrona.</summary>
+        public static async Task<IMonitorCapture> GdiAsync(string monitorId)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
+
+            var canonicalId = MonitorIdentifier.Normalize(monitorId);
+            var log = Logger.ForMonitor(canonicalId);
+            log.Information("CaptureFactory: selecting backend {Backend}", "GDI");
+
+            return await GdiMonitorCapture.CreateAsync(monitorId).ConfigureAwait(false);
+        }
+
         /// <summary>Cria captura GDI (fallback) para o monitor informado.</summary>
+        /// <remarks>Prefer GdiAsync when possible to avoid blocking the calling thread.</remarks>
         public static IMonitorCapture Gdi(string monitorId)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
