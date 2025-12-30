@@ -18,6 +18,10 @@ internal sealed partial class PreviewForm : WinForms.Form
     private IMonitorCapture? _activeCapture;
     private readonly object _captureGate = new();
     private Drawing.Bitmap? _currentFrame;
+    
+    // Frame coalescence fields to prevent BeginInvoke queue buildup
+    private volatile Drawing.Bitmap? _pendingFrame;
+    private int _uiUpdatePending; // 0 = no update pending, 1 = update pending
 
     public PreviewForm()
     {
@@ -30,6 +34,7 @@ internal sealed partial class PreviewForm : WinForms.Form
         UpdateStyles();
 
         InitializeComponent();
+        picPreview.Paint += PicPreview_Paint;
         _captureFactory = () => new GdiMonitorCaptureProvider();
         CarregarMonitores();
     }
@@ -45,6 +50,7 @@ internal sealed partial class PreviewForm : WinForms.Form
     {
         await StopCaptureAsync();
         LiberarFrameAtual();
+        LiberarPendingFrame();
         base.OnFormClosing(e);
     }
 
@@ -229,6 +235,10 @@ internal sealed partial class PreviewForm : WinForms.Form
         }
 
         await capture.DisposeAsync().ConfigureAwait(false);
+        
+        // Clean up after stopping capture
+        LiberarFrameAtual();
+        LiberarPendingFrame();
     }
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
@@ -254,22 +264,97 @@ internal sealed partial class PreviewForm : WinForms.Form
             return;
         }
 
-        try
+        // Swap the pending frame atomically and dispose the old one
+        var oldFrame = System.Threading.Interlocked.Exchange(ref _pendingFrame, frame);
+        if (oldFrame is not null)
         {
-            if (!IsDisposed)
+            try
             {
-                BeginInvoke(new Action(() => ExibirFrame(frame)));
-                return;
+                oldFrame.Dispose();
+            }
+            catch
+            {
+                // Ignore disposal errors
             }
         }
-        catch (ObjectDisposedException)
+
+        // Only schedule a UI update if one is not already pending
+        if (System.Threading.Interlocked.CompareExchange(ref _uiUpdatePending, 1, 0) == 0)
         {
+            try
+            {
+                if (!IsDisposed)
+                {
+                    BeginInvoke(new Action(ProcessPendingFrame));
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Form is disposed, clean up
+                System.Threading.Interlocked.Exchange(ref _uiUpdatePending, 0);
+                LiberarPendingFrame();
+            }
+            catch (InvalidOperationException)
+            {
+                // Handle is invalid
+                System.Threading.Interlocked.Exchange(ref _uiUpdatePending, 0);
+                LiberarPendingFrame();
+            }
         }
-        catch (InvalidOperationException)
+    }
+
+    private void ProcessPendingFrame()
+    {
+        // Get the pending frame atomically
+        var frame = System.Threading.Interlocked.Exchange(ref _pendingFrame, null);
+        
+        if (frame is not null)
         {
+            // Replace current frame with the new one
+            LiberarFrameAtual();
+            _currentFrame = frame;
+            picPreview.Image = frame;
         }
 
-        frame.Dispose();
+        // Mark UI update as complete
+        System.Threading.Interlocked.Exchange(ref _uiUpdatePending, 0);
+
+        // If a new frame arrived while we were processing, schedule another update
+        if (_pendingFrame is not null && System.Threading.Interlocked.CompareExchange(ref _uiUpdatePending, 1, 0) == 0)
+        {
+            try
+            {
+                if (!IsDisposed)
+                {
+                    BeginInvoke(new Action(ProcessPendingFrame));
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                System.Threading.Interlocked.Exchange(ref _uiUpdatePending, 0);
+            }
+            catch (InvalidOperationException)
+            {
+                System.Threading.Interlocked.Exchange(ref _uiUpdatePending, 0);
+            }
+        }
+    }
+
+    private void PicPreview_Paint(object? sender, WinForms.PaintEventArgs e)
+    {
+        var frame = _currentFrame;
+        if (frame is not null)
+        {
+            try
+            {
+                // The DoubleBufferedPictureBox will handle drawing
+                // This method exists to ensure we refresh when needed
+            }
+            catch
+            {
+                // Ignore paint errors
+            }
+        }
     }
 
     private void ExibirFrame(Drawing.Bitmap frame)
@@ -281,11 +366,34 @@ internal sealed partial class PreviewForm : WinForms.Form
 
     private void LiberarFrameAtual()
     {
-        if (_currentFrame is not null)
+        var frame = System.Threading.Interlocked.Exchange(ref _currentFrame, null);
+        if (frame is not null)
         {
             picPreview.Image = null;
-            _currentFrame.Dispose();
-            _currentFrame = null;
+            try
+            {
+                frame.Dispose();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+    }
+
+    private void LiberarPendingFrame()
+    {
+        var frame = System.Threading.Interlocked.Exchange(ref _pendingFrame, null);
+        if (frame is not null)
+        {
+            try
+            {
+                frame.Dispose();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
         }
     }
 
