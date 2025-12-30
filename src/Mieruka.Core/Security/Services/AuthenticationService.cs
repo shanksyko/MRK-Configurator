@@ -43,7 +43,7 @@ public class AuthenticationService : IAuthenticationService
         }
 
         user.LastLoginAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        await SaveChangesWithRetryAsync();
 
         CurrentUser = user;
         await _auditLog.LogAsync(user.Id, "Login Success", details: $"User {username} logged in");
@@ -64,7 +64,7 @@ public class AuthenticationService : IAuthenticationService
         user.MustChangePassword = false;
         user.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        await SaveChangesWithRetryAsync();
         await _auditLog.LogAsync(userId, "Password Changed");
 
         return true;
@@ -92,5 +92,24 @@ public class AuthenticationService : IAuthenticationService
             100000,
             HashAlgorithmName.SHA256);
         return Convert.ToBase64String(pbkdf2.GetBytes(32));
+    }
+
+    private async Task SaveChangesWithRetryAsync()
+    {
+        // Retry logic for database writes with exponential backoff
+        const int maxRetries = 3;
+        for (int i = 0; i < maxRetries; i++)
+        {
+            try
+            {
+                await _context.SaveChangesAsync();
+                return;
+            }
+            catch (DbUpdateException) when (i < maxRetries - 1)
+            {
+                // Wait before retry with exponential backoff
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i)));
+            }
+        }
     }
 }

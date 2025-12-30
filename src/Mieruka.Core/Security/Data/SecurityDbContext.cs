@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Mieruka.Core.Security.Models;
 
@@ -33,12 +34,34 @@ public class SecurityDbContext : DbContext
     {
         if (!optionsBuilder.IsConfigured)
         {
-            optionsBuilder.UseSqlite($"Data Source={_databasePath}");
+            // Use SqliteConnectionStringBuilder to configure shared cache for better concurrency
+            var connectionStringBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = _databasePath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Cache = SqliteCacheMode.Shared
+            };
+
+            optionsBuilder.UseSqlite(connectionStringBuilder.ConnectionString, options =>
+            {
+                // Configure command timeout for better handling of busy scenarios
+                options.CommandTimeout(30);
+                
+                // Enable automatic retry for transient failures
+                // SQLite doesn't have a built-in retry strategy, but we configure timeouts
+                // The busy_timeout PRAGMA will handle retries at the SQLite level
+            });
         }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Enable WAL mode for better concurrency
+        // WAL allows readers and writers to proceed concurrently
+        Database.ExecuteSqlRaw("PRAGMA journal_mode = WAL;");
+        Database.ExecuteSqlRaw("PRAGMA synchronous = NORMAL;");
+        Database.ExecuteSqlRaw("PRAGMA busy_timeout = 3000;");
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");
