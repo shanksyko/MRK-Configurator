@@ -54,14 +54,23 @@ public class SecurityDbContext : DbContext
         }
     }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    /// <summary>
+    /// Ensures the database is created and WAL mode is enabled for better concurrency.
+    /// Should be called once during application initialization.
+    /// </summary>
+    public void EnsureDatabaseConfigured()
     {
+        Database.EnsureCreated();
+        
         // Enable WAL mode for better concurrency
         // WAL allows readers and writers to proceed concurrently
         Database.ExecuteSqlRaw("PRAGMA journal_mode = WAL;");
         Database.ExecuteSqlRaw("PRAGMA synchronous = NORMAL;");
         Database.ExecuteSqlRaw("PRAGMA busy_timeout = 3000;");
+    }
 
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");

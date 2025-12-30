@@ -357,13 +357,6 @@ internal sealed partial class PreviewForm : WinForms.Form
         }
     }
 
-    private void ExibirFrame(Drawing.Bitmap frame)
-    {
-        LiberarFrameAtual();
-        _currentFrame = frame;
-        picPreview.Image = frame;
-    }
-
     private void LiberarFrameAtual()
     {
         var frame = System.Threading.Interlocked.Exchange(ref _currentFrame, null);
