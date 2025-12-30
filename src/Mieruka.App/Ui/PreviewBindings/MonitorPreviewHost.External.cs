@@ -155,16 +155,23 @@ internal sealed class PreviewHostSession : IAsyncDisposable
                     continue;
                 }
 
-                switch (envelope.Kind)
+                try
                 {
-                    case PreviewIpcMessageKind.Frame:
-                        var frame = envelope.Deserialize<PreviewFrameMessage>();
-                        Backend ??= frame.Backend;
-                        DispatchFrame(frame);
-                        break;
-                    case PreviewIpcMessageKind.Status:
-                        Backend ??= envelope.Deserialize<PreviewStatusMessage>().Backend;
-                        break;
+                    switch (envelope.Kind)
+                    {
+                        case PreviewIpcMessageKind.Frame:
+                            var frame = envelope.Deserialize<PreviewFrameMessage>();
+                            Backend ??= frame.Backend;
+                            DispatchFrame(frame);
+                            break;
+                        case PreviewIpcMessageKind.Status:
+                            Backend ??= envelope.Deserialize<PreviewStatusMessage>().Backend;
+                            break;
+                    }
+                }
+                finally
+                {
+                    await envelope.DisposeAsync().ConfigureAwait(false);
                 }
             }
         }

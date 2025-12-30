@@ -159,8 +159,15 @@ public sealed class PreviewIpcChannel : IAsyncDisposable
     }
 }
 
-public sealed class PreviewIpcEnvelope : IAsyncDisposable
+/// <summary>
+/// Represents an IPC message envelope containing header and optional payload.
+/// This class must be disposed after use to return rented buffers to the ArrayPool.
+/// Ownership: The caller of ReadAsync owns the envelope and must dispose it.
+/// </summary>
+public sealed class PreviewIpcEnvelope : IAsyncDisposable, IDisposable
 {
+    private int _disposed;
+
     public PreviewIpcEnvelope(PreviewIpcMessageKind kind, byte[] header, byte[]? payloadBuffer, int payloadLength)
     {
         Kind = kind;
@@ -184,13 +191,20 @@ public sealed class PreviewIpcEnvelope : IAsyncDisposable
 
     public ReadOnlyMemory<byte> GetPayload() => PayloadBuffer is null ? ReadOnlyMemory<byte>.Empty : new ReadOnlyMemory<byte>(PayloadBuffer, 0, PayloadLength);
 
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            if (PayloadBuffer is not null)
+            {
+                ArrayPool<byte>.Shared.Return(PayloadBuffer);
+            }
+        }
+    }
+
     public ValueTask DisposeAsync()
     {
-        if (PayloadBuffer is not null)
-        {
-            ArrayPool<byte>.Shared.Return(PayloadBuffer);
-        }
-
+        Dispose();
         return ValueTask.CompletedTask;
     }
 }

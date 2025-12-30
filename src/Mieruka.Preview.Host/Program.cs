@@ -150,7 +150,7 @@ internal sealed class CaptureRunner
 
         _backend = new PreviewBackendInfo(PreviewBackendKind.Gdi, PreviewSettings.Default.TargetFpsGdi, "GDI");
         _frameInterval = PreviewSettings.Default.GetGdiFrameInterval();
-        return CaptureFactory.Gdi(_monitorId);
+        return await CaptureFactory.GdiAsync(_monitorId).ConfigureAwait(false);
     }
 
     private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)

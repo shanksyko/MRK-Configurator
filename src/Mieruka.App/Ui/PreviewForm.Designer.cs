@@ -14,7 +14,7 @@ partial class PreviewForm
     internal Button btnParar = null!;
     internal Button btnCapturaGdi = null!;
     internal Button btnCapturaGpu = null!;
-    internal PictureBox picPreview = null!;
+    internal DoubleBufferedPictureBox picPreview = null!;
     internal Label lblStatus = null!;
 
     protected override void Dispose(bool disposing)
@@ -39,9 +39,9 @@ partial class PreviewForm
         btnParar = new Button();
         btnCapturaGdi = new Button();
         btnCapturaGpu = new Button();
-        picPreview = new PictureBox();
+        picPreview = new DoubleBufferedPictureBox();
         lblStatus = new Label();
-        ((ISupportInitialize)picPreview).BeginInit();
+        SuspendLayout();
         SuspendLayout();
         //
         // layoutPrincipal
@@ -146,9 +146,7 @@ partial class PreviewForm
         picPreview.Margin = new Padding(3, 3, 3, 8);
         picPreview.Name = "picPreview";
         picPreview.Size = new System.Drawing.Size(938, 497);
-        picPreview.SizeMode = PictureBoxSizeMode.Zoom;
         picPreview.TabIndex = 1;
-        picPreview.TabStop = false;
         //
         // lblStatus
         //
@@ -172,7 +170,6 @@ partial class PreviewForm
         Name = "PreviewForm";
         StartPosition = FormStartPosition.CenterParent;
         Text = "Preview de Monitores";
-        ((ISupportInitialize)picPreview).EndInit();
         ResumeLayout(false);
     }
 
