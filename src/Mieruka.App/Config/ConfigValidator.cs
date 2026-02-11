@@ -27,6 +27,14 @@ internal sealed partial class ConfigValidator
         "msedgedriver",
     };
 
+    private static readonly IReadOnlyList<string> GeckoDriverCandidates = new[]
+    {
+        "geckodriver.exe",
+        "geckodriver",
+    };
+
+    private static readonly IReadOnlyList<string> BraveDriverCandidates = ChromeDriverCandidates;
+
     private readonly string _baseDirectory;
     private readonly IReadOnlyList<string> _driverProbePaths;
 
@@ -537,7 +545,7 @@ internal sealed partial class ConfigValidator
 
         foreach (var browser in requiredBrowsers)
         {
-            if (browser is not (BrowserType.Chrome or BrowserType.Edge))
+            if (browser is not (BrowserType.Chrome or BrowserType.Edge or BrowserType.Firefox or BrowserType.Brave))
             {
                 continue;
             }
@@ -555,6 +563,8 @@ internal sealed partial class ConfigValidator
         {
             BrowserType.Chrome => ChromeDriverCandidates,
             BrowserType.Edge => EdgeDriverCandidates,
+            BrowserType.Firefox => GeckoDriverCandidates,
+            BrowserType.Brave => BraveDriverCandidates,
             _ => Array.Empty<string>(),
         };
 

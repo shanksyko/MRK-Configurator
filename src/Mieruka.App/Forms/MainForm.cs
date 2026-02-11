@@ -357,9 +357,14 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private void SaveGraphicsOptions(PreviewGraphicsOptions options)
     {
+        _ = SaveGraphicsOptionsAsync(options);
+    }
+
+    private async Task SaveGraphicsOptionsAsync(PreviewGraphicsOptions options)
+    {
         try
         {
-            _graphicsOptionsStore.SaveAsync(options.Normalize()).GetAwaiter().GetResult();
+            await _graphicsOptionsStore.SaveAsync(options.Normalize()).ConfigureAwait(true);
         }
         catch (Exception ex)
         {

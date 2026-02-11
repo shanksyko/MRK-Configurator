@@ -262,7 +262,7 @@ public sealed class CredentialVault
                     }
 
                     Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                    // TODO: manter janelas de exposição de memória o mais curtas possível
+                    CryptographicOperations.ZeroMemory(entropyBytes);
                 }
             }
             catch (EndOfStreamException ex)
@@ -316,7 +316,7 @@ public sealed class CredentialVault
         var sync = _locks.GetOrAdd(path, _ => new object());
         lock (sync)
         {
-            var charsArray = chars.ToArray(); // TODO: refatorar para não materializar
+            var charsArray = chars.ToArray();
             try
             {
                 var plainBytes = Encoding.UTF8.GetBytes(charsArray);
@@ -354,7 +354,7 @@ public sealed class CredentialVault
                     }
 
                     Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                    // TODO: manter janelas de exposição de memória o mais curtas possível
+                    CryptographicOperations.ZeroMemory(entropyBytes);
                 }
             }
             finally
@@ -394,7 +394,7 @@ public sealed class CredentialVault
             }
 
             Array.Clear(entropyBytes, 0, entropyBytes.Length);
-            // TODO: manter janelas de exposição de memória o mais curtas possível
+            CryptographicOperations.ZeroMemory(entropyBytes);
         }
     }
 

@@ -214,6 +214,8 @@ internal sealed class SiteTestService
             {
                 BrowserType.Chrome => "chrome.exe",
                 BrowserType.Edge => "msedge.exe",
+                BrowserType.Firefox => "firefox.exe",
+                BrowserType.Brave => "brave.exe",
                 _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
             };
         }
@@ -222,6 +224,8 @@ internal sealed class SiteTestService
         {
             BrowserType.Chrome => "google-chrome",
             BrowserType.Edge => "microsoft-edge",
+            BrowserType.Firefox => "firefox",
+            BrowserType.Brave => "brave-browser",
             _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
         };
     }

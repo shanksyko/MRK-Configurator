@@ -197,7 +197,7 @@ public sealed class CookieSafeStore
                         finally
                         {
                             Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                            // TODO: manter janelas de exposição de memória o mais curtas possível
+                            CryptographicOperations.ZeroMemory(entropyBytes);
                         }
 
                         var json = Encoding.UTF8.GetString(jsonBytes);
@@ -323,7 +323,7 @@ public sealed class CookieSafeStore
                             finally
                             {
                                 Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                                // TODO: manter janelas de exposição de memória o mais curtas possível
+                                CryptographicOperations.ZeroMemory(entropyBytes);
                             }
 
                             var json = Encoding.UTF8.GetString(jsonBytes);
@@ -391,7 +391,7 @@ public sealed class CookieSafeStore
                             finally
                             {
                                 Array.Clear(entropyBytes, 0, entropyBytes.Length);
-                                // TODO: manter janelas de exposição de memória o mais curtas possível
+                                CryptographicOperations.ZeroMemory(entropyBytes);
                             }
 
                             var json = Encoding.UTF8.GetString(jsonBytes);
@@ -448,7 +448,7 @@ public sealed class CookieSafeStore
         finally
         {
             Array.Clear(entropyBytes, 0, entropyBytes.Length);
-            // TODO: manter janelas de exposição de memória o mais curtas possível
+            CryptographicOperations.ZeroMemory(entropyBytes);
         }
     }
 

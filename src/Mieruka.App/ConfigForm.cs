@@ -356,17 +356,46 @@ internal sealed class ConfigForm : WinForms.Form
 
         var fileMenu = new WinForms.ToolStripMenuItem("Arquivo");
 
-        var importItem = new WinForms.ToolStripMenuItem("Importar...");
+        var saveItem = new WinForms.ToolStripMenuItem("Salvar")
+        {
+            ShortcutKeys = Keys.Control | Keys.S,
+            ShowShortcutKeys = true,
+        };
+        saveItem.Click += OnSaveConfigurationClicked;
+
+        var importItem = new WinForms.ToolStripMenuItem("Importar...")
+        {
+            ShortcutKeys = Keys.Control | Keys.I,
+            ShowShortcutKeys = true,
+        };
         importItem.Click += OnImportConfiguration;
 
-        var exportItem = new WinForms.ToolStripMenuItem("Exportar...");
+        var exportItem = new WinForms.ToolStripMenuItem("Exportar...")
+        {
+            ShortcutKeys = Keys.Control | Keys.E,
+            ShowShortcutKeys = true,
+        };
         exportItem.Click += OnExportConfiguration;
 
+        fileMenu.DropDownItems.Add(saveItem);
+        fileMenu.DropDownItems.Add(new WinForms.ToolStripSeparator());
         fileMenu.DropDownItems.Add(importItem);
         fileMenu.DropDownItems.Add(exportItem);
 
         menuStrip.Items.Add(fileMenu);
         return menuStrip;
+    }
+
+    /// <inheritdoc />
+    protected override bool ProcessCmdKey(ref WinForms.Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.S))
+        {
+            OnSaveConfigurationClicked(this, EventArgs.Empty);
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     /// <inheritdoc />

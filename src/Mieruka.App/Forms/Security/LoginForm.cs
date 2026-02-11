@@ -57,9 +57,16 @@ public partial class LoginForm : Form
                 if (user.MustChangePassword)
                 {
                     MessageBox.Show("Você deve alterar sua senha no primeiro login.", "Alterar Senha", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    // TODO: Implement ChangePasswordForm
-                    // using var changePasswordForm = new ChangePasswordForm(_authService, user);
-                    // if (changePasswordForm.ShowDialog() == DialogResult.OK) { ... }
+                    using var changePasswordForm = new ChangePasswordForm(_authService, user);
+                    if (changePasswordForm.ShowDialog(this) != DialogResult.OK)
+                    {
+                        // User cancelled password change — treat as incomplete login.
+                        LoginSuccessful = false;
+                        _authenticatedUser = null;
+                        lblStatus.Text = "Alteração de senha obrigatória.";
+                        return;
+                    }
+
                     DialogResult = DialogResult.OK;
                     Close();
                 }

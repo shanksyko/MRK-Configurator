@@ -626,6 +626,8 @@ internal sealed class SiteEditorDialog : WinForms.Form
             {
                 BrowserType.Chrome => "chrome.exe",
                 BrowserType.Edge => "msedge.exe",
+                BrowserType.Firefox => "firefox.exe",
+                BrowserType.Brave => "brave.exe",
                 _ => browser.ToString(),
             };
         }
@@ -634,6 +636,8 @@ internal sealed class SiteEditorDialog : WinForms.Form
         {
             BrowserType.Chrome => "google-chrome",
             BrowserType.Edge => "microsoft-edge",
+            BrowserType.Firefox => "firefox",
+            BrowserType.Brave => "brave-browser",
             _ => browser.ToString().ToLowerInvariant(),
         };
     }

@@ -29,20 +29,8 @@ public sealed class AppRunner : IAppRunner
 {
     private static readonly TimeSpan WindowWaitTimeout = TimeSpan.FromSeconds(5);
 
-    public static event EventHandler? BeforeMoveWindow;
-    public static event EventHandler? AfterMoveWindow;
-
-    event EventHandler? IAppRunner.BeforeMoveWindow
-    {
-        add => AppRunner.BeforeMoveWindow += value;
-        remove => AppRunner.BeforeMoveWindow -= value;
-    }
-
-    event EventHandler? IAppRunner.AfterMoveWindow
-    {
-        add => AppRunner.AfterMoveWindow += value;
-        remove => AppRunner.AfterMoveWindow -= value;
-    }
+    public event EventHandler? BeforeMoveWindow;
+    public event EventHandler? AfterMoveWindow;
 
     public async Task RunAndPositionAsync(
         AppConfig app,
@@ -183,9 +171,9 @@ public sealed class AppRunner : IAppRunner
         {
             BeforeMoveWindow?.Invoke(this, EventArgs.Empty);
         }
-        catch
+        catch (Exception ex)
         {
-            // Suppress subscriber exceptions to avoid interrupting the runner.
+            Logger.Debug(ex, "Subscriber exception in BeforeMoveWindow.");
         }
     }
 
@@ -195,9 +183,9 @@ public sealed class AppRunner : IAppRunner
         {
             AfterMoveWindow?.Invoke(this, EventArgs.Empty);
         }
-        catch
+        catch (Exception ex)
         {
-            // Suppress subscriber exceptions to avoid interrupting the runner.
+            Logger.Debug(ex, "Subscriber exception in AfterMoveWindow.");
         }
     }
 

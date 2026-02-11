@@ -14,4 +14,14 @@ public enum BrowserType
     /// Microsoft Edge browser.
     /// </summary>
     Edge,
+
+    /// <summary>
+    /// Mozilla Firefox browser.
+    /// </summary>
+    Firefox,
+
+    /// <summary>
+    /// Brave browser (Chromium-based).
+    /// </summary>
+    Brave,
 }

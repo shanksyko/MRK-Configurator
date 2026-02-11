@@ -603,34 +603,51 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
             return false;
         }
 
-        foreach (var candidate in Process.GetProcesses())
+        // Filter by known browser process names instead of enumerating all processes.
+        var browserProcessNames = GetBrowserProcessNames(context.Config.Browser);
+        foreach (var processName in browserProcessNames)
         {
-            var keepCandidate = false;
+            foreach (var candidate in Process.GetProcessesByName(processName))
+            {
+                var keepCandidate = false;
 
-            try
-            {
-                if (string.Equals(candidate.MainWindowTitle, expectedTitle, StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    context.Process = candidate;
-                    _telemetry.Info($"Attached to running site '{context.Config.Id}' (PID {candidate.Id}).");
-                    keepCandidate = true;
-                    return true;
+                    if (string.Equals(candidate.MainWindowTitle, expectedTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Process = candidate;
+                        _telemetry.Info($"Attached to running site '{context.Config.Id}' (PID {candidate.Id}).");
+                        keepCandidate = true;
+                        return true;
+                    }
                 }
-            }
-            catch
-            {
-                // Ignore inaccessible processes.
-            }
-            finally
-            {
-                if (!keepCandidate)
+                catch
                 {
-                    candidate.Dispose();
+                    // Ignore inaccessible processes.
+                }
+                finally
+                {
+                    if (!keepCandidate)
+                    {
+                        candidate.Dispose();
+                    }
                 }
             }
         }
 
         return false;
+    }
+
+    private static string[] GetBrowserProcessNames(BrowserType browser)
+    {
+        return browser switch
+        {
+            BrowserType.Chrome => new[] { "chrome", "Google Chrome" },
+            BrowserType.Edge => new[] { "msedge", "Microsoft Edge" },
+            BrowserType.Firefox => new[] { "firefox" },
+            BrowserType.Brave => new[] { "brave" },
+            _ => Array.Empty<string>(),
+        };
     }
 
     private void ScheduleRetry<TConfig>(WatchContextBase<TConfig> context, DateTimeOffset now, string reason)
@@ -904,6 +921,8 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
             {
                 BrowserType.Chrome => "chrome.exe",
                 BrowserType.Edge => "msedge.exe",
+                BrowserType.Firefox => "firefox.exe",
+                BrowserType.Brave => "brave.exe",
                 _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
             };
         }
@@ -912,6 +931,8 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
         {
             BrowserType.Chrome => "google-chrome",
             BrowserType.Edge => "microsoft-edge",
+            BrowserType.Firefox => "firefox",
+            BrowserType.Brave => "brave-browser",
             _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
         };
     }

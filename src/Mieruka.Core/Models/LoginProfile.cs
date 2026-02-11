@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Mieruka.Core.Models;
 
@@ -17,7 +18,10 @@ public sealed record class LoginProfile
 
     /// <summary>
     /// Password applied to the login form.
+    /// When present in JSON, the value is migrated to the credential vault on first load
+    /// and then cleared from the serialized configuration.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Password { get; init; }
 
     /// <summary>
