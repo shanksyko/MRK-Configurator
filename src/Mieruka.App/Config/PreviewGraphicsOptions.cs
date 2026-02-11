@@ -46,12 +46,13 @@ public sealed record class PreviewGraphicsOptions
 public enum PreviewGraphicsMode
 {
     /// <summary>
-    /// Uses automatic detection (GPU when available, with GDI fallback).
+    /// Uses GDI by default to avoid GPU contention with other applications.
+    /// Falls back to GDI automatically.
     /// </summary>
     Auto,
 
     /// <summary>
-    /// Prefers GPU capture whenever possible.
+    /// Uses GPU capture explicitly. May compete with other GPU applications.
     /// </summary>
     Gpu,
 

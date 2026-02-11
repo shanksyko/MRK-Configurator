@@ -30,7 +30,6 @@ public sealed class AppRunner : IAppRunner
     private static readonly TimeSpan WindowWaitTimeout = TimeSpan.FromSeconds(5);
 
     public static event EventHandler? BeforeMoveWindow;
-
     public static event EventHandler? AfterMoveWindow;
 
     event EventHandler? IAppRunner.BeforeMoveWindow
@@ -96,7 +95,7 @@ public sealed class AppRunner : IAppRunner
         }
         catch (Exception ex)
         {
-            Logger.Error($"RunAndPositionAsync falhou para {app.Name ?? app.Id}", ex);
+            Logger.Error(ex, "RunAndPositionAsync falhou para {AppId}", app.Name ?? app.Id);
             throw;
         }
         finally

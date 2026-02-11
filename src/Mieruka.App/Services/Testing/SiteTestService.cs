@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.App.Config;
@@ -31,13 +32,47 @@ internal sealed class SiteTestService
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
     }
 
-    public Task<TestRunResult> TestAsync(SiteConfig site, string? selectedMonitorStableId, CancellationToken ct)
+    public async Task<TestRunResult> TestAsync(SiteConfig site, string? selectedMonitorStableId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(site);
 
-        return RequiresSelenium(site)
+        var connectivityResult = await CheckConnectivityAsync(site.Url, ct).ConfigureAwait(false);
+        if (connectivityResult is not null)
+        {
+            _logger.Warning("Connectivity check failed for {Url}: {Message}", site.Url, connectivityResult);
+        }
+
+        return await (RequiresSelenium(site)
             ? TestWithSeleniumAsync(site, selectedMonitorStableId, ct)
-            : TestWithProcessAsync(site, selectedMonitorStableId, ct);
+            : TestWithProcessAsync(site, selectedMonitorStableId, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<string?> CheckConnectivityAsync(string? url, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return null; // Skip check for invalid/empty URLs
+        }
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            using var request = new HttpRequestMessage(HttpMethod.Head, uri);
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            return null; // Reachable
+        }
+        catch (HttpRequestException ex)
+        {
+            return $"Não foi possível conectar em {uri.Host}: {ex.Message}";
+        }
+        catch (TaskCanceledException)
+        {
+            return $"Timeout ao conectar em {uri.Host}";
+        }
+        catch (Exception ex)
+        {
+            return $"Erro de conexão: {ex.Message}";
+        }
     }
 
     private async Task<TestRunResult> TestWithProcessAsync(SiteConfig site, string? selectedMonitorStableId, CancellationToken ct)

@@ -1148,12 +1148,25 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
             handler(this, args);
         }
+        catch (Exception)
+        {
+            bitmap.Dispose();
+            throw;
+        }
         finally
         {
             _dispatchDepth.Value = nextDepth - 1;
         }
 #else
-        handler(this, args);
+        try
+        {
+            handler(this, args);
+        }
+        catch (Exception)
+        {
+            bitmap.Dispose();
+            throw;
+        }
 #endif
     }
 

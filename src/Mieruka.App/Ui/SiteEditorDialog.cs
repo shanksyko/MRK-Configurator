@@ -18,12 +18,15 @@ internal sealed class SiteEditorDialog : WinForms.Form
 {
     private readonly IReadOnlyList<MonitorInfo> _monitors;
     private readonly IReadOnlyList<ZonePreset> _zonePresets;
+    private readonly HashSet<string> _existingIds;
+    private readonly string? _originalId;
     private readonly List<MonitorOption> _monitorOptions = new();
     private readonly List<ZoneOption> _zoneOptions = new();
     private readonly WinForms.TextBox _nameBox;
     private readonly WinForms.TextBox _titleBox;
     private readonly WinForms.TextBox _urlBox;
     private readonly WinForms.ComboBox _browserBox;
+    private readonly WinForms.Label _browserStatusLabel;
     private readonly WinForms.TextBox _userDataBox;
     private readonly WinForms.TextBox _profileBox;
     private readonly WinForms.TextBox _argsBox;
@@ -53,10 +56,13 @@ internal sealed class SiteEditorDialog : WinForms.Form
         IReadOnlyList<MonitorInfo> monitors,
         IReadOnlyList<ZonePreset> zonePresets,
         SiteConfig? template = null,
-        string? selectedMonitorStableId = null)
+        string? selectedMonitorStableId = null,
+        IEnumerable<string>? existingIds = null)
     {
         _monitors = monitors ?? Array.Empty<MonitorInfo>();
         _zonePresets = zonePresets ?? Array.Empty<ZonePreset>();
+        _existingIds = new HashSet<string>(existingIds ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        _originalId = template?.Id;
 
         AutoScaleMode = WinForms.AutoScaleMode.Dpi;
         AutoScaleDimensions = new Drawing.SizeF(96f, 96f);
@@ -99,7 +105,19 @@ internal sealed class SiteEditorDialog : WinForms.Form
         {
             _browserBox.Items.Add(browser);
         }
-        _browserBox.SelectedIndexChanged += (_, _) => UpdateBrowserPreview();
+        _browserBox.SelectedIndexChanged += (_, _) =>
+        {
+            UpdateBrowserDetectionStatus();
+            UpdateBrowserPreview();
+        };
+
+        _browserStatusLabel = new WinForms.Label
+        {
+            Dock = WinForms.DockStyle.Fill,
+            Font = baseFont,
+            AutoSize = true,
+            ForeColor = Drawing.Color.Gray,
+        };
 
         _argsBox = new WinForms.TextBox
         {
@@ -192,6 +210,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         AddRow(layout, "URL", _urlBox);
         _urlBox.TextChanged += (_, _) => UpdateBrowserPreview();
         AddRow(layout, "Navegador", _browserBox);
+        AddRow(layout, "", _browserStatusLabel);
         AddRow(layout, "User data dir", _userDataBox);
         AddRow(layout, "Profile dir", _profileBox);
         AddRow(layout, "Argumentos (um por linha)", _argsBox);
@@ -279,6 +298,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         PopulateZones(template?.TargetZonePresetId);
         LoadTemplate(template);
         UpdateReloadState();
+        UpdateBrowserDetectionStatus();
         UpdateBrowserPreview();
     }
 
@@ -618,6 +638,35 @@ internal sealed class SiteEditorDialog : WinForms.Form
         };
     }
 
+    private void UpdateBrowserDetectionStatus()
+    {
+        if (_browserStatusLabel is null || _browserBox.SelectedItem is not BrowserType browser)
+        {
+            return;
+        }
+
+        try
+        {
+            var installations = BrowserRegistry.Detect();
+            var match = installations.FirstOrDefault(b => b.Engine == browser);
+            if (match is not null && match.IsDetected)
+            {
+                _browserStatusLabel.Text = $"✓ {match.DisplayName} detectado: {match.ExecutablePath}";
+                _browserStatusLabel.ForeColor = Drawing.Color.Green;
+            }
+            else
+            {
+                _browserStatusLabel.Text = $"⚠ {browser} não encontrado no sistema";
+                _browserStatusLabel.ForeColor = Drawing.Color.OrangeRed;
+            }
+        }
+        catch
+        {
+            _browserStatusLabel.Text = "Não foi possível verificar o navegador";
+            _browserStatusLabel.ForeColor = Drawing.Color.Gray;
+        }
+    }
+
     private void UpdateReloadState()
     {
         _reloadIntervalBox.Enabled = _reloadCheck.Checked;
@@ -781,6 +830,14 @@ internal sealed class SiteEditorDialog : WinForms.Form
             return false;
         }
 
+        var id = _nameBox.Text.Trim();
+        if (!string.Equals(id, _originalId, StringComparison.OrdinalIgnoreCase) && _existingIds.Contains(id))
+        {
+            WinForms.MessageBox.Show(this, $"Já existe um site com o nome '{id}'.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+            _nameBox.Focus();
+            return false;
+        }
+
         if (_browserBox.SelectedItem is null)
         {
             WinForms.MessageBox.Show(this, "Selecione um navegador para o site.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
@@ -800,6 +857,24 @@ internal sealed class SiteEditorDialog : WinForms.Form
             WinForms.MessageBox.Show(this, "Modo aplicativo requer uma URL.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
             _urlBox.Focus();
             return false;
+        }
+
+        var url = _urlBox.Text?.Trim();
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var parsedUri))
+            {
+                WinForms.MessageBox.Show(this, $"A URL '{url}' não é válida. Use formato http:// ou https://.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+                _urlBox.Focus();
+                return false;
+            }
+
+            if (parsedUri.Scheme is not ("http" or "https"))
+            {
+                WinForms.MessageBox.Show(this, "Apenas URLs http:// e https:// são suportadas.", "Validação", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+                _urlBox.Focus();
+                return false;
+            }
         }
 
         if (_zoneBox.Enabled && _zoneBox.SelectedItem is not ZoneOption)

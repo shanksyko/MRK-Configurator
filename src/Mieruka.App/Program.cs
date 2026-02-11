@@ -161,7 +161,7 @@ internal static class Program
 
     private static void InitializeGpuCapture(PreviewGraphicsOptions graphicsOptions)
     {
-        var configurationAllowsGpu = graphicsOptions.Mode != PreviewGraphicsMode.Gdi;
+        var configurationAllowsGpu = graphicsOptions.Mode == PreviewGraphicsMode.Gpu;
 
         GpuCaptureGuard.Initialize(
             configurationAllowsGpu,

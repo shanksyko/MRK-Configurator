@@ -158,9 +158,9 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             _graphicsDropDown.DropDownItems.Clear();
         }
 
-        _graphicsAutoItem = CreateGraphicsMenuItem("Auto", PreviewGraphicsMode.Auto, "Seleciona automaticamente entre GPU e GDI");
-        _graphicsGpuItem = CreateGraphicsMenuItem("Ativada (GPU)", PreviewGraphicsMode.Gpu, "Força o uso de GPU sempre que possível");
-        _graphicsGdiItem = CreateGraphicsMenuItem("Desativada (GDI)", PreviewGraphicsMode.Gdi, "Força o modo GDI para o preview");
+        _graphicsAutoItem = CreateGraphicsMenuItem("Auto (GDI)", PreviewGraphicsMode.Auto, "Usa GDI por padrão, sem competir pela GPU");
+        _graphicsGpuItem = CreateGraphicsMenuItem("GPU", PreviewGraphicsMode.Gpu, "Usa GPU para captura (pode conflitar com outros apps)");
+        _graphicsGdiItem = CreateGraphicsMenuItem("GDI", PreviewGraphicsMode.Gdi, "Força o modo GDI para o preview");
 
         _graphicsDropDown.DropDownItems.AddRange(new WinForms.ToolStripItem[]
         {
@@ -327,7 +327,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     }
 
     private bool ShouldPreferGpu()
-        => _graphicsOptions.Mode != PreviewGraphicsMode.Gdi;
+        => _graphicsOptions.Mode == PreviewGraphicsMode.Gpu;
 
     private static JsonStore<PreviewGraphicsOptions> CreateGraphicsOptionsStore()
     {
@@ -1173,7 +1173,9 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         // Fire-and-forget pause instead of blocking the UI thread.
         // StopSafeAsync inside PausePreviewsAsync already handles cancellation gracefully.
-        _ = PausePreviewsAsync();
+        _ = PausePreviewsAsync().ContinueWith(
+            t => _telemetry.Warn("Falha ao pausar previews.", t.Exception?.InnerException),
+            TaskContinuationOptions.OnlyOnFaulted);
 
         if (clearManualState)
         {

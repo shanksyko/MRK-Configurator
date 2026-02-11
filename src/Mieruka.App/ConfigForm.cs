@@ -417,8 +417,11 @@ internal sealed class ConfigForm : WinForms.Form
                 preview.EntryDropped -= OnMonitorEntryDropped;
                 preview.SelectionApplied -= OnMonitorSelectionApplied;
                 preview.MonitorSelected -= OnMonitorSelected;
+                preview.Dispose();
             }
 
+            _imageList?.Dispose();
+            _issueImageList?.Dispose();
             _toolTip.Dispose();
         }
 
@@ -2240,7 +2243,8 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.Monitors,
             _workspace.ZonePresets.ToList(),
             template: null,
-            selectedMonitorStableId: _selectedMonitorStableId);
+            selectedMonitorStableId: _selectedMonitorStableId,
+            existingIds: _workspace.Sites.Select(s => s.Id));
         dialog.TestHandler = config =>
         {
             using var cts = new CancellationTokenSource(TestTimeout);
@@ -2293,7 +2297,8 @@ internal sealed class ConfigForm : WinForms.Form
             _workspace.Monitors,
             _workspace.ZonePresets.ToList(),
             current,
-            _selectedMonitorStableId);
+            _selectedMonitorStableId,
+            existingIds: _workspace.Sites.Select(s => s.Id));
         dialog.TestHandler = config =>
         {
             using var cts = new CancellationTokenSource(TestTimeout);
