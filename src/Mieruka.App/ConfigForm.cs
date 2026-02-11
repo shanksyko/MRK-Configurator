@@ -138,7 +138,7 @@ internal sealed class ConfigForm : WinForms.Form
 
         _imageList = new WinForms.ImageList
         {
-            ImageSize = new Drawing.Size(32, 32),
+            ImageSize = new Drawing.Size(20, 20),
             ColorDepth = ColorDepth.Depth32Bit,
         };
         _imageList.Images.Add("app", SystemIcons.Application);
@@ -156,12 +156,16 @@ internal sealed class ConfigForm : WinForms.Form
         _applicationsList.SmallImageList = _imageList;
         _applicationsList.SelectedIndexChanged += OnApplicationsSelectedIndexChanged;
         _applicationsList.ItemDrag += OnListItemDrag;
+        _applicationsList.MouseDoubleClick += (_, _) => { if (_appEditButton?.Enabled == true) OnEditApplicationClicked(_applicationsList, EventArgs.Empty); };
+        _applicationsList.KeyDown += OnApplicationsListKeyDown;
         ConfigureApplicationListView(_applicationsList);
 
         _sitesList = CreateListView();
         _sitesList.SmallImageList = _imageList;
         _sitesList.SelectedIndexChanged += OnSitesSelectedIndexChanged;
         _sitesList.ItemDrag += OnListItemDrag;
+        _sitesList.MouseDoubleClick += (_, _) => { if (_siteEditButton?.Enabled == true) OnEditSiteClicked(_sitesList, EventArgs.Empty); };
+        _sitesList.KeyDown += OnSitesListKeyDown;
         ConfigureSiteListView(_sitesList);
 
         _appsBinding = new BindingSource { DataSource = _workspace.Applications };
@@ -176,7 +180,7 @@ internal sealed class ConfigForm : WinForms.Form
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = false,
-            Padding = new WinForms.Padding(0, 6, 0, 0),
+            Padding = new WinForms.Padding(4, 8, 4, 4),
         };
 
         _siteButtonPanel = new WinForms.FlowLayoutPanel
@@ -186,7 +190,7 @@ internal sealed class ConfigForm : WinForms.Form
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = false,
-            Padding = new WinForms.Padding(0, 6, 0, 0),
+            Padding = new WinForms.Padding(4, 8, 4, 4),
         };
 
         var appsTab = new TabPage("Aplicativos")
@@ -244,9 +248,10 @@ internal sealed class ConfigForm : WinForms.Form
             FullRowSelect = true,
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
             SmallImageList = _issueImageList,
+            BorderStyle = BorderStyle.None,
         };
         _issuesList.Columns.Add("Tipo", 100, HorizontalAlignment.Left);
-        _issuesList.Columns.Add("Mensagem", 400, HorizontalAlignment.Left);
+        _issuesList.Columns.Add("Mensagem", 500, HorizontalAlignment.Left);
 
         var issuesLabel = new WinForms.Label
         {
@@ -849,14 +854,16 @@ internal sealed class ConfigForm : WinForms.Form
     {
         var entry = EntryReference.Create(EntryKind.Application, app.Id);
         var displayName = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
+        var exeName = app.ExecutablePath;
+        try { exeName = System.IO.Path.GetFileName(app.ExecutablePath); } catch { /* keep full path */ }
         var item = new WinForms.ListViewItem(displayName)
         {
             Tag = entry,
             ImageKey = "app",
-            ToolTipText = app.ExecutablePath,
+            ToolTipText = $"{app.ExecutablePath}\n{app.Arguments ?? "(sem argumentos)"}",
         };
 
-        item.SubItems.Add(app.ExecutablePath);
+        item.SubItems.Add(exeName);
         item.SubItems.Add(app.Arguments ?? string.Empty);
         item.SubItems.Add(DescribeWindow(app.Window));
         return item;
@@ -870,36 +877,21 @@ internal sealed class ConfigForm : WinForms.Form
         {
             Tag = entry,
             ImageKey = "site",
-            ToolTipText = site.Url,
+            ToolTipText = $"{site.Url}\n{site.Browser} · {(site.AppMode ? "App" : "Janela")}{(site.KioskMode ? " + Kiosk" : "")}",
         };
 
         item.SubItems.Add(site.Url);
-        item.SubItems.Add(site.Browser.ToString());
 
-        var profile = string.Join(", ", new[]
-        {
-            string.IsNullOrWhiteSpace(site.UserDataDirectory) ? null : site.UserDataDirectory,
-            string.IsNullOrWhiteSpace(site.ProfileDirectory) ? null : site.ProfileDirectory,
-        }.Where(value => !string.IsNullOrWhiteSpace(value)));
-        item.SubItems.Add(profile);
+        var browserLabel = site.Browser.ToString();
+        item.SubItems.Add(browserLabel);
 
         var modeParts = new List<string>();
-        if (site.AppMode)
-        {
-            modeParts.Add("App");
-        }
-        else
-        {
-            modeParts.Add("Janela");
-        }
-
-        if (site.KioskMode)
-        {
-            modeParts.Add("Kiosk");
-        }
-
+        if (site.AppMode) modeParts.Add("App");
+        else modeParts.Add("Janela");
+        if (site.KioskMode) modeParts.Add("Kiosk");
         item.SubItems.Add(string.Join(" + ", modeParts));
-        item.SubItems.Add(site.Login is null ? "Não" : "Sim");
+
+        item.SubItems.Add(site.Login is not null ? "✓" : "—");
         item.SubItems.Add(DescribeWindow(site.Window));
         return item;
     }
@@ -960,9 +952,14 @@ internal sealed class ConfigForm : WinForms.Form
         UpdateMonitorPreviews();
     }
 
+    private static readonly Drawing.Color RowAlternateColor = Drawing.Color.FromArgb(245, 247, 250);
+    private static readonly Drawing.Color RowHoverColor = Drawing.Color.FromArgb(230, 240, 255);
+    private static readonly Drawing.Color RowSelectedColor = Drawing.Color.FromArgb(0, 120, 215);
+    private static readonly Drawing.Color HeaderBackColor = Drawing.Color.FromArgb(240, 240, 240);
+
     private static WinForms.ListView CreateListView()
     {
-        return new WinForms.ListView
+        var lv = new WinForms.ListView
         {
             Dock = WinForms.DockStyle.Fill,
             MultiSelect = false,
@@ -971,7 +968,102 @@ internal sealed class ConfigForm : WinForms.Form
             View = View.Details,
             FullRowSelect = true,
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
+            OwnerDraw = true,
+            BorderStyle = BorderStyle.None,
         };
+
+        lv.DrawColumnHeader += OnDrawColumnHeader;
+        lv.DrawItem += OnDrawItem;
+        lv.DrawSubItem += OnDrawSubItem;
+
+        return lv;
+    }
+
+    private static void OnDrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
+    {
+        using var brush = new Drawing.SolidBrush(HeaderBackColor);
+        e.Graphics.FillRectangle(brush, e.Bounds);
+
+        using var borderPen = new Drawing.Pen(Drawing.Color.FromArgb(220, 220, 220));
+        e.Graphics.DrawLine(borderPen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
+        var font = e.Font ?? SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
+        using var textBrush = new Drawing.SolidBrush(Drawing.Color.FromArgb(80, 80, 80));
+        var textBounds = new Drawing.Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height);
+        var sf = new Drawing.StringFormat { LineAlignment = Drawing.StringAlignment.Center, Trimming = Drawing.StringTrimming.EllipsisCharacter };
+        e.Graphics.DrawString(e.Header?.Text ?? string.Empty, font, textBrush, textBounds, sf);
+    }
+
+    private static void OnDrawItem(object? sender, DrawListViewItemEventArgs e)
+    {
+        e.DrawDefault = false;
+    }
+
+    private static void OnDrawSubItem(object? sender, DrawListViewSubItemEventArgs e)
+    {
+        if (e.Item is null || e.SubItem is null)
+        {
+            e.DrawDefault = true;
+            return;
+        }
+
+        Drawing.Color backColor;
+        Drawing.Color foreColor;
+
+        if (e.Item.Selected)
+        {
+            backColor = RowSelectedColor;
+            foreColor = Drawing.Color.White;
+        }
+        else
+        {
+            backColor = e.ItemIndex % 2 == 0 ? Drawing.Color.White : RowAlternateColor;
+            foreColor = Drawing.Color.FromArgb(30, 30, 30);
+        }
+
+        using var bgBrush = new Drawing.SolidBrush(backColor);
+        e.Graphics.FillRectangle(bgBrush, e.Bounds);
+
+        if (e.ColumnIndex == 0 && e.Item.ImageList is not null && !string.IsNullOrEmpty(e.Item.ImageKey))
+        {
+            var img = e.Item.ImageList.Images[e.Item.ImageKey];
+            if (img is not null)
+            {
+                var iconSize = Math.Min(e.Bounds.Height - 4, 20);
+                var iconY = e.Bounds.Y + (e.Bounds.Height - iconSize) / 2;
+                e.Graphics.DrawImage(img, e.Bounds.X + 4, iconY, iconSize, iconSize);
+
+                var textBounds = new Drawing.Rectangle(e.Bounds.X + iconSize + 8, e.Bounds.Y, e.Bounds.Width - iconSize - 12, e.Bounds.Height);
+                DrawSubItemText(e.Graphics, e.SubItem.Text, textBounds, e.SubItem.Font ?? e.Item.Font, foreColor, isBold: true);
+                return;
+            }
+        }
+
+        var bounds = new Drawing.Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height);
+        DrawSubItemText(e.Graphics, e.SubItem.Text, bounds, e.SubItem.Font ?? e.Item.Font, foreColor, isBold: false);
+    }
+
+    private static void DrawSubItemText(Drawing.Graphics g, string text, Drawing.Rectangle bounds, Drawing.Font font, Drawing.Color color, bool isBold)
+    {
+        var drawFont = isBold
+            ? new Drawing.Font(font, Drawing.FontStyle.Bold)
+            : font;
+
+        try
+        {
+            using var brush = new Drawing.SolidBrush(color);
+            var sf = new Drawing.StringFormat
+            {
+                LineAlignment = Drawing.StringAlignment.Center,
+                Trimming = Drawing.StringTrimming.EllipsisCharacter,
+                FormatFlags = Drawing.StringFormatFlags.NoWrap,
+            };
+            g.DrawString(text, drawFont, brush, bounds, sf);
+        }
+        finally
+        {
+            if (isBold) drawFont.Dispose();
+        }
     }
 
     private WinForms.Control BuildApplicationTab()
@@ -1049,7 +1141,7 @@ internal sealed class ConfigForm : WinForms.Form
         _siteButtonPanel.ResumeLayout();
     }
 
-    private WinForms.Button CreateActionButton(string text, EventHandler onClick, bool enabled = true)
+    private static WinForms.Button CreateActionButton(string text, EventHandler onClick, bool enabled = true)
     {
         var button = new WinForms.Button
         {
@@ -1057,8 +1149,15 @@ internal sealed class ConfigForm : WinForms.Form
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Enabled = enabled,
-            Margin = new WinForms.Padding(0, 0, 6, 0),
+            Margin = new WinForms.Padding(0, 0, 4, 0),
+            Padding = new WinForms.Padding(12, 4, 12, 4),
+            FlatStyle = WinForms.FlatStyle.Flat,
+            BackColor = Drawing.Color.FromArgb(245, 245, 245),
+            Cursor = Cursors.Hand,
         };
+        button.FlatAppearance.BorderColor = Drawing.Color.FromArgb(200, 200, 200);
+        button.FlatAppearance.MouseOverBackColor = Drawing.Color.FromArgb(230, 240, 255);
+        button.FlatAppearance.MouseDownBackColor = Drawing.Color.FromArgb(200, 220, 250);
         button.Click += onClick;
         return button;
     }
@@ -1066,22 +1165,49 @@ internal sealed class ConfigForm : WinForms.Form
     private static void ConfigureApplicationListView(WinForms.ListView listView)
     {
         listView.Columns.Clear();
-        listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
-        listView.Columns.Add("Executável", 260, HorizontalAlignment.Left);
-        listView.Columns.Add("Argumentos", 220, HorizontalAlignment.Left);
-        listView.Columns.Add("Destino", 220, HorizontalAlignment.Left);
+        listView.Columns.Add("Nome", 200, HorizontalAlignment.Left);
+        listView.Columns.Add("Executável", 280, HorizontalAlignment.Left);
+        listView.Columns.Add("Argumentos", 200, HorizontalAlignment.Left);
+        listView.Columns.Add("Monitor", 200, HorizontalAlignment.Left);
     }
 
     private static void ConfigureSiteListView(WinForms.ListView listView)
     {
         listView.Columns.Clear();
-        listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
-        listView.Columns.Add("URL", 260, HorizontalAlignment.Left);
-        listView.Columns.Add("Navegador", 100, HorizontalAlignment.Left);
-        listView.Columns.Add("Perfil", 200, HorizontalAlignment.Left);
-        listView.Columns.Add("Modo", 160, HorizontalAlignment.Left);
-        listView.Columns.Add("Login", 120, HorizontalAlignment.Left);
-        listView.Columns.Add("Destino", 220, HorizontalAlignment.Left);
+        listView.Columns.Add("Nome", 200, HorizontalAlignment.Left);
+        listView.Columns.Add("URL", 280, HorizontalAlignment.Left);
+        listView.Columns.Add("Navegador", 110, HorizontalAlignment.Left);
+        listView.Columns.Add("Modo", 100, HorizontalAlignment.Left);
+        listView.Columns.Add("Login", 70, HorizontalAlignment.Left);
+        listView.Columns.Add("Monitor", 200, HorizontalAlignment.Left);
+    }
+
+    private void OnApplicationsListKeyDown(object? sender, WinForms.KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Delete && _appRemoveButton?.Enabled == true)
+        {
+            OnRemoveApplicationClicked(sender, EventArgs.Empty);
+            e.Handled = true;
+        }
+        else if (e.KeyCode == Keys.Enter && _appEditButton?.Enabled == true)
+        {
+            OnEditApplicationClicked(sender, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
+    private void OnSitesListKeyDown(object? sender, WinForms.KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Delete && _siteRemoveButton?.Enabled == true)
+        {
+            OnRemoveSiteClicked(sender, EventArgs.Empty);
+            e.Handled = true;
+        }
+        else if (e.KeyCode == Keys.Enter && _siteEditButton?.Enabled == true)
+        {
+            OnEditSiteClicked(sender, EventArgs.Empty);
+            e.Handled = true;
+        }
     }
 
     private void OnApplicationsSelectedIndexChanged(object? sender, EventArgs e)
