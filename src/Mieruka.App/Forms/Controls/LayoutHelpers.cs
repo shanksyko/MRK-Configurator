@@ -113,6 +113,14 @@ internal static class LayoutHelpers
             Text = GetMonitorDisplayName(monitor),
         };
 
+        // Ensure the font is disposed when the label is disposed.
+        // Label.Font does NOT take ownership — without this the GDI font handle leaks
+        // every time monitor cards are recreated (resize, topology change).
+        title.Disposed += (_, _) =>
+        {
+            try { titleFont.Dispose(); } catch { /* ignore */ }
+        };
+
         previewBox = new WinForms.PictureBox
         {
             Dock = WinForms.DockStyle.Fill,

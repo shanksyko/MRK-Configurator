@@ -296,10 +296,6 @@ internal sealed class ConfigForm : WinForms.Form
             "Aplicar Preset",
             "Seleciona e aplica um preset de zonas para o item atual.",
             OnApplyPresetClicked);
-        var previewButton = CreateFooterButton(
-            "Testar Preview",
-            "Abre a janela de preview para validar a captura de tela.",
-            OnTestPreviewClicked);
         var restoreButton = CreateFooterButton(
             "Restaurar Padrão",
             "Restaura os presets de zona padrão do aplicativo.",
@@ -315,7 +311,6 @@ internal sealed class ConfigForm : WinForms.Form
             saveButton,
             validateButton,
             applyPresetButton,
-            previewButton,
             restoreButton,
             closeButton,
         });
@@ -675,29 +670,7 @@ internal sealed class ConfigForm : WinForms.Form
         ApplyPresetToSelection(dialog.SelectedPreset, dialog.SelectedZone);
     }
 
-    private void OnTestPreviewClicked(object? sender, EventArgs e)
-    {
-        Log.Information("Teste de preview solicitado.");
 
-        if (_workspace.Monitors.Count == 0)
-        {
-            WinForms.MessageBox.Show(this, "Nenhum monitor está configurado para exibição de preview.", "Preview", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
-            return;
-        }
-
-        try
-        {
-            using var previewForm = new PreviewForm(_workspace.Monitors);
-            previewForm.ShowDialog(this);
-            UpdateStatus("Preview encerrado.");
-            Log.Information("Janela de preview encerrada pelo usuário.");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Falha ao abrir a janela de preview.");
-            WinForms.MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Erro", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
-        }
-    }
 
     private void OnRestoreDefaultsClicked(object? sender, EventArgs e)
     {

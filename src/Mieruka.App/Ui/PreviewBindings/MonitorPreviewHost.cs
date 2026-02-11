@@ -76,12 +76,14 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly List<Drawing.Bitmap> _pendingFrames = new();
-    private const int PendingFrameLimit = 2;
+    private const int PendingFrameLimit = 4;
     private readonly Guid _previewSessionId = Guid.NewGuid();
     private Drawing.Bitmap? _previewPlaceholderBitmap;
     private bool _editorPreviewDisabledMode;
     private readonly EventHandler _frameAnimationHandler;
     private TimeSpan _frameThrottle = DefaultFrameThrottle;
+    private long _frameThrottleTicks = DefaultFrameThrottle.Ticks; // lock-free hot path
+    private long _nextFrameAtTicks;                                 // lock-free hot path
     private bool _frameThrottleCustomized;
     private int _isVisible = 1;
     private Drawing.Bitmap? _currentFrame;
@@ -330,9 +332,11 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 }
 
                 _frameThrottle = sanitized;
+                Volatile.Write(ref _frameThrottleTicks, sanitized.Ticks);
                 if (_frameThrottle <= TimeSpan.Zero)
                 {
                     _nextFrameAt = DateTime.MinValue;
+                    Volatile.Write(ref _nextFrameAtTicks, 0L);
                 }
             }
         }
@@ -358,7 +362,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
                     if (_frameThrottle < SafeModeFrameThrottle)
                     {
                         _frameThrottle = SafeModeFrameThrottle;
+                        Volatile.Write(ref _frameThrottleTicks, SafeModeFrameThrottle.Ticks);
                         _nextFrameAt = DateTime.MinValue;
+                        Volatile.Write(ref _nextFrameAtTicks, 0L);
                     }
                 }
             }
@@ -843,6 +849,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 .GetResult();
 
             DisposePlaceholderBitmap();
+            DisposeBitmapPool();
 
             GC.SuppressFinalize(this);
         }
@@ -1579,16 +1586,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 return;
             }
 
-            if (!RegisterPendingFrame(clone, out var pendingCount))
-            {
-                ForQueueEvent("FrameDroppedBackpressure").Debug(
-                    "Limite de fila atingido; descartando quadro recente para manter a UI responsiva. Pendentes={PendingCount} Limite={Limit}.",
-                    pendingCount,
-                    PendingFrameLimit);
-                clone.Dispose();
-                return;
-            }
-
+            RegisterPendingFrame(clone, out _);
             UpdateTarget(clone);
         }
         finally
@@ -1691,11 +1689,40 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
+    // Pool de bitmaps reutilizáveis para evitar ~8MB de alocação por frame.
+    // Ring buffer com 3 slots — suficiente para pipeline de preview sem GC pressure.
+    private readonly Drawing.Bitmap?[] _bitmapPool = new Drawing.Bitmap?[3];
+    private int _bitmapPoolIndex;
+
     private Drawing.Bitmap? TryCloneFrame(Drawing.Image frame, int width, int height)
     {
         try
         {
-            return new Drawing.Bitmap(frame);
+            var poolIndex = _bitmapPoolIndex % _bitmapPool.Length;
+            var reusable = _bitmapPool[poolIndex];
+
+            // Reuse existing bitmap if dimensions match; otherwise allocate a new one.
+            if (reusable is null || reusable.Width != width || reusable.Height != height)
+            {
+                // Don't dispose the old bitmap here — it may still be referenced
+                // by the PictureBox. The old image is disposed when replaced via
+                // TryApplyFrame -> DisposeFrame chain.
+                reusable = new Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                _bitmapPool[poolIndex] = reusable;
+            }
+
+            using (var g = Drawing.Graphics.FromImage(reusable))
+            {
+                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                g.DrawImage(frame, 0, 0, width, height);
+            }
+
+            _bitmapPoolIndex = poolIndex + 1;
+
+            // Return a lightweight clone that owns its own pixel data so the pool
+            // bitmap can be reused on the next frame while this one is displayed.
+            return reusable.Clone(new Drawing.Rectangle(0, 0, width, height), reusable.PixelFormat);
         }
         catch (Exception ex) when (ex is ArgumentException or ExternalException or InvalidOperationException)
         {
@@ -2166,19 +2193,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private void StartAnimationSafe(Drawing.Image image)
     {
-        if (!CanAnimate(image))
-        {
-            return;
-        }
-
-        try
-        {
-            Drawing.ImageAnimator.Animate(image, _frameAnimationHandler);
-        }
-        catch
-        {
-            // Ignore animation failures.
-        }
+        // Preview frames are always single-frame bitmaps; skip the expensive
+        // ImageAnimator.CanAnimate check entirely on the hot path.
+        // Animated GIFs are never produced by the capture pipeline.
     }
 
     private static bool CanAnimate(Drawing.Image image)
@@ -2229,7 +2246,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             try
             {
-                _target.Invoke(new Action(ClearFrame));
+                _target.BeginInvoke(new Action(ClearFrame));
             }
             catch
             {
@@ -2273,6 +2290,25 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
         catch
         {
+        }
+    }
+
+    private void DisposeBitmapPool()
+    {
+        for (var i = 0; i < _bitmapPool.Length; i++)
+        {
+            var bitmap = Interlocked.Exchange(ref _bitmapPool[i], null);
+            if (bitmap is not null)
+            {
+                try
+                {
+                    bitmap.Dispose();
+                }
+                catch
+                {
+                    // Ignore failures while disposing pooled bitmaps.
+                }
+            }
         }
     }
 
@@ -2493,32 +2529,30 @@ public sealed partial class MonitorPreviewHost : IDisposable
             return false;
         }
 
-        if (!HasPendingFrameCapacity())
-        {
-            return false;
-        }
-
-        TimeSpan throttle;
-        lock (_frameTimingGate)
-        {
-            throttle = _frameThrottle;
-        }
-
-        if (throttle <= TimeSpan.Zero)
+        // Lock-free frame timing using Interlocked.CompareExchange on ticks.
+        // This eliminates lock contention on the hot path (every frame arrival).
+        var throttleTicks = Volatile.Read(ref _frameThrottleTicks);
+        if (throttleTicks <= 0)
         {
             return true;
         }
 
-        var now = DateTime.UtcNow;
-        lock (_frameTimingGate)
+        var nowTicks = DateTime.UtcNow.Ticks;
+        while (true)
         {
-            if (now < _nextFrameAt)
+            var deadline = Volatile.Read(ref _nextFrameAtTicks);
+            if (nowTicks < deadline)
             {
                 return false;
             }
 
-            _nextFrameAt = now + throttle;
-            return true;
+            var newDeadline = nowTicks + throttleTicks;
+            if (Interlocked.CompareExchange(ref _nextFrameAtTicks, newDeadline, deadline) == deadline)
+            {
+                return true;
+            }
+
+            // Another thread won the race; re-check.
         }
     }
 
@@ -2544,6 +2578,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private void ResetFrameThrottle()
     {
+        Volatile.Write(ref _nextFrameAtTicks, 0L);
         lock (_frameTimingGate)
         {
             _nextFrameAt = DateTime.MinValue;
@@ -2562,15 +2597,19 @@ public sealed partial class MonitorPreviewHost : IDisposable
             if (_safeModeEnabled)
             {
                 _frameThrottle = SafeModeFrameThrottle;
+                Volatile.Write(ref _frameThrottleTicks, SafeModeFrameThrottle.Ticks);
                 _nextFrameAt = DateTime.MinValue;
+                Volatile.Write(ref _nextFrameAtTicks, 0L);
                 return;
             }
 
             var targetThrottle = capture is GraphicsCaptureProvider ? GpuFrameThrottle : GdiFrameThrottle;
             _frameThrottle = targetThrottle;
+            Volatile.Write(ref _frameThrottleTicks, targetThrottle.Ticks);
             if (_frameThrottle <= TimeSpan.Zero)
             {
                 _nextFrameAt = DateTime.MinValue;
+                Volatile.Write(ref _nextFrameAtTicks, 0L);
             }
         }
     }
@@ -2602,10 +2641,21 @@ public sealed partial class MonitorPreviewHost : IDisposable
     {
         lock (_pendingFramesGate)
         {
-            if (_pendingFrames.Count >= PendingFrameLimit)
+            // Drop oldest frames when the queue is full instead of rejecting
+            // the newest frame. This keeps the displayed image as fresh as
+            // possible and prevents visible stutter during brief UI delays.
+            while (_pendingFrames.Count >= PendingFrameLimit)
             {
-                pendingCount = _pendingFrames.Count;
-                return false;
+                var oldest = _pendingFrames[0];
+                _pendingFrames.RemoveAt(0);
+                try
+                {
+                    oldest.Dispose();
+                }
+                catch
+                {
+                    // Ignore failures while disposing stale frames.
+                }
             }
 
             _pendingFrames.Add(frame);

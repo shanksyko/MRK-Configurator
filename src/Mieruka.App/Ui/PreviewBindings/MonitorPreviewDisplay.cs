@@ -172,7 +172,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         get
         {
             var cp = base.CreateParams;
-            cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
+            // NOTE: WS_EX_COMPOSITED (0x02000000) was removed.
+            // It forces software rendering and conflicts with OptimizedDoubleBuffer,
+            // causing double redraws and visible flickering/stuttering.
+            // DoubleBuffered + AllPaintingInWmPaint is sufficient for flicker-free rendering.
             return cp;
         }
     }

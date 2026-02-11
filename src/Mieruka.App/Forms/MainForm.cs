@@ -98,7 +98,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         var grid = dgvProgramas ?? throw new InvalidOperationException("O DataGridView de programas não foi criado pelo designer.");
         var source = bsProgramas ?? throw new InvalidOperationException("A BindingSource de programas não foi inicializada.");
-        _ = menuPreview ?? throw new InvalidOperationException("O menu de preview não foi criado.");
         _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi criado.");
 
         source.DataSource = _programas;
@@ -1171,7 +1170,10 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     private void StopAutomaticPreviews(bool clearManualState)
     {
         _previewsRequested = false;
-        PausePreviewsAsync().GetAwaiter().GetResult();
+
+        // Fire-and-forget pause instead of blocking the UI thread.
+        // StopSafeAsync inside PausePreviewsAsync already handles cancellation gracefully.
+        _ = PausePreviewsAsync();
 
         if (clearManualState)
         {
@@ -1184,7 +1186,20 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     {
         foreach (var context in _monitorCardOrder)
         {
-            context.CloseTestWindowAsync().GetAwaiter().GetResult();
+            try
+            {
+                // Use synchronous close only during form closing where
+                // we must ensure cleanup completes before exit.
+                context.CloseTestWindowAsync().GetAwaiter().GetResult();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Safe to ignore during shutdown.
+            }
+            catch (InvalidOperationException)
+            {
+                // Safe to ignore during shutdown.
+            }
         }
 
         foreach (var host in _monitorHosts)
@@ -1198,9 +1213,11 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         if (tlpMonitores is not null)
         {
+            tlpMonitores.SuspendLayout();
             tlpMonitores.Controls.Clear();
             tlpMonitores.RowStyles.Clear();
             tlpMonitores.RowCount = 1;
+            tlpMonitores.ResumeLayout(false);
         }
     }
 
@@ -1226,18 +1243,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         }
     }
 
-    private void menuPreview_Click(object? sender, EventArgs e)
-    {
-        try
-        {
-            var preview = new PreviewForm();
-            preview.Show(this);
-        }
-        catch (Exception ex)
-        {
-            WinForms.MessageBox.Show(this, $"Não foi possível abrir o preview: {ex.Message}", "Preview", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
-        }
-    }
+
 
     private void btnAdicionar_Click(object? sender, EventArgs e)
     {

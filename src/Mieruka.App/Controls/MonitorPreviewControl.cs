@@ -191,17 +191,19 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
         }
     }
 
+    // Cached pens for OnPaint to avoid per-paint GDI allocations.
+    private static readonly Drawing.Pen s_selectedPen = new(Drawing.Color.DodgerBlue, 2);
+    private static readonly Drawing.Pen s_normalPen = new(SystemColors.ControlDark, 1);
+
     protected override void OnPaint(WinForms.PaintEventArgs e)
     {
         base.OnPaint(e);
 
-        var color = _isSelected ? Drawing.Color.DodgerBlue : SystemColors.ControlDark;
-        var thickness = _isSelected ? 2 : 1;
+        var pen = _isSelected ? s_selectedPen : s_normalPen;
         var rect = ClientRectangle;
         rect.Width -= 1;
         rect.Height -= 1;
 
-        using var pen = new Drawing.Pen(color, thickness);
         e.Graphics.DrawRectangle(pen, rect);
     }
 
@@ -256,6 +258,14 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
             Alignment = StringAlignment.Center,
             LineAlignment = StringAlignment.Center,
         };
+
+        // Cached GDI resources to avoid per-paint allocations (reduces GC pressure + stutter).
+        private static readonly SolidBrush s_grayTextBrush = new(SystemColors.GrayText);
+        private static readonly SolidBrush s_monitorFillBrush = new(Drawing.Color.FromArgb(234, 240, 246));
+        private static readonly SolidBrush s_selectionOverlay = new(Drawing.Color.FromArgb(80, Drawing.Color.DeepSkyBlue));
+        private static readonly Drawing.Pen s_monitorPen = new(Drawing.Color.SteelBlue, 2f);
+        private static readonly Drawing.Pen s_monitorPenDropCue = new(Drawing.Color.SteelBlue, 4f);
+        private static readonly Drawing.Pen s_selectionOutline = new(Drawing.Color.DeepSkyBlue, 2f);
 
         private Drawing.Rectangle? _selection;
         private Drawing.RectangleF _currentDrag;
@@ -344,22 +354,19 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
 
             if (Monitor is null)
             {
-                using var textBrush = new SolidBrush(SystemColors.GrayText);
-                e.Graphics.DrawString("Nenhum monitor disponível", displayFont, textBrush, ClientRectangle, _stringFormat);
+                e.Graphics.DrawString("Nenhum monitor disponível", displayFont, s_grayTextBrush, ClientRectangle, _stringFormat);
                 return;
             }
 
             if (!TryGetMonitorSurface(out var surface, out var scale))
             {
-                using var textBrush = new SolidBrush(SystemColors.GrayText);
-                e.Graphics.DrawString("Monitor inválido", displayFont, textBrush, ClientRectangle, _stringFormat);
+                e.Graphics.DrawString("Monitor inválido", displayFont, s_grayTextBrush, ClientRectangle, _stringFormat);
                 return;
             }
 
-            using var monitorBrush = new SolidBrush(Drawing.Color.FromArgb(234, 240, 246));
-            using var monitorPen = new Drawing.Pen(Drawing.Color.SteelBlue, _showDropCue ? 4f : 2f);
+            var monitorPen = _showDropCue ? s_monitorPenDropCue : s_monitorPen;
 
-            e.Graphics.FillRectangle(monitorBrush, surface);
+            e.Graphics.FillRectangle(s_monitorFillBrush, surface);
             e.Graphics.DrawRectangle(monitorPen, surface.X, surface.Y, surface.Width, surface.Height);
 
             Drawing.RectangleF selectionRect;
@@ -383,19 +390,16 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
 
             if (selectionRect.Width > 0f && selectionRect.Height > 0f)
             {
-                using var overlay = new SolidBrush(Drawing.Color.FromArgb(80, Drawing.Color.DeepSkyBlue));
-                using var outline = new Drawing.Pen(Drawing.Color.DeepSkyBlue, 2f);
-                e.Graphics.FillRectangle(overlay, selectionRect);
-                e.Graphics.DrawRectangle(outline, selectionRect.X, selectionRect.Y, selectionRect.Width, selectionRect.Height);
+                e.Graphics.FillRectangle(s_selectionOverlay, selectionRect);
+                e.Graphics.DrawRectangle(s_selectionOutline, selectionRect.X, selectionRect.Y, selectionRect.Width, selectionRect.Height);
             }
 
-            using var captionBrush = new SolidBrush(SystemColors.GrayText);
             var caption = Monitor.DeviceName;
             if (!string.IsNullOrWhiteSpace(caption))
             {
                 var captionBounds = new Drawing.RectangleF(surface.Left, surface.Bottom + 6f, surface.Width, displayFont.Height + 6f);
                 var messageFont = ResolveFont(SystemFonts.MessageBoxFont ?? Font);
-                e.Graphics.DrawString(caption, messageFont, captionBrush, captionBounds, _stringFormat);
+                e.Graphics.DrawString(caption, messageFont, s_grayTextBrush, captionBounds, _stringFormat);
             }
         }
 

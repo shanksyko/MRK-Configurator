@@ -15,8 +15,7 @@ partial class MainForm
     internal ToolStripMenuItem menuPerfisTestar = null!;
     internal ToolStripSeparator menuPerfisSeparador = null!;
     internal ToolStripMenuItem menuPerfisCarregar = null!;
-    internal ToolStripMenuItem menuExibir = null!;
-    internal ToolStripMenuItem menuPreview = null!;
+
     internal TableLayoutPanel layoutPrincipal = null!;
     internal GroupBox grpMonitores = null!;
     internal TableLayoutPanel tlpMonitores = null!;
@@ -60,8 +59,7 @@ partial class MainForm
         menuPerfisTestar = new ToolStripMenuItem();
         menuPerfisSeparador = new ToolStripSeparator();
         menuPerfisCarregar = new ToolStripMenuItem();
-        menuExibir = new ToolStripMenuItem();
-        menuPreview = new ToolStripMenuItem();
+
         layoutPrincipal = new TableLayoutPanel();
         grpMonitores = new GroupBox();
         tlpMonitores = new TableLayoutPanel();
@@ -98,7 +96,7 @@ partial class MainForm
         // menuPrincipal
         //
         menuPrincipal.ImageScalingSize = new System.Drawing.Size(24, 24);
-        menuPrincipal.Items.AddRange(new ToolStripItem[] { menuPerfis, menuExibir });
+        menuPrincipal.Items.AddRange(new ToolStripItem[] { menuPerfis });
         menuPrincipal.Location = new System.Drawing.Point(0, 0);
         menuPrincipal.Name = "menuPrincipal";
         menuPrincipal.Padding = new Padding(8, 3, 0, 3);
@@ -152,20 +150,7 @@ partial class MainForm
         menuPerfisCarregar.Size = new System.Drawing.Size(246, 26);
         menuPerfisCarregar.Text = "Carregar perfil...";
         menuPerfisCarregar.Click += menuPerfisCarregar_Click;
-        //
-        // menuExibir
-        //
-        menuExibir.DropDownItems.AddRange(new ToolStripItem[] { menuPreview });
-        menuExibir.Name = "menuExibir";
-        menuExibir.Size = new System.Drawing.Size(58, 24);
-        menuExibir.Text = "&Exibir";
-        //
-        // menuPreview
-        //
-        menuPreview.Name = "menuPreview";
-        menuPreview.Size = new System.Drawing.Size(180, 24);
-        menuPreview.Text = "Preview...";
-        menuPreview.Click += menuPreview_Click;
+
         //
         // layoutPrincipal
         //
