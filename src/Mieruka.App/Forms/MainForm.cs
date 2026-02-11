@@ -1260,7 +1260,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             TargetMonitorStableId = SelectedMonitorId ?? string.Empty,
         };
 
-        AbrirEditor(null, novoPrograma);
+        AbrirEditorAsync(null, novoPrograma);
     }
 
     private void btnEditar_Click(object? sender, EventArgs e)
@@ -1271,7 +1271,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return;
         }
 
-        AbrirEditor(selecionado);
+        AbrirEditorAsync(selecionado);
     }
 
     private void btnDuplicar_Click(object? sender, EventArgs e)
@@ -2019,7 +2019,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             ?? new MonitorKey();
     }
 
-    private void AbrirEditor(ProgramaConfig? selected, ProgramaConfig? template = null)
+    private async void AbrirEditorAsync(ProgramaConfig? selected, ProgramaConfig? template = null)
     {
         var monitors = _monitorSnapshot.Count > 0
             ? _monitorSnapshot.ToList()
@@ -2027,22 +2027,50 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         var programaParaEdicao = template ?? selected;
 
-        using var editor = new AppEditorForm(programaParaEdicao, monitors, SelectedMonitorId, _appRunner, _programas);
-        var resultado = editor.ShowDialog(this);
+        // Stop main form previews before opening the editor to avoid
+        // GPU capture contention (WGC only allows one session per monitor).
+        // Without this, two capture clients fight for the same device causing
+        // heavy flickering and forced closure of GPU-backed applications.
+        // PausePreviewsAsync calls StopSafeAsync which fully releases the
+        // WGC session — SuspendCaptureAsync is not enough as it keeps the
+        // session handle open.
+        var hadPreviews = _previewsRequested;
+        await PausePreviewsAsync().ConfigureAwait(true);
+
+        WinForms.DialogResult resultado;
+        string? editorSelectedMonitor;
+        ProgramaConfig? programa;
+
+        try
+        {
+            using var editor = new AppEditorForm(programaParaEdicao, monitors, SelectedMonitorId, _appRunner, _programas);
+            resultado = editor.ShowDialog(this);
+            editorSelectedMonitor = editor.SelectedMonitorId;
+            programa = editor.Resultado;
+        }
+        finally
+        {
+            // Restart main form previews after the editor closes.
+            if (hadPreviews && !IsDisposed)
+            {
+                _previewsRequested = true;
+                await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+            }
+        }
+
         if (resultado != WinForms.DialogResult.OK)
         {
             return;
         }
 
-        var programa = editor.Resultado;
         if (programa is null)
         {
             return;
         }
 
-        if (!string.IsNullOrEmpty(editor.SelectedMonitorId))
+        if (!string.IsNullOrEmpty(editorSelectedMonitor))
         {
-            UpdateSelectedMonitor(editor.SelectedMonitorId, notify: false);
+            UpdateSelectedMonitor(editorSelectedMonitor, notify: false);
         }
 
         if (selected is null)
