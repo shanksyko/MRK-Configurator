@@ -60,6 +60,11 @@ partial class AppEditorForm
     internal FlowLayoutPanel flowCycleItems = null!;
     internal CheckBox chkCycleRedeDisponivel = null!;
     internal ToolTip cycleToolTip = null!;
+    internal TextBox txtNomeAmigavel = null!;
+    internal TextBox txtEnvVars = null!;
+    internal CheckBox chkWatchdogEnabled = null!;
+    internal NumericUpDown nudWatchdogGrace = null!;
+    internal ToolTip editorToolTip = null!;
 
     protected override void Dispose(bool disposing)
     {
@@ -142,9 +147,18 @@ partial class AppEditorForm
         btnCycleUp = new Button();
         btnCycleDown = new Button();
         flowCycleItems = new FlowLayoutPanel();
-        var lblAvancado = new Label();
         errorProvider = new ErrorProvider(components);
         cycleToolTip = ToolTipTamer.Create(components);
+        editorToolTip = ToolTipTamer.Create(components);
+        txtNomeAmigavel = new TextBox();
+        txtEnvVars = new TextBox();
+        chkWatchdogEnabled = new CheckBox();
+        nudWatchdogGrace = new NumericUpDown();
+        var tlpAvancado = new TableLayoutPanel();
+        var lblNomeAmigavel = new Label();
+        var lblEnvVars = new Label();
+        var lblWatchdogGrace = new Label();
+        ((ISupportInitialize)nudWatchdogGrace).BeginInit();
         tlpExecutavel.SuspendLayout();
         flowAppType.SuspendLayout();
         ((ISupportInitialize)bsCycle).BeginInit();
@@ -390,6 +404,7 @@ partial class AppEditorForm
         btnBrowseExe.TabIndex = 1;
         btnBrowseExe.Text = "Procurar...";
         btnBrowseExe.UseVisualStyleBackColor = true;
+        editorToolTip.SetToolTip(btnBrowseExe, "Selecionar arquivo executável (.exe)");
         //
         // lblArgumentos
         //
@@ -644,6 +659,7 @@ partial class AppEditorForm
         btnTestarJanela.Text = "Testar";
         btnTestarJanela.UseVisualStyleBackColor = true;
         btnTestarJanela.Click += btnTestarJanela_Click;
+        editorToolTip.SetToolTip(btnTestarJanela, "Simular posicionamento da janela no monitor selecionado");
         //
         // btnTestReal
         //
@@ -656,6 +672,7 @@ partial class AppEditorForm
         btnTestReal.Text = "Executar real";
         btnTestReal.UseVisualStyleBackColor = true;
         btnTestReal.Click += btnTestReal_Click;
+        editorToolTip.SetToolTip(btnTestReal, "Iniciar o programa e posicionar a janela real");
         //
         // tabSites
         //
@@ -970,7 +987,7 @@ partial class AppEditorForm
         //
         // tpAvancado
         //
-        tpAvancado.Controls.Add(lblAvancado);
+        tpAvancado.Controls.Add(tlpAvancado);
         tpAvancado.Location = new System.Drawing.Point(4, 24);
         tpAvancado.Margin = new Padding(8);
         tpAvancado.Name = "tpAvancado";
@@ -980,16 +997,103 @@ partial class AppEditorForm
         tpAvancado.Text = "Avançado";
         tpAvancado.UseVisualStyleBackColor = true;
         //
-        // lblAvancado
+        // tlpAvancado
         //
-        lblAvancado.AutoSize = true;
-        lblAvancado.Dock = DockStyle.Top;
-        lblAvancado.Margin = new Padding(0);
-        lblAvancado.Name = "lblAvancado";
-        lblAvancado.Padding = new Padding(0, 0, 0, 8);
-        lblAvancado.Size = new System.Drawing.Size(305, 15);
-        lblAvancado.TabIndex = 0;
-        lblAvancado.Text = "Recursos avançados poderão ser ajustados futuramente.";
+        tlpAvancado.ColumnCount = 2;
+        tlpAvancado.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpAvancado.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpAvancado.Controls.Add(lblNomeAmigavel, 0, 0);
+        tlpAvancado.Controls.Add(txtNomeAmigavel, 1, 0);
+        tlpAvancado.Controls.Add(chkWatchdogEnabled, 0, 1);
+        tlpAvancado.SetColumnSpan(chkWatchdogEnabled, 2);
+        tlpAvancado.Controls.Add(lblWatchdogGrace, 0, 2);
+        tlpAvancado.Controls.Add(nudWatchdogGrace, 1, 2);
+        tlpAvancado.Controls.Add(lblEnvVars, 0, 3);
+        tlpAvancado.SetColumnSpan(lblEnvVars, 2);
+        tlpAvancado.Controls.Add(txtEnvVars, 0, 4);
+        tlpAvancado.SetColumnSpan(txtEnvVars, 2);
+        tlpAvancado.Dock = DockStyle.Fill;
+        tlpAvancado.Location = new System.Drawing.Point(8, 8);
+        tlpAvancado.Margin = new Padding(0);
+        tlpAvancado.Name = "tlpAvancado";
+        tlpAvancado.Padding = new Padding(0, 0, 0, 8);
+        tlpAvancado.RowCount = 5;
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpAvancado.Size = new System.Drawing.Size(1016, 604);
+        tlpAvancado.TabIndex = 0;
+        //
+        // lblNomeAmigavel
+        //
+        lblNomeAmigavel.AutoSize = true;
+        lblNomeAmigavel.Margin = new Padding(0, 0, 8, 8);
+        lblNomeAmigavel.Name = "lblNomeAmigavel";
+        lblNomeAmigavel.Size = new System.Drawing.Size(83, 15);
+        lblNomeAmigavel.TabIndex = 0;
+        lblNomeAmigavel.Text = "Nome amigável";
+        //
+        // txtNomeAmigavel
+        //
+        txtNomeAmigavel.Dock = DockStyle.Fill;
+        txtNomeAmigavel.Margin = new Padding(0, 0, 0, 8);
+        txtNomeAmigavel.Name = "txtNomeAmigavel";
+        txtNomeAmigavel.Size = new System.Drawing.Size(900, 23);
+        txtNomeAmigavel.TabIndex = 1;
+        txtNomeAmigavel.PlaceholderText = "Nome opcional para exibição";
+        //
+        // chkWatchdogEnabled
+        //
+        chkWatchdogEnabled.AutoSize = true;
+        chkWatchdogEnabled.Margin = new Padding(0, 0, 0, 8);
+        chkWatchdogEnabled.Name = "chkWatchdogEnabled";
+        chkWatchdogEnabled.Size = new System.Drawing.Size(200, 19);
+        chkWatchdogEnabled.TabIndex = 2;
+        chkWatchdogEnabled.Text = "Supervisão (Watchdog) ativada";
+        chkWatchdogEnabled.Checked = true;
+        chkWatchdogEnabled.UseVisualStyleBackColor = true;
+        //
+        // lblWatchdogGrace
+        //
+        lblWatchdogGrace.AutoSize = true;
+        lblWatchdogGrace.Margin = new Padding(0, 0, 8, 8);
+        lblWatchdogGrace.Name = "lblWatchdogGrace";
+        lblWatchdogGrace.Size = new System.Drawing.Size(160, 15);
+        lblWatchdogGrace.TabIndex = 3;
+        lblWatchdogGrace.Text = "Carência pós-reinício (seg)";
+        //
+        // nudWatchdogGrace
+        //
+        nudWatchdogGrace.Margin = new Padding(0, 0, 8, 8);
+        nudWatchdogGrace.Maximum = new decimal(new int[] { 300, 0, 0, 0 });
+        nudWatchdogGrace.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+        nudWatchdogGrace.Name = "nudWatchdogGrace";
+        nudWatchdogGrace.Size = new System.Drawing.Size(160, 23);
+        nudWatchdogGrace.TabIndex = 4;
+        nudWatchdogGrace.Value = new decimal(new int[] { 15, 0, 0, 0 });
+        //
+        // lblEnvVars
+        //
+        lblEnvVars.AutoSize = true;
+        lblEnvVars.Margin = new Padding(0, 8, 0, 4);
+        lblEnvVars.Name = "lblEnvVars";
+        lblEnvVars.Size = new System.Drawing.Size(260, 15);
+        lblEnvVars.TabIndex = 5;
+        lblEnvVars.Text = "Variáveis de ambiente (CHAVE=VALOR por linha)";
+        //
+        // txtEnvVars
+        //
+        txtEnvVars.Dock = DockStyle.Fill;
+        txtEnvVars.Margin = new Padding(0);
+        txtEnvVars.Multiline = true;
+        txtEnvVars.Name = "txtEnvVars";
+        txtEnvVars.ScrollBars = ScrollBars.Vertical;
+        txtEnvVars.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9F);
+        txtEnvVars.Size = new System.Drawing.Size(1016, 400);
+        txtEnvVars.TabIndex = 6;
+        txtEnvVars.PlaceholderText = "DISPLAY=:0\nLANG=pt_BR.UTF-8";
         //
         // painelRodape
         //
@@ -1018,6 +1122,7 @@ partial class AppEditorForm
         btnSalvar.Text = "Salvar";
         btnSalvar.UseVisualStyleBackColor = true;
         btnSalvar.Click += btnSalvar_Click;
+        editorToolTip.SetToolTip(btnSalvar, "Salvar configuração (Ctrl+S)");
         //
         // btnCancelar
         //
@@ -1030,6 +1135,7 @@ partial class AppEditorForm
         btnCancelar.Text = "Cancelar";
         btnCancelar.UseVisualStyleBackColor = true;
         btnCancelar.Click += btnCancelar_Click;
+        editorToolTip.SetToolTip(btnCancelar, "Descartar alterações e fechar (Esc)");
         //
         // errorProvider
         //
@@ -1065,8 +1171,11 @@ partial class AppEditorForm
         flpCycleButtons.PerformLayout();
         flowCycleItems.ResumeLayout(false);
         tpCiclo.ResumeLayout(false);
+        tlpAvancado.ResumeLayout(false);
+        tlpAvancado.PerformLayout();
         tpAvancado.ResumeLayout(false);
         tpAvancado.PerformLayout();
+        ((ISupportInitialize)nudWatchdogGrace).EndInit();
         painelRodape.ResumeLayout(false);
         painelRodape.PerformLayout();
         tlpGeral.ResumeLayout(false);

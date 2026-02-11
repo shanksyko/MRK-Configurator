@@ -131,6 +131,8 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
     private int _invalidSnapshotAttempts;
     private Drawing.PointF? _lastClickMonitorPoint;
     private bool _settingCycleCurrentCell;
+    private bool _isDirty;
+    private bool _suppressDirtyTracking;
 
     private static int _simRectsDepth;
     private static int _simOverlaysDepth;
@@ -260,6 +262,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
         txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
         txtId.TextChanged += txtId_TextChanged;
+        txtId.Leave += (_, _) => ValidarCampoId();
 
         cboMonitores.SelectedIndexChanged += cboMonitores_SelectedIndexChanged;
         PopulateMonitorCombo(programa);
@@ -340,6 +343,37 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         BindInstalledBrowsers();
         ApplyAppTypeUI();
         UpdatePreviewVisibility();
+
+        WireDirtyTracking();
+        _suppressDirtyTracking = false;
+        _isDirty = false;
+    }
+
+    private void MarkDirty()
+    {
+        if (_suppressDirtyTracking) return;
+        _isDirty = true;
+    }
+
+    private void WireDirtyTracking()
+    {
+        _suppressDirtyTracking = true;
+        txtId.TextChanged += (_, _) => MarkDirty();
+        txtExecutavel.TextChanged += (_, _) => MarkDirty();
+        txtArgumentos.TextChanged += (_, _) => MarkDirty();
+        chkAutoStart.CheckedChanged += (_, _) => MarkDirty();
+        rbExe.CheckedChanged += (_, _) => MarkDirty();
+        rbBrowser.CheckedChanged += (_, _) => MarkDirty();
+        chkJanelaTelaCheia.CheckedChanged += (_, _) => MarkDirty();
+        nudJanelaX.ValueChanged += (_, _) => MarkDirty();
+        nudJanelaY.ValueChanged += (_, _) => MarkDirty();
+        nudJanelaLargura.ValueChanged += (_, _) => MarkDirty();
+        nudJanelaAltura.ValueChanged += (_, _) => MarkDirty();
+        cboMonitores.SelectedIndexChanged += (_, _) => MarkDirty();
+        txtNomeAmigavel.TextChanged += (_, _) => MarkDirty();
+        txtEnvVars.TextChanged += (_, _) => MarkDirty();
+        chkWatchdogEnabled.CheckedChanged += (_, _) => MarkDirty();
+        nudWatchdogGrace.ValueChanged += (_, _) => MarkDirty();
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -425,6 +459,22 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 
         appsTabControl!.ExecutablePath = programa.ExecutablePath;
         appsTabControl.Arguments = programa.Arguments ?? string.Empty;
+
+        // Avançado
+        txtNomeAmigavel.Text = programa.Name ?? string.Empty;
+        var wd = programa.Watchdog ?? new WatchdogSettings();
+        chkWatchdogEnabled.Checked = wd.Enabled;
+        nudWatchdogGrace.Value = AjustarRange(nudWatchdogGrace, wd.RestartGracePeriodSeconds);
+
+        var envLines = new System.Text.StringBuilder();
+        if (programa.EnvironmentVariables is { Count: > 0 } envDict)
+        {
+            foreach (var kv in envDict)
+            {
+                envLines.AppendLine($"{kv.Key}={kv.Value}");
+            }
+        }
+        txtEnvVars.Text = envLines.ToString().TrimEnd();
 
         UpdateWindowInputsState();
         _ = UpdateMonitorPreviewAsync();
@@ -3615,6 +3665,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         return (_original ?? new ProgramaConfig()) with
         {
             Id = id,
+            Name = string.IsNullOrWhiteSpace(txtNomeAmigavel.Text) ? null : txtNomeAmigavel.Text.Trim(),
             ExecutablePath = executavel,
             Arguments = argumentos,
             AutoStart = chkAutoStart.Checked,
@@ -3626,7 +3677,33 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             RequiresNetwork = _editingMetadata?.RequiresNetwork
                 ?? _original?.RequiresNetwork
                 ?? false,
+            Watchdog = new WatchdogSettings
+            {
+                Enabled = chkWatchdogEnabled.Checked,
+                RestartGracePeriodSeconds = (int)nudWatchdogGrace.Value,
+            },
+            EnvironmentVariables = ParseEnvironmentVariables(),
         };
+    }
+
+    private IDictionary<string, string> ParseEnvironmentVariables()
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(txtEnvVars.Text)) return dict;
+
+        foreach (var line in txtEnvVars.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eqIndex = line.IndexOf('=');
+            if (eqIndex <= 0) continue;
+            var key = line[..eqIndex].Trim();
+            var value = line[(eqIndex + 1)..].Trim();
+            if (!string.IsNullOrEmpty(key))
+            {
+                dict[key] = value;
+            }
+        }
+
+        return dict;
     }
 
     private void InitializeCycleMetadata(IList<ProgramaConfig>? profileApps, ProgramaConfig? programa)
@@ -4033,9 +4110,42 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         else
         {
             errorProvider.SetError(txtExecutavel, string.Empty);
+
+            // Validação modo navegador
+            if (_sites.Count == 0)
+            {
+                errorProvider.SetError(sitesEditorControl, "Adicione pelo menos um site.");
+                valido = false;
+            }
+            else
+            {
+                errorProvider.SetError(sitesEditorControl, string.Empty);
+            }
+
+            if (cmbBrowserEngine.SelectedIndex < 0)
+            {
+                errorProvider.SetError(cmbBrowserEngine, "Selecione um motor de navegador.");
+                valido = false;
+            }
+            else
+            {
+                errorProvider.SetError(cmbBrowserEngine, string.Empty);
+            }
         }
 
         return valido;
+    }
+
+    private void ValidarCampoId()
+    {
+        if (string.IsNullOrWhiteSpace(txtId.Text))
+        {
+            errorProvider.SetError(txtId, "Informe um identificador.");
+        }
+        else
+        {
+            errorProvider.SetError(txtId, string.Empty);
+        }
     }
 
     private void btnCancelar_Click(object? sender, EventArgs e)
@@ -4044,8 +4154,54 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         Close();
     }
 
+    protected override bool ProcessCmdKey(ref WinForms.Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.Control | Keys.S:
+                btnSalvar_Click(this, EventArgs.Empty);
+                return true;
+            case Keys.Control | Keys.D1:
+                tabEditor.SelectedIndex = 0;
+                return true;
+            case Keys.Control | Keys.D2:
+                if (tabEditor.TabCount > 1) tabEditor.SelectedIndex = 1;
+                return true;
+            case Keys.Control | Keys.D3:
+                if (tabEditor.TabCount > 2) tabEditor.SelectedIndex = 2;
+                return true;
+            case Keys.Control | Keys.D4:
+                if (tabEditor.TabCount > 3) tabEditor.SelectedIndex = 3;
+                return true;
+            case Keys.Control | Keys.D5:
+                if (tabEditor.TabCount > 4) tabEditor.SelectedIndex = 4;
+                return true;
+            case Keys.Control | Keys.D6:
+                if (tabEditor.TabCount > 5) tabEditor.SelectedIndex = 5;
+                return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     protected override async void OnFormClosing(WinForms.FormClosingEventArgs e)
     {
+        if (DialogResult != WinForms.DialogResult.OK && _isDirty)
+        {
+            var result = MessageBox.Show(
+                this,
+                "Existem alterações não salvas. Deseja descartar?",
+                "Confirmação",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result != WinForms.DialogResult.Yes)
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         StopCycleSimulation();
         base.OnFormClosing(e);
 
