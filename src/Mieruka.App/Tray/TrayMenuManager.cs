@@ -31,7 +31,7 @@ internal sealed class TrayMenuManager : IDisposable
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     private bool _disposed;
-    private bool _operationInProgress;
+    private volatile bool _operationInProgress;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TrayMenuManager"/> class.

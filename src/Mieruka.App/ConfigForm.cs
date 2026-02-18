@@ -83,7 +83,6 @@ internal sealed class ConfigForm : WinForms.Form
 
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
-    private readonly object _testGate = new();
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
@@ -1019,7 +1018,7 @@ internal sealed class ConfigForm : WinForms.Form
         var font = e.Font ?? SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
         using var textBrush = new Drawing.SolidBrush(Drawing.Color.FromArgb(80, 80, 80));
         var textBounds = new Drawing.Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height);
-        var sf = new Drawing.StringFormat { LineAlignment = Drawing.StringAlignment.Center, Trimming = Drawing.StringTrimming.EllipsisCharacter };
+        using var sf = new Drawing.StringFormat { LineAlignment = Drawing.StringAlignment.Center, Trimming = Drawing.StringTrimming.EllipsisCharacter };
         e.Graphics.DrawString(e.Header?.Text ?? string.Empty, font, textBrush, textBounds, sf);
     }
 
@@ -1081,7 +1080,7 @@ internal sealed class ConfigForm : WinForms.Form
         try
         {
             using var brush = new Drawing.SolidBrush(color);
-            var sf = new Drawing.StringFormat
+            using var sf = new Drawing.StringFormat
             {
                 LineAlignment = Drawing.StringAlignment.Center,
                 Trimming = Drawing.StringTrimming.EllipsisCharacter,

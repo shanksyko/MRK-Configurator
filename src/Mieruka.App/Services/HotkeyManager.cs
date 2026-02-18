@@ -353,7 +353,14 @@ public sealed class HotkeyManager : IDisposable
                 }
             }, null);
 
-            return tcs.Task.GetAwaiter().GetResult();
+            // Use a bounded wait to avoid hanging indefinitely when
+            // the STA thread is blocked or unresponsive.
+            if (!tcs.Task.Wait(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("Hotkey registration timed out.");
+            }
+
+            return tcs.Task.Result;
         }
 
         public void Unregister(int registrationId)
@@ -370,7 +377,8 @@ public sealed class HotkeyManager : IDisposable
                 tcs.SetResult(true);
             }, null);
 
-            tcs.Task.GetAwaiter().GetResult();
+            // Bounded wait — do not block forever.
+            tcs.Task.Wait(TimeSpan.FromSeconds(5));
         }
 
         public void Dispose()

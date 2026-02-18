@@ -315,7 +315,17 @@ public sealed class DiagnosticsService : IDisposable
 
         _disposed = true;
 
-        StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        try
+        {
+            // Use a bounded wait to avoid deadlocking when Dispose is
+            // called from the UI thread during form shutdown.
+            StopAsync().Wait(TimeSpan.FromSeconds(5));
+        }
+        catch (AggregateException)
+        {
+            // Best-effort shutdown — swallow cancellation/timeout exceptions.
+        }
+
         _listener.Close();
     }
 

@@ -67,7 +67,7 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
 
     private async void btnDetectarCampos_Click(object? sender, EventArgs e)
     {
-        await DetectarCamposAsync().ConfigureAwait(false);
+        await DetectarCamposAsync();
     }
 
     private async Task DetectarCamposAsync()

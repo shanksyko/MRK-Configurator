@@ -213,6 +213,9 @@ public sealed class CredentialVault
         }
         finally
         {
+            // Zero out password bytes to minimize exposure in memory dumps.
+            Array.Clear(passwordBytes, 0, passwordBytes.Length);
+
             if (credential.CredentialBlob != IntPtr.Zero)
             {
                 Marshal.FreeCoTaskMem(credential.CredentialBlob);
@@ -240,6 +243,8 @@ public sealed class CredentialVault
                 var passwordBytes = new byte[native.CredentialBlobSize];
                 Marshal.Copy(native.CredentialBlob, passwordBytes, 0, passwordBytes.Length);
                 password = Encoding.Unicode.GetString(passwordBytes).TrimEnd('\0');
+                // Zero out password bytes to minimize exposure in memory dumps.
+                Array.Clear(passwordBytes, 0, passwordBytes.Length);
             }
 
             credential = new NetworkCredential(username, password);

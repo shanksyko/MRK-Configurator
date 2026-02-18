@@ -95,16 +95,15 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
     }
 
     /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken = default)
+    public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        StopInternal();
-        return Task.CompletedTask;
+        await StopInternalAsync().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task RecoverAsync(CancellationToken cancellationToken = default)
     {
-        StopInternal();
+        await StopInternalAsync().ConfigureAwait(false);
         await StartAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -118,7 +117,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
             return;
         }
 
-        StopInternal();
+        StopInternalSync();
 
         lock (_gate)
         {
@@ -728,7 +727,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
         }
     }
 
-    private void StopInternal()
+    private async Task StopInternalAsync()
     {
         CancellationTokenSource? cancellation = null;
         Task? monitor = null;
@@ -750,9 +749,49 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
 
         try
         {
-            monitor!.GetAwaiter().GetResult();
+            // Use WhenAny with a timeout to avoid deadlocks when the
+            // monitored task tries to marshal back to the UI thread.
+            await Task.WhenAny(monitor!, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            cancellation.Dispose();
+        }
+    }
+
+    private void StopInternalSync()
+    {
+        CancellationTokenSource? cancellation = null;
+        Task? monitor = null;
+
+        lock (_gate)
+        {
+            if (_monitorTask is null || _monitorCancellation is null)
+            {
+                return;
+            }
+
+            cancellation = _monitorCancellation;
+            monitor = _monitorTask;
+            _monitorTask = null;
+            _monitorCancellation = null;
+        }
+
+        cancellation!.Cancel();
+
+        try
+        {
+            // Fallback sync path for Dispose only — uses a bounded wait
+            // to avoid deadlocking when called from the UI thread.
+            monitor!.Wait(TimeSpan.FromSeconds(5));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
         {
         }
         finally

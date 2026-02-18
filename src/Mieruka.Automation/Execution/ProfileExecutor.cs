@@ -133,7 +133,7 @@ public sealed class ProfileExecutor : IDisposable
             _displayService?.Dispose();
         }
 
-        _executionCts?.Dispose();
+        Interlocked.Exchange(ref _executionCts, null)?.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -161,8 +161,7 @@ public sealed class ProfileExecutor : IDisposable
             lock (_gate)
             {
                 _executionTask = null;
-                _executionCts?.Dispose();
-                _executionCts = null;
+                Interlocked.Exchange(ref _executionCts, null)?.Dispose();
             }
         }
     }

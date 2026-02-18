@@ -59,7 +59,15 @@ public sealed class BrowserLauncher
         var service = ChromeDriverService.CreateDefaultService();
         service.HideCommandPromptWindow = true;
 
-        return new ChromeDriver(service, options);
+        try
+        {
+            return new ChromeDriver(service, options);
+        }
+        catch
+        {
+            service.Dispose();
+            throw;
+        }
     }
 
     private IWebDriver CreateEdgeDriver(SiteConfig site, BrowserArgumentsSettings? globalArguments)
@@ -71,7 +79,15 @@ public sealed class BrowserLauncher
         var service = EdgeDriverService.CreateDefaultService();
         service.HideCommandPromptWindow = true;
 
-        return new EdgeDriver(service, options);
+        try
+        {
+            return new EdgeDriver(service, options);
+        }
+        catch
+        {
+            service.Dispose();
+            throw;
+        }
     }
 
     private static void ConfigureChromiumOptions(ChromiumOptions options, SiteConfig site, BrowserArgumentsSettings? globalArguments)

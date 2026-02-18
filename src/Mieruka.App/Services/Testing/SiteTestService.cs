@@ -20,6 +20,9 @@ namespace Mieruka.App.Services.Testing;
 
 internal sealed class SiteTestService
 {
+    // Shared HttpClient avoids socket exhaustion from per-call allocation.
+    private static readonly HttpClient SharedHttpClient = new() { Timeout = TimeSpan.FromSeconds(5) };
+
     private readonly ConfiguratorWorkspace _workspace;
     private readonly IDisplayService? _displayService;
     private readonly ITelemetry _telemetry;
@@ -56,9 +59,8 @@ internal sealed class SiteTestService
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             using var request = new HttpRequestMessage(HttpMethod.Head, uri);
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            using var response = await SharedHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             return null; // Reachable
         }
         catch (HttpRequestException ex)
@@ -185,7 +187,22 @@ internal sealed class SiteTestService
 
         var tabManager = new TabManager(_telemetry);
         var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        _ = Task.Run(() => tabManager.MonitorAsync(driver, sanitized, cancellation.Token));
+        var task = Task.Run(async () =>
+        {
+            try
+            {
+                await tabManager.MonitorAsync(driver, sanitized, cancellation.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                cancellation.Dispose();
+            }
+        });
+
+        // Observe exceptions to prevent UnobservedTaskException.
+        task.ContinueWith(
+            t => _logger.Warning(t.Exception, "Whitelist monitoring faulted."),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private async Task ExecuteLoginAsync(IWebDriver driver, LoginProfile? login, CancellationToken ct)

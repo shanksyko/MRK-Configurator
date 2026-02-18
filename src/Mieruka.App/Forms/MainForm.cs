@@ -233,7 +233,14 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return;
         }
 
-        await SetGraphicsModeAsync(mode).ConfigureAwait(true);
+        try
+        {
+            await SetGraphicsModeAsync(mode).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao alterar modo gráfico.", ex);
+        }
     }
 
     private async Task ApplyGraphicsOptionsAsync()
@@ -445,20 +452,34 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void MainForm_Shown(object? sender, EventArgs e)
     {
-        await RefreshMonitorCardsAsync().ConfigureAwait(true);
+        try
+        {
+            await RefreshMonitorCardsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao carregar monitor cards.", ex);
+        }
     }
 
     private async void MainForm_Resize(object? sender, EventArgs e)
     {
-        if (WindowState == WinForms.FormWindowState.Minimized)
+        try
         {
-            await PausePreviewsAsync().ConfigureAwait(true);
-            return;
-        }
+            if (WindowState == WinForms.FormWindowState.Minimized)
+            {
+                await PausePreviewsAsync().ConfigureAwait(true);
+                return;
+            }
 
-        if (_previewsRequested)
+            if (_previewsRequested)
+            {
+                await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
         {
-            await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+            _telemetry.Warn("Falha ao reagir a redimensionamento.", ex);
         }
     }
 
@@ -948,13 +969,20 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return;
         }
 
-        if (_monitorCards.TryGetValue(monitorId, out var context))
+        try
         {
-            _requestedPreviews.Remove(monitorId);
-            _previewsRequested = _requestedPreviews.Count > 0;
-            context.Host.SetPreviewRequestedByUser(false);
-            await context.Host.StopSafeAsync().ConfigureAwait(true);
-            await context.CloseTestWindowAsync().ConfigureAwait(true);
+            if (_monitorCards.TryGetValue(monitorId, out var context))
+            {
+                _requestedPreviews.Remove(monitorId);
+                _previewsRequested = _requestedPreviews.Count > 0;
+                context.Host.SetPreviewRequestedByUser(false);
+                await context.Host.StopSafeAsync().ConfigureAwait(true);
+                await context.CloseTestWindowAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn($"Falha ao parar preview do monitor '{monitorId}'.", ex);
         }
 
         _manuallyStoppedMonitors.Add(monitorId);
@@ -1216,9 +1244,13 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         {
             try
             {
-                // Use synchronous close only during form closing where
-                // we must ensure cleanup completes before exit.
-                context.CloseTestWindowAsync().GetAwaiter().GetResult();
+                // Use a bounded wait during form closing to ensure cleanup
+                // completes without risking a deadlock on the UI thread.
+                context.CloseTestWindowAsync().Wait(TimeSpan.FromSeconds(3));
+            }
+            catch (AggregateException)
+            {
+                // Best-effort cleanup during shutdown.
             }
             catch (ObjectDisposedException)
             {
@@ -1341,12 +1373,26 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void btnExecutar_Click(object? sender, EventArgs e)
     {
-        await ExecutarOrchestratorAsync().ConfigureAwait(false);
+        try
+        {
+            await ExecutarOrchestratorAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha não tratada ao executar orchestrator.", ex);
+        }
     }
 
     private async void btnParar_Click(object? sender, EventArgs e)
     {
-        await PararOrchestratorAsync().ConfigureAwait(false);
+        try
+        {
+            await PararOrchestratorAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha não tratada ao parar orchestrator.", ex);
+        }
     }
 
     private async Task ExecutarOrchestratorAsync()
@@ -1408,12 +1454,26 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void btnExecutarPerfil_Click(object? sender, EventArgs e)
     {
-        await RunProfileAsync(BuildProfileFromUI()).ConfigureAwait(true);
+        try
+        {
+            await RunProfileAsync(BuildProfileFromUI()).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao executar perfil.", ex);
+        }
     }
 
     private async void btnPararPerfil_Click(object? sender, EventArgs e)
     {
-        await StopProfileExecutionAsync().ConfigureAwait(true);
+        try
+        {
+            await StopProfileExecutionAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao parar perfil.", ex);
+        }
     }
 
     private async void btnTestarItem_Click(object? sender, EventArgs e)
@@ -1425,7 +1485,14 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return;
         }
 
-        await _appTestRunner.RunTestAsync(selecionado, this).ConfigureAwait(true);
+        try
+        {
+            await _appTestRunner.RunTestAsync(selecionado, this).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao testar item.", ex);
+        }
     }
 
     private void menuPerfisSalvar_Click(object? sender, EventArgs e)
@@ -1435,12 +1502,26 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void menuPerfisExecutar_Click(object? sender, EventArgs e)
     {
-        await RunProfileAsync(BuildProfileFromUI()).ConfigureAwait(true);
+        try
+        {
+            await RunProfileAsync(BuildProfileFromUI()).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao executar perfil via menu.", ex);
+        }
     }
 
     private async void menuPerfisParar_Click(object? sender, EventArgs e)
     {
-        await StopProfileExecutionAsync().ConfigureAwait(true);
+        try
+        {
+            await StopProfileExecutionAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao parar perfil via menu.", ex);
+        }
     }
 
     private void menuPerfisTestar_Click(object? sender, EventArgs e)
@@ -2066,7 +2147,15 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         // WGC session — SuspendCaptureAsync is not enough as it keeps the
         // session handle open.
         var hadPreviews = _previewsRequested;
-        await PausePreviewsAsync().ConfigureAwait(true);
+
+        try
+        {
+            await PausePreviewsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao pausar previews antes de abrir editor.", ex);
+        }
 
         WinForms.DialogResult resultado;
         string? editorSelectedMonitor;
@@ -2122,7 +2211,14 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
     {
-        await SuspendMonitorPreviewsAsync().ConfigureAwait(true);
+        try
+        {
+            await SuspendMonitorPreviewsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao suspender previews antes de mover janela.", ex);
+        }
     }
 
     private void AppRunnerOnAfterMoveWindow(object? sender, EventArgs e)
@@ -2296,7 +2392,14 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
                 TestWindow = null;
             }
 
-            await ResumeHostFromTestWindowAsync().ConfigureAwait(true);
+            try
+            {
+                await ResumeHostFromTestWindowAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Falha ao retomar host após fechar janela de teste.");
+            }
         }
 
         private async Task PauseHostForTestWindowAsync()
