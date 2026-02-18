@@ -271,13 +271,7 @@ public sealed class ProfileExecutor : IDisposable
 
         try
         {
-            var monitors = _displayService.Monitors();
-            if (monitors is List<MonitorInfo> list)
-            {
-                return list.ToList();
-            }
-
-            return monitors.ToList();
+            return _displayService.Monitors().ToList();
         }
         catch
         {
@@ -649,6 +643,8 @@ public sealed class ProfileExecutor : IDisposable
         var comparison = StringComparison.OrdinalIgnoreCase;
         IntPtr result = IntPtr.Zero;
 
+        var builder = new StringBuilder(256);
+
         EnumWindows((hwnd, _) =>
         {
             if (!IsWindowVisible(hwnd))
@@ -662,7 +658,8 @@ public sealed class ProfileExecutor : IDisposable
                 return true;
             }
 
-            var builder = new StringBuilder(length + 1);
+            builder.EnsureCapacity(length + 1);
+            builder.Clear();
             if (GetWindowText(hwnd, builder, builder.Capacity) == 0)
             {
                 return true;

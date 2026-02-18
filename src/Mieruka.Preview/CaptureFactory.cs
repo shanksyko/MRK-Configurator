@@ -71,7 +71,7 @@ namespace Mieruka.Preview
         /// <summary>Cria captura GPU (Windows.Graphics.Capture / DXGI) de forma síncrona.</summary>
         public static IMonitorCapture Gpu(string monitorId)
         {
-            return GpuAsync(monitorId).GetAwaiter().GetResult();
+            return GpuAsync(monitorId).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         /// <summary>Cria captura GDI (fallback) para o monitor informado de forma assíncrona.</summary>

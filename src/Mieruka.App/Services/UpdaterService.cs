@@ -316,16 +316,17 @@ public sealed class UpdaterService : IDisposable
             return string.Empty;
         }
 
-        var builder = new StringBuilder(value.Length);
+        Span<char> buffer = stackalloc char[value.Length];
+        var pos = 0;
         foreach (var ch in value)
         {
             if (Uri.IsHexDigit(ch))
             {
-                builder.Append(ch);
+                buffer[pos++] = ch;
             }
         }
 
-        return builder.ToString();
+        return new string(buffer[..pos]);
     }
 
     private static string ResolveApplicationDirectory(string? directory)
@@ -419,20 +420,4 @@ public sealed class UpdaterService : IDisposable
         public string? Sha256 { get; init; }
     }
 
-    private sealed class NullTelemetry : ITelemetry
-    {
-        public static ITelemetry Instance { get; } = new NullTelemetry();
-
-        public void Info(string message, Exception? exception = null)
-        {
-        }
-
-        public void Warn(string message, Exception? exception = null)
-        {
-        }
-
-        public void Error(string message, Exception? exception = null)
-        {
-        }
-    }
 }

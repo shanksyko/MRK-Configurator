@@ -142,15 +142,18 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
 
     private async Task MonitorAsync(CancellationToken cancellationToken)
     {
+        // Reuse lists across iterations to avoid repeated allocations.
+        var apps = new List<AppWatchContext>();
+        var sites = new List<SiteWatchContext>();
+
         while (!cancellationToken.IsCancellationRequested)
         {
-            List<AppWatchContext> apps;
-            List<SiteWatchContext> sites;
-
             lock (_gate)
             {
-                apps = _applications.Values.ToList();
-                sites = _sites.Values.ToList();
+                apps.Clear();
+                apps.AddRange(_applications.Values);
+                sites.Clear();
+                sites.AddRange(_sites.Values);
             }
 
             var timestamp = DateTimeOffset.UtcNow;
@@ -638,14 +641,19 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
         return false;
     }
 
+    private static readonly string[] ChromeProcessNames = ["chrome", "Google Chrome"];
+    private static readonly string[] EdgeProcessNames = ["msedge", "Microsoft Edge"];
+    private static readonly string[] FirefoxProcessNames = ["firefox"];
+    private static readonly string[] BraveProcessNames = ["brave"];
+
     private static string[] GetBrowserProcessNames(BrowserType browser)
     {
         return browser switch
         {
-            BrowserType.Chrome => new[] { "chrome", "Google Chrome" },
-            BrowserType.Edge => new[] { "msedge", "Microsoft Edge" },
-            BrowserType.Firefox => new[] { "firefox" },
-            BrowserType.Brave => new[] { "brave" },
+            BrowserType.Chrome => ChromeProcessNames,
+            BrowserType.Edge => EdgeProcessNames,
+            BrowserType.Firefox => FirefoxProcessNames,
+            BrowserType.Brave => BraveProcessNames,
             _ => Array.Empty<string>(),
         };
     }
@@ -776,10 +784,19 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
             }
         }
 
-        foreach (var id in _applications.Keys.Except(seen, StringComparer.OrdinalIgnoreCase).ToList())
+        List<string>? toRemoveApps = null;
+        foreach (var id in _applications.Keys)
         {
-            _applications[id].Dispose();
-            _applications.Remove(id);
+            if (!seen.Contains(id))
+                (toRemoveApps ??= new List<string>()).Add(id);
+        }
+        if (toRemoveApps is not null)
+        {
+            foreach (var id in toRemoveApps)
+            {
+                _applications[id].Dispose();
+                _applications.Remove(id);
+            }
         }
     }
 
@@ -806,10 +823,19 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
             }
         }
 
-        foreach (var id in _sites.Keys.Except(seen, StringComparer.OrdinalIgnoreCase).ToList())
+        List<string>? toRemoveSites = null;
+        foreach (var id in _sites.Keys)
         {
-            _sites[id].Dispose();
-            _sites.Remove(id);
+            if (!seen.Contains(id))
+                (toRemoveSites ??= new List<string>()).Add(id);
+        }
+        if (toRemoveSites is not null)
+        {
+            foreach (var id in toRemoveSites)
+            {
+                _sites[id].Dispose();
+                _sites.Remove(id);
+            }
         }
     }
 
@@ -1141,20 +1167,4 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
         }
     }
 
-    private sealed class NullTelemetry : ITelemetry
-    {
-        public static ITelemetry Instance { get; } = new NullTelemetry();
-
-        public void Error(string message, Exception? exception = null)
-        {
-        }
-
-        public void Info(string message, Exception? exception = null)
-        {
-        }
-
-        public void Warn(string message, Exception? exception = null)
-        {
-        }
-    }
 }

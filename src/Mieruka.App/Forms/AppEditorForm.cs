@@ -3686,7 +3686,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         };
     }
 
-    private IDictionary<string, string> ParseEnvironmentVariables()
+    private IReadOnlyDictionary<string, string> ParseEnvironmentVariables()
     {
         var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(txtEnvVars.Text)) return dict;

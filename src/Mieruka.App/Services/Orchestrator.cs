@@ -88,13 +88,14 @@ public interface IOrchestrationComponent
 /// Coordinates the lifecycle of monitor, rotation, cycle and watchdog services, guaranteeing
 /// that they are started and stopped in a consistent way.
 /// </summary>
-public sealed class Orchestrator
+public sealed class Orchestrator : IDisposable
 {
     private readonly IReadOnlyList<ComponentRegistration> _startupOrder;
     private readonly ITelemetry _telemetry;
     private readonly SemaphoreSlim _stateGate = new(1, 1);
 
     private int _state = (int)OrchestratorState.Init;
+    private bool _disposed;
 
     /// <summary>
     /// Occurs whenever the orchestrator transitions to a new state.
@@ -277,8 +278,9 @@ public sealed class Orchestrator
     {
         List<Exception>? failures = null;
 
-        foreach (var component in _startupOrder.AsEnumerable().Reverse())
+        for (var i = _startupOrder.Count - 1; i >= 0; i--)
         {
+            var component = _startupOrder[i];
             try
             {
                 await ExecuteAsync(
@@ -372,8 +374,11 @@ public sealed class Orchestrator
 
     private async Task RollbackStartAsync(IEnumerable<ComponentRegistration> startedComponents)
     {
-        foreach (var component in startedComponents.Reverse())
+        // Use list to iterate in reverse without LINQ allocation
+        var list = startedComponents as IList<ComponentRegistration> ?? startedComponents.ToList();
+        for (var i = list.Count - 1; i >= 0; i--)
         {
+            var component = list[i];
             try
             {
                 _telemetry.Info($"Rolling back {component.Name} component due to start failure.");
@@ -425,6 +430,20 @@ public sealed class Orchestrator
     {
         var value = Interlocked.CompareExchange(ref _state, 0, 0);
         return (OrchestratorState)value;
+    }
+
+    /// <summary>
+    /// Releases resources used by the orchestrator.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _stateGate.Dispose();
     }
 
     private sealed record class ComponentRegistration(string Name, IOrchestrationComponent Component);

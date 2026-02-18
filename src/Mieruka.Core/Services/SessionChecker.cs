@@ -11,7 +11,7 @@ namespace Mieruka.Core.Services;
 [SupportedOSPlatform("windows")]
 public sealed class SessionChecker : IDisposable
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly ITelemetry _telemetry;
     private readonly Dictionary<int, SessionSnapshot> _sessions = new();
     private bool _disposed;
@@ -134,8 +134,6 @@ public sealed class SessionChecker : IDisposable
             _hasDisconnectedRemoteSession = false;
             _disposed = true;
         }
-
-        GC.SuppressFinalize(this);
     }
 
     private static bool ContainsDisconnectedRemoteSession(IReadOnlyList<SessionSnapshot> sessions)

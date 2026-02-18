@@ -4,7 +4,7 @@ using Mieruka.Core.Security.Models;
 
 namespace Mieruka.Core.Security.Services;
 
-public class AuditLogService : IAuditLogService
+public sealed class AuditLogService : IAuditLogService
 {
     private readonly SecurityDbContext _context;
 

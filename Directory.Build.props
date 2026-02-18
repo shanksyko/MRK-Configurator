@@ -15,6 +15,12 @@
     <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
   </PropertyGroup>
 
+  <!-- GC configuration for desktop app with real-time capture requirements -->
+  <PropertyGroup>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
   <!-- Publish optimizations (use with dotnet publish) -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishReadyToRun>true</PublishReadyToRun>

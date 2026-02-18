@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using WinForms = System.Windows.Forms;
@@ -17,6 +18,7 @@ internal sealed class MonitorCardPanel : WinForms.Panel
         BackColor = SystemColors.Control;
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool Selected
     {
         get => _selected;

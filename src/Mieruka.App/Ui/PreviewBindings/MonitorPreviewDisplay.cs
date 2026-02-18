@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -231,8 +232,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// <summary>
     /// Gets or sets the ambient edit session identifier used for logging correlation.
     /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Guid? EditSessionId { get; set; }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsCoordinateAnalysisMode { get; set; }
 
     public sealed class MonitorMouseEventArgs : EventArgs

@@ -63,7 +63,7 @@ namespace Mieruka.Preview
                 }
 
                 // Use Task.Run to avoid blocking if StartAsync is truly async
-                Task.Run(async () => await capture.StartAsync(monitor).ConfigureAwait(false)).GetAwaiter().GetResult();
+                Task.Run(async () => await capture.StartAsync(monitor).ConfigureAwait(false)).ConfigureAwait(false).GetAwaiter().GetResult();
                 return capture;
             }
             catch
@@ -89,7 +89,7 @@ namespace Mieruka.Preview
         {
             try
             {
-                capture.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                capture.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
             }
             catch
             {

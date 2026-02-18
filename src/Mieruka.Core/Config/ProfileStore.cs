@@ -21,7 +21,7 @@ public sealed class ProfileStore
 
     private static readonly ReadOnlyCollection<char> InvalidFileNameChars = Array.AsReadOnly(Path.GetInvalidFileNameChars());
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly string _profilesDirectory;
     private readonly JsonSerializerOptions _serializerOptions = new()
     {
@@ -231,7 +231,7 @@ public sealed class ProfileStore
         };
     }
 
-    private static IList<AppConfig> CloneApplications(IList<AppConfig> source)
+    private static IReadOnlyList<AppConfig> CloneApplications(IReadOnlyList<AppConfig> source)
     {
         var result = new List<AppConfig>(source.Count);
 
@@ -276,7 +276,7 @@ public sealed class ProfileStore
         return result;
     }
 
-    private static IList<WindowConfig> CloneWindows(IList<WindowConfig> source)
+    private static IReadOnlyList<WindowConfig> CloneWindows(IReadOnlyList<WindowConfig> source)
     {
         var result = new List<WindowConfig>(source.Count);
 

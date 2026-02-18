@@ -595,7 +595,7 @@ internal static class WindowPlacementHelper
         {
             if (!IsWindow(handle))
             {
-                Thread.Sleep(120);
+                Thread.Sleep(50);
                 continue;
             }
 
@@ -606,11 +606,11 @@ internal static class WindowPlacementHelper
             }
             catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
             {
-                Thread.Sleep(120);
+                Thread.Sleep(50);
             }
             catch (ArgumentException)
             {
-                Thread.Sleep(120);
+                Thread.Sleep(50);
             }
         }
 

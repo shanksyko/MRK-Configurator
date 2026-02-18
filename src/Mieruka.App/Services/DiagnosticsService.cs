@@ -21,7 +21,7 @@ public sealed class DiagnosticsService : IDisposable
     private readonly HttpListener _listener;
     private readonly Func<DiagnosticsReport> _reportProvider;
     private readonly string _healthPath;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     private CancellationTokenSource? _cts;
     private Task? _listenerTask;
@@ -315,9 +315,8 @@ public sealed class DiagnosticsService : IDisposable
 
         _disposed = true;
 
-        StopAsync().GetAwaiter().GetResult();
+        StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         _listener.Close();
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>

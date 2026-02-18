@@ -52,7 +52,7 @@ internal sealed class ConfiguratorWorkspace
     /// <summary>
     /// Gets the zone presets available in the workspace.
     /// </summary>
-    public IList<ZonePreset> ZonePresets => _baseConfig.ZonePresets;
+    public IReadOnlyList<ZonePreset> ZonePresets => _baseConfig.ZonePresets;
 
     /// <summary>
     /// Gets the monitors available in the workspace.

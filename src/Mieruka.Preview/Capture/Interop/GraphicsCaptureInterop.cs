@@ -155,7 +155,7 @@ internal static class GraphicsCaptureInterop
         try
         {
             var accessGuid = Direct3DDxgiInterfaceAccessGuid;
-            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, ref accessGuid, out var accessPtr));
+            Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, in accessGuid, out var accessPtr));
             IDirect3DDxgiInterfaceAccess? access = null;
             try
             {

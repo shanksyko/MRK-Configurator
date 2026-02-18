@@ -499,20 +499,4 @@ public sealed class HotkeyManager : IDisposable
         public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     }
 
-    private sealed class NullTelemetry : ITelemetry
-    {
-        public static ITelemetry Instance { get; } = new NullTelemetry();
-
-        public void Error(string message, Exception? exception = null)
-        {
-        }
-
-        public void Info(string message, Exception? exception = null)
-        {
-        }
-
-        public void Warn(string message, Exception? exception = null)
-        {
-        }
-    }
 }

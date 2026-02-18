@@ -25,7 +25,7 @@ public sealed record class SiteConfig
     /// <summary>
     /// Additional arguments applied when launching the browser for this site.
     /// </summary>
-    public IList<string> BrowserArguments { get; init; } = new List<string>();
+    public IReadOnlyList<string> BrowserArguments { get; init; } = [];
 
     /// <summary>
     /// Optional user data directory used when launching Chromium browsers.
@@ -60,7 +60,7 @@ public sealed record class SiteConfig
     /// <summary>
     /// Custom headers applied when requesting the site.
     /// </summary>
-    public IDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
     /// Watchdog related settings that describe how the site should be supervised.
@@ -70,7 +70,7 @@ public sealed record class SiteConfig
     /// <summary>
     /// Host names allowed to remain open when additional tabs or popups are created.
     /// </summary>
-    public IList<string> AllowedTabHosts { get; init; } = new List<string>();
+    public IReadOnlyList<string> AllowedTabHosts { get; init; } = [];
 
     /// <summary>
     /// Optional automation profile used to authenticate against the site.

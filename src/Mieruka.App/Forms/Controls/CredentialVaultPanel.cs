@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Security;
@@ -48,6 +49,7 @@ public sealed partial class CredentialVaultPanel : WinForms.UserControl
         UpdateButtonsAvailability();
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string? ScopeSiteId
     {
         get => _scopeSiteId;

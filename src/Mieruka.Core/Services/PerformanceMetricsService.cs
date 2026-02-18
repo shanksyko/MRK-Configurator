@@ -53,19 +53,19 @@ public sealed class PerformanceMetricsService
         ArgumentNullException.ThrowIfNull(inputDrift);
         ArgumentNullException.ThrowIfNull(cycleDrift);
 
-        var frameSamples = frames.ToList();
+        var frameSamples = frames.ToArray();
         var frameDurations = frameSamples
             .Select(sample => sample.Duration.TotalMilliseconds)
             .Where(duration => duration > 0 && !double.IsNaN(duration) && !double.IsInfinity(duration))
-            .ToList();
-        var driftSamples = inputDrift.ToList();
-        var cycleSamples = cycleDrift.ToList();
+            .ToArray();
+        var driftSamples = inputDrift.ToArray();
+        var cycleSamples = cycleDrift.ToArray();
 
-        var averageFrameDuration = frameDurations.Count == 0
+        var averageFrameDuration = frameDurations.Length == 0
             ? 0d
             : frameDurations.Average();
 
-        var medianFrameDuration = frameDurations.Count == 0
+        var medianFrameDuration = frameDurations.Length == 0
             ? 0d
             : Median(frameDurations);
 
@@ -80,7 +80,7 @@ public sealed class PerformanceMetricsService
             medianFps,
             driftMetrics,
             cycleMetrics,
-            frameSamples.Count);
+            frameSamples.Length);
     }
 
     /// <summary>
@@ -100,9 +100,9 @@ public sealed class PerformanceMetricsService
         var values = samples
             .Where(value => !double.IsNaN(value) && !double.IsInfinity(value))
             .Select(Math.Abs)
-            .ToList();
+            .ToArray();
 
-        if (values.Count == 0)
+        if (values.Length == 0)
         {
             return DriftStatistics.Empty;
         }
@@ -115,15 +115,15 @@ public sealed class PerformanceMetricsService
         var ordered = values
             .Where(value => !double.IsNaN(value) && !double.IsInfinity(value))
             .OrderBy(value => value)
-            .ToList();
+            .ToArray();
 
-        if (ordered.Count == 0)
+        if (ordered.Length == 0)
         {
             return 0d;
         }
 
-        var middle = ordered.Count / 2;
-        if (ordered.Count % 2 == 0)
+        var middle = ordered.Length / 2;
+        if (ordered.Length % 2 == 0)
         {
             return (ordered[middle - 1] + ordered[middle]) / 2d;
         }

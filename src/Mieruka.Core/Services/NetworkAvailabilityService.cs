@@ -14,8 +14,9 @@ public sealed class NetworkAvailabilityService : INetworkAvailabilityService
         {
             return NetworkInterface.GetIsNetworkAvailable();
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"NetworkAvailability check failed: {ex.Message}");
             return true;
         }
     }

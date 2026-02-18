@@ -31,7 +31,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
     private long _totalInvalid;
     private long _sampleDropped;
     private long _sampleInvalid;
-    private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
+    private long _lastStatsTick = Environment.TickCount64;
     private ILogger? _captureLogger;
     private string? _previewSessionId; // Keep this unique to avoid duplicate session tracking fields
     private string? _monitorId;
@@ -95,7 +95,7 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
         Interlocked.Exchange(ref _totalInvalid, 0);
         _sampleDropped = 0;
         _sampleInvalid = 0;
-        _lastStatsSampleUtc = DateTime.UtcNow;
+        _lastStatsTick = Environment.TickCount64;
         _captureLogger.Information(
             "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, targetFps={TargetFps}",
             Backend,
@@ -305,8 +305,8 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             return;
         }
 
-        var now = DateTime.UtcNow;
-        if (!force && (now - _lastStatsSampleUtc).TotalSeconds < 5)
+        var nowTick = Environment.TickCount64;
+        if (!force && (nowTick - _lastStatsTick) < 5000)
         {
             return;
         }
@@ -320,8 +320,8 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             return;
         }
 
-        var elapsedSeconds = Math.Max(0.001, (now - _lastStatsSampleUtc).TotalSeconds);
-        _lastStatsSampleUtc = now;
+        var elapsedSeconds = Math.Max(0.001, (nowTick - _lastStatsTick) / 1000.0);
+        _lastStatsTick = nowTick;
 
         var fps = schedulerMetrics.Frames / elapsedSeconds;
         var effectiveFps = schedulerMetrics.EffectiveFps;

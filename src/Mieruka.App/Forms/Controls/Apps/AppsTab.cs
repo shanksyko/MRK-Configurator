@@ -223,6 +223,7 @@ public sealed class AppsTab : WinForms.UserControl
 
     public event EventHandler<string>? ArgumentsChanged;
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string ExecutablePath
     {
         get => _currentExecutablePath;
@@ -233,6 +234,7 @@ public sealed class AppsTab : WinForms.UserControl
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Arguments
     {
         get => _txtArgs.Text;

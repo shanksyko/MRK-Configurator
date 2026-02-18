@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Linq;
 using Drawing = System.Drawing;
 using WinForms = System.Windows.Forms;
@@ -49,6 +50,8 @@ public sealed class SecuritySettingsForm : WinForms.Form
         StartPosition = WinForms.FormStartPosition.CenterParent;
         Size = new Drawing.Size(640, 480);
         MinimumSize = new Drawing.Size(600, 420);
+
+        SuspendLayout();
 
         var layout = new WinForms.TableLayoutPanel
         {
@@ -176,6 +179,8 @@ public sealed class SecuritySettingsForm : WinForms.Form
 
         Controls.Add(layout);
 
+        ResumeLayout(true);
+
         Load += (_, _) => RefreshData();
 
         _cleanupTimer = new WinForms.Timer { Interval = (int)TimeSpan.FromMinutes(15).TotalMilliseconds };
@@ -186,6 +191,7 @@ public sealed class SecuritySettingsForm : WinForms.Form
     /// <summary>
     /// Gets or sets a value indicating whether telemetry is enabled.
     /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool TelemetryEnabled
     {
         get => _telemetryOptIn.Checked;

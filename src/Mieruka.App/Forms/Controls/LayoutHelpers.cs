@@ -184,7 +184,7 @@ internal static class LayoutHelpers
     {
         ArgumentNullException.ThrowIfNull(monitor);
 
-        var ordinal = monitor.Key?.DisplayIndex >= 0
+        var ordinal = monitor.Key.DisplayIndex >= 0
             ? monitor.Key.DisplayIndex + 1
             : 0;
 

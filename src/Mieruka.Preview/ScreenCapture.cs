@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
 namespace Mieruka.Preview;
@@ -63,6 +64,59 @@ internal static class ScreenCapture
     private const int CAPTUREBLT = 0x40000000;
 
     /// <summary>
+    /// Captures the provided rectangle from the virtual desktop into an existing bitmap,
+    /// using <see cref="System.Drawing.Graphics.GetHdc"/> to BitBlt directly into the
+    /// managed bitmap's pixel buffer (no intermediate GDI handle or pixel copy).
+    /// </summary>
+    /// <param name="src">Rectangle to capture in virtual desktop coordinates.</param>
+    /// <param name="target">Reusable bitmap to receive the captured pixels. Must match the target dimensions.</param>
+    /// <returns>True if the capture succeeded; false otherwise.</returns>
+    public static bool CaptureRectangleInto(Rectangle src, Bitmap target)
+    {
+        if (src.Width <= 0 || src.Height <= 0 || target is null)
+        {
+            return false;
+        }
+
+        var targetWidth = target.Width;
+        var targetHeight = target.Height;
+
+        using var g = Graphics.FromImage(target);
+        var hdcDest = g.GetHdc();
+        try
+        {
+            var desktop = GetDesktopWindow();
+            var hdcSrc = GetWindowDC(desktop);
+            if (hdcSrc == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                var rop = SRCCOPY | CAPTUREBLT;
+
+                if (targetWidth == src.Width && targetHeight == src.Height)
+                {
+                    return BitBlt(hdcDest, 0, 0, targetWidth, targetHeight, hdcSrc, src.Left, src.Top, rop);
+                }
+
+                return StretchBlt(
+                    hdcDest, 0, 0, targetWidth, targetHeight,
+                    hdcSrc, src.Left, src.Top, src.Width, src.Height, rop);
+            }
+            finally
+            {
+                ReleaseDC(desktop, hdcSrc);
+            }
+        }
+        finally
+        {
+            g.ReleaseHdc(hdcDest);
+        }
+    }
+
+    /// <summary>
     /// Captures the provided rectangle from the virtual desktop into a bitmap.
     /// </summary>
     /// <param name="src">Rectangle to capture in virtual desktop coordinates.</param>
@@ -72,6 +126,20 @@ internal static class ScreenCapture
     public static Bitmap CaptureRectangle(Rectangle src)
         => CaptureRectangle(src, Size.Empty);
 
+    /// <summary>
+    /// Captures the provided rectangle from the virtual desktop into a bitmap.
+    /// Uses <see cref="System.Drawing.Graphics.GetHdc"/> to BitBlt directly into a
+    /// managed bitmap, eliminating the CreateCompatibleBitmap + Image.FromHbitmap
+    /// pixel-copy overhead.
+    /// </summary>
+    /// <param name="src">Rectangle to capture in virtual desktop coordinates.</param>
+    /// <param name="targetSize">
+    /// Optional target size. When the width or height is zero or negative, the source
+    /// dimensions are used (1:1 capture).
+    /// </param>
+    /// <returns>A bitmap containing the captured pixels.</returns>
+    /// <exception cref="ArgumentException">Thrown when the rectangle has invalid dimensions.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the capture fails.</exception>
     public static Bitmap CaptureRectangle(Rectangle src, Size targetSize)
     {
         if (src.Width <= 0 || src.Height <= 0)
@@ -87,30 +155,23 @@ internal static class ScreenCapture
             throw new ArgumentException("The target capture size must be positive.", nameof(targetSize));
         }
 
-        var desktop = GetDesktopWindow();
-        var hdcSrc = GetWindowDC(desktop);
-        if (hdcSrc == IntPtr.Zero)
-        {
-            throw new InvalidOperationException("Failed to acquire the desktop device context.");
-        }
-
+        // Allocate a managed GDI+ bitmap and BitBlt directly into its backing pixel
+        // buffer via GetHdc/ReleaseHdc. This avoids an intermediate CreateCompatibleBitmap
+        // plus the pixel-copy inside Image.FromHbitmap.
+        var result = new Bitmap(targetWidth, targetHeight, PixelFormat.Format32bppPArgb);
         try
         {
-            var hdcMem = CreateCompatibleDC(hdcSrc);
-            if (hdcMem == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to create a compatible device context.");
-            }
-
+            using var g = Graphics.FromImage(result);
+            var hdcDest = g.GetHdc();
             try
             {
-                var hBmp = CreateCompatibleBitmap(hdcSrc, targetWidth, targetHeight);
-                if (hBmp == IntPtr.Zero)
+                var desktop = GetDesktopWindow();
+                var hdcSrc = GetWindowDC(desktop);
+                if (hdcSrc == IntPtr.Zero)
                 {
-                    throw new InvalidOperationException("Failed to create the capture bitmap.");
+                    throw new InvalidOperationException("Failed to acquire the desktop device context.");
                 }
 
-                var hOld = SelectObject(hdcMem, hBmp);
                 try
                 {
                     var rop = SRCCOPY | CAPTUREBLT;
@@ -118,12 +179,12 @@ internal static class ScreenCapture
 
                     if (targetWidth == src.Width && targetHeight == src.Height)
                     {
-                        success = BitBlt(hdcMem, 0, 0, targetWidth, targetHeight, hdcSrc, src.Left, src.Top, rop);
+                        success = BitBlt(hdcDest, 0, 0, targetWidth, targetHeight, hdcSrc, src.Left, src.Top, rop);
                     }
                     else
                     {
                         success = StretchBlt(
-                            hdcMem,
+                            hdcDest,
                             0,
                             0,
                             targetWidth,
@@ -140,24 +201,23 @@ internal static class ScreenCapture
                     {
                         throw new InvalidOperationException("GDI failed to copy the desktop pixels into the preview surface.");
                     }
-
-                    var image = Image.FromHbitmap(hBmp);
-                    return (Bitmap)image;
                 }
                 finally
                 {
-                    SelectObject(hdcMem, hOld);
-                    DeleteObject(hBmp);
+                    ReleaseDC(desktop, hdcSrc);
                 }
             }
             finally
             {
-                DeleteDC(hdcMem);
+                g.ReleaseHdc(hdcDest);
             }
         }
-        finally
+        catch
         {
-            ReleaseDC(desktop, hdcSrc);
+            result.Dispose();
+            throw;
         }
+
+        return result;
     }
 }

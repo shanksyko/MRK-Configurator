@@ -57,6 +57,7 @@ public partial class SitesEditorControl : WinForms.UserControl
     public event EventHandler<string>? TestarLogin;
     public event EventHandler<string>? AplicarPosicao;
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public BindingList<SiteConfig> Sites
     {
         get => _sites;

@@ -5,7 +5,7 @@ namespace Mieruka.Core.Services;
 /// <summary>
 /// Telemetry sink that discards all events.
 /// </summary>
-internal sealed class NullTelemetry : ITelemetry
+public sealed class NullTelemetry : ITelemetry
 {
     public static readonly NullTelemetry Instance = new();
 

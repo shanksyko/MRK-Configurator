@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
@@ -302,6 +303,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         UpdateBrowserPreview();
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Func<SiteConfig, Task<bool>>? TestHandler { get; set; }
 
     public SiteConfig? Result { get; private set; }

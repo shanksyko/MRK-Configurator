@@ -11,7 +11,7 @@ namespace Mieruka.Core.Services;
 public sealed class ZonePresetService
 {
     private readonly List<ZonePreset> _presets;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ZonePresetService"/> class.

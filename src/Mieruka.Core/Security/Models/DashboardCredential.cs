@@ -1,6 +1,6 @@
 namespace Mieruka.Core.Security.Models;
 
-public class DashboardCredential
+public sealed class DashboardCredential
 {
     public int Id { get; set; }
     public string SiteId { get; set; } = string.Empty;

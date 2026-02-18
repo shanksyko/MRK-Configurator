@@ -70,8 +70,12 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     private long _totalFrames;
     private long _totalDropped;
     private long _totalInvalidImages;
-    private DateTime _lastStatsSampleUtc = DateTime.UtcNow;
+    private long _lastStatsTick = Environment.TickCount64;
     private FeatureLevel _selectedFeatureLevel = FeatureLevel.Level_11_0;
+    private ID3D11Texture2D? _stagingTexture;
+    private int _stagingWidth;
+    private int _stagingHeight;
+    private static readonly ConcurrentDictionary<Type, MethodInfo?> _closeMethodCache = new();
 
     /// <inheritdoc />
     public event EventHandler<MonitorFrameArrivedEventArgs>? FrameArrived;
@@ -262,7 +266,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
                 Interlocked.Exchange(ref _totalFrames, 0);
                 Interlocked.Exchange(ref _totalDropped, 0);
                 Interlocked.Exchange(ref _totalInvalidImages, 0);
-                _lastStatsSampleUtc = DateTime.UtcNow;
+                _lastStatsTick = Environment.TickCount64;
 
                 _captureLogger.Information(
                     "PreviewStart: backend={Backend}, monitorId={MonitorId}, previewSessionId={PreviewSessionId}, featureLevel={Level}, targetFps={TargetFps:F1}",
@@ -612,6 +616,14 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     [SupportedOSPlatform("windows10.0.17763")]
     private void ReleaseDirect3D()
     {
+        if (_stagingTexture is not null)
+        {
+            _stagingTexture.Dispose();
+            _stagingTexture = null;
+            _stagingWidth = 0;
+            _stagingHeight = 0;
+        }
+
         if (_direct3DDevice is not null)
         {
             Logger.Debug("Liberando wrapper Direct3D11 (tipo {Type}).", _direct3DDevice.GetType().FullName);
@@ -647,7 +659,7 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
         try
         {
-            var closeMethod = type.GetMethod("Close", Type.EmptyTypes);
+            var closeMethod = _closeMethodCache.GetOrAdd(type, static t => t.GetMethod("Close", Type.EmptyTypes));
             if (closeMethod is not null)
             {
                 closeMethod.Invoke(instance, null);
@@ -787,8 +799,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
 
     private void MaybePublishStats(bool force = false)
     {
-        var now = DateTime.UtcNow;
-        if (!force && (now - _lastStatsSampleUtc).TotalSeconds < 5)
+        var nowTick = Environment.TickCount64;
+        if (!force && (nowTick - _lastStatsTick) < 5000)
         {
             return;
         }
@@ -802,8 +814,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             return;
         }
 
-        var elapsedSeconds = Math.Max(0.001, (now - _lastStatsSampleUtc).TotalSeconds);
-        _lastStatsSampleUtc = now;
+        var elapsedSeconds = Math.Max(0.001, (nowTick - _lastStatsTick) / 1000.0);
+        _lastStatsTick = nowTick;
 
         var fps = frames / elapsedSeconds;
         var logger = _captureLogger ?? Logger;
@@ -1021,27 +1033,40 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
     }
 
     [SupportedOSPlatform("windows10.0.17763")]
+    private ID3D11Texture2D GetOrCreateStagingTexture(int width, int height, Vortice.DXGI.Format format)
+    {
+        if (_stagingTexture is not null && _stagingWidth == width && _stagingHeight == height)
+        {
+            return _stagingTexture;
+        }
+
+        _stagingTexture?.Dispose();
+        _stagingTexture = _d3dDevice!.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)width,
+            Height = (uint)height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = format,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+            MiscFlags = ResourceOptionFlags.None,
+        });
+        _stagingWidth = width;
+        _stagingHeight = height;
+        return _stagingTexture;
+    }
+
+    [SupportedOSPlatform("windows10.0.17763")]
     private Bitmap CopyTextureToBitmap(Vortice.Direct3D11.ID3D11Texture2D texture, int width, int height)
     {
         var description = texture.Description;
         var safeWidth = ClampDimension(width);
         var safeHeight = ClampDimension(height);
 
-        var stagingDesc = new Vortice.Direct3D11.Texture2DDescription
-        {
-            Width = (uint)safeWidth,
-            Height = (uint)safeHeight,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = description.Format,
-            SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-            Usage = Vortice.Direct3D11.ResourceUsage.Staging,
-            CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Read,
-            BindFlags = Vortice.Direct3D11.BindFlags.None,
-            MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-        };
-
-        using var staging = _d3dDevice!.CreateTexture2D(stagingDesc);
+        var staging = GetOrCreateStagingTexture(safeWidth, safeHeight, description.Format);
         _d3dContext!.CopyResource(texture, staging);
 
         var dataBox = _d3dContext.Map(staging, 0, Vortice.Direct3D11.MapMode.Read, Vortice.Direct3D11.MapFlags.None);
@@ -1103,8 +1128,8 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
             using var graphics = Graphics.FromImage(scaled);
             graphics.CompositingMode = CompositingMode.SourceCopy;
             graphics.CompositingQuality = CompositingQuality.HighSpeed;
-            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighSpeed;
             graphics.SmoothingMode = SmoothingMode.None;
             graphics.DrawImage(
                 bitmap,

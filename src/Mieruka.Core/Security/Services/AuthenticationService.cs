@@ -5,7 +5,7 @@ using Mieruka.Core.Security.Models;
 
 namespace Mieruka.Core.Security.Services;
 
-public class AuthenticationService : IAuthenticationService
+public sealed class AuthenticationService : IAuthenticationService
 {
     private readonly SecurityDbContext _context;
     private readonly IAuditLogService _auditLog;

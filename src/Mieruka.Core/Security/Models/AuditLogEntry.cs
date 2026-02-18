@@ -1,6 +1,6 @@
 namespace Mieruka.Core.Security.Models;
 
-public class AuditLogEntry
+public sealed class AuditLogEntry
 {
     public int Id { get; set; }
     public int? UserId { get; set; }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -178,6 +179,7 @@ internal sealed class AppEditorDialog : WinForms.Form
         LoadTemplate(template);
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Func<AppConfig, Task<bool>>? TestHandler { get; set; }
 
     public AppConfig? Result { get; private set; }

@@ -503,22 +503,5 @@ internal sealed class BindingTrayService : IDisposable
 
     private readonly record struct WindowPlacement(WindowConfig Window, string MonitorStableId, string? ZonePresetId);
 
-    private sealed class NullTelemetry : ITelemetry
-    {
-        public static ITelemetry Instance { get; } = new NullTelemetry();
-
-        public void Error(string message, Exception? exception = null)
-        {
-        }
-
-        public void Info(string message, Exception? exception = null)
-        {
-        }
-
-        public void Warn(string message, Exception? exception = null)
-        {
-        }
-    }
-
     private static ILogger ForEvent(string eventId) => Logger.ForContext("EventId", eventId);
 }

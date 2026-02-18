@@ -22,7 +22,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<string, AppConfig> _applications = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SiteConfig> _sites = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Random _random = new();
+
     private readonly HotkeyManager? _hotkeyManager;
     private readonly bool _ownsHotkeyManager;
 
@@ -526,7 +526,7 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
     {
         for (var index = items.Count - 1; index > 0; index--)
         {
-            var swap = _random.Next(index + 1);
+            var swap = Random.Shared.Next(index + 1);
             (items[index], items[swap]) = (items[swap], items[index]);
         }
     }
@@ -778,20 +778,4 @@ internal sealed class CycleManager : IOrchestrationComponent, IDisposable
         public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
     }
 
-    private sealed class NullTelemetry : ITelemetry
-    {
-        public static ITelemetry Instance { get; } = new NullTelemetry();
-
-        public void Error(string message, Exception? exception = null)
-        {
-        }
-
-        public void Info(string message, Exception? exception = null)
-        {
-        }
-
-        public void Warn(string message, Exception? exception = null)
-        {
-        }
-    }
 }

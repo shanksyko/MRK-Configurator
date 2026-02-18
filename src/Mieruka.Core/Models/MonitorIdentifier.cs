@@ -27,12 +27,12 @@ public static class MonitorIdentifier
     /// </summary>
     public static string Create(MonitorKey? key, string? deviceName = null)
     {
-        if (key is null)
+        if (key is not { } k)
         {
             return string.IsNullOrWhiteSpace(deviceName) ? string.Empty : deviceName;
         }
 
-        var hasAdapterInfo = key.AdapterLuidHigh != 0 || key.AdapterLuidLow != 0 || key.TargetId != 0;
+        var hasAdapterInfo = k.AdapterLuidHigh != 0 || k.AdapterLuidLow != 0 || k.TargetId != 0;
         if (!hasAdapterInfo)
         {
             if (!string.IsNullOrWhiteSpace(deviceName))
@@ -40,9 +40,9 @@ public static class MonitorIdentifier
                 return deviceName;
             }
 
-            if (!string.IsNullOrWhiteSpace(key.DeviceId))
+            if (!string.IsNullOrWhiteSpace(k.DeviceId))
             {
-                return key.DeviceId;
+                return k.DeviceId;
             }
 
             return string.Empty;
@@ -50,17 +50,17 @@ public static class MonitorIdentifier
 
         var adapter = string.Join(
             AdapterSeparator,
-            key.AdapterLuidHigh.ToString("X8", CultureInfo.InvariantCulture),
-            key.AdapterLuidLow.ToString("X8", CultureInfo.InvariantCulture));
+            k.AdapterLuidHigh.ToString("X8", CultureInfo.InvariantCulture),
+            k.AdapterLuidLow.ToString("X8", CultureInfo.InvariantCulture));
 
         var identifier = string.Join(
             SegmentSeparator,
             adapter,
-            key.TargetId.ToString("X8", CultureInfo.InvariantCulture));
+            k.TargetId.ToString("X8", CultureInfo.InvariantCulture));
 
         var device = !string.IsNullOrWhiteSpace(deviceName)
             ? deviceName
-            : key.DeviceId;
+            : k.DeviceId;
 
         return string.IsNullOrWhiteSpace(device)
             ? identifier

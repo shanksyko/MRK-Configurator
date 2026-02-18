@@ -25,12 +25,12 @@ public sealed record class ProfileConfig
     /// <summary>
     /// Applications that should be launched when the profile is executed.
     /// </summary>
-    public IList<AppConfig> Applications { get; init; } = new List<AppConfig>();
+    public IReadOnlyList<AppConfig> Applications { get; init; } = [];
 
     /// <summary>
     /// Standalone window placements that should be enforced after launching the applications.
     /// </summary>
-    public IList<WindowConfig> Windows { get; init; } = new List<WindowConfig>();
+    public IReadOnlyList<WindowConfig> Windows { get; init; } = [];
 
     /// <summary>
     /// Optional identifier of the monitor used when an entry does not specify a target monitor.

@@ -49,7 +49,14 @@ public static class MonitorCaptureFactory
                 }
                 else
                 {
-                    graphics.DisposeAsync().GetAwaiter().GetResult();
+                    try
+                    {
+                        graphics.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                    }
+                    catch
+                    {
+                        // Ignore dispose failures for unsupported providers.
+                    }
                 }
             }
             catch

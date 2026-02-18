@@ -48,8 +48,9 @@ public sealed class DriverVersionGuard
             await updater().ConfigureAwait(false);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"DriverVersionGuard auto-update failed: {ex.Message}");
             return false;
         }
     }

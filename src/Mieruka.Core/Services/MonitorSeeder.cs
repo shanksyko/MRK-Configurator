@@ -59,7 +59,7 @@ public sealed class MonitorSeeder
     /// <summary>
     /// Returns the default set of layout presets.
     /// </summary>
-    public IList<ZonePreset> CreateDefaultZonePresets()
+    public IReadOnlyList<ZonePreset> CreateDefaultZonePresets()
         => new List<ZonePreset>(ZonePreset.Defaults);
 
     /// <summary>
@@ -76,7 +76,7 @@ public sealed class MonitorSeeder
         var monitors = CreateMonitors(probes);
         var presets = resetPresets || config.ZonePresets.Count == 0
             ? CreateDefaultZonePresets()
-            : new List<ZonePreset>(config.ZonePresets);
+            : (IReadOnlyList<ZonePreset>)new List<ZonePreset>(config.ZonePresets);
 
         return config with
         {

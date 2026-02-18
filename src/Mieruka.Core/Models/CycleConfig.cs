@@ -25,7 +25,7 @@ public sealed record class CycleConfig
     /// <summary>
     /// Items that compose the cycle.
     /// </summary>
-    public IList<CycleItem> Items { get; init; } = new List<CycleItem>();
+    public IReadOnlyList<CycleItem> Items { get; init; } = [];
 
     /// <summary>
     /// Keyboard shortcuts that control the playback cycle.

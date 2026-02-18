@@ -2,7 +2,9 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using Mieruka.App.Config;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
@@ -41,9 +43,12 @@ internal static class Program
 
             var graphicsOptions = LoadPreviewGraphicsOptions();
             PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
-            InitializeGpuCapture(graphicsOptions);
 
-            var mainForm = new MainForm();
+            // Defer GPU environment checks to a background thread so the main
+            // window appears immediately while the heavier COM/DX11 probes run.
+            _ = Task.Run(() => InitializeGpuCapture(graphicsOptions));
+
+            var mainForm = new MainForm(graphicsOptions);
             TabLayoutGuard.Attach(mainForm);
             WinForms.Application.Run(mainForm);
         }
@@ -142,8 +147,22 @@ internal static class Program
 
     private static PreviewGraphicsOptions LoadPreviewGraphicsOptions()
     {
-        var store = new JsonStore<PreviewGraphicsOptions>(ResolvePreviewOptionsPath());
-        return store.LoadAsync().GetAwaiter().GetResult() ?? new PreviewGraphicsOptions();
+        var path = ResolvePreviewOptionsPath();
+        if (!File.Exists(path))
+        {
+            return new PreviewGraphicsOptions();
+        }
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var options = System.Text.Json.JsonSerializer.Deserialize<PreviewGraphicsOptions>(json);
+            return options ?? new PreviewGraphicsOptions();
+        }
+        catch
+        {
+            return new PreviewGraphicsOptions();
+        }
     }
 
     private static string ResolvePreviewOptionsPath()

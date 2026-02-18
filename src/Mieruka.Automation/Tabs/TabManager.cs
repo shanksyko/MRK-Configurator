@@ -18,6 +18,7 @@ public sealed class TabManager
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly ITelemetry _telemetry;
+    private List<string>? _staleKeys;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabManager"/> class.
@@ -75,13 +76,23 @@ public sealed class TabManager
                 }
             }
 
-            var openHandles = handles.ToHashSet(StringComparer.Ordinal);
-            foreach (var known in observations.Keys.ToList())
+            foreach (var known in observations.Keys)
             {
-                if (!openHandles.Contains(known))
+                if (!handles.Contains(known))
                 {
-                    observations.Remove(known);
+                    _staleKeys ??= new List<string>();
+                    _staleKeys.Add(known);
                 }
+            }
+
+            if (_staleKeys is { Count: > 0 })
+            {
+                foreach (var key in _staleKeys)
+                {
+                    observations.Remove(key);
+                }
+
+                _staleKeys.Clear();
             }
 
             foreach (var handle in handles)

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.Versioning;
@@ -175,10 +176,11 @@ internal sealed class CaptureRunner
                 ImageLockMode.ReadOnly,
                 PixelFormat.Format32bppPArgb);
 
+            var length = Math.Max(0, bmpData.Stride * bmpData.Height);
+            var buffer = ArrayPool<byte>.Shared.Rent(length);
             try
             {
-                var buffer = new byte[Math.Max(0, bmpData.Stride * bmpData.Height)];
-                System.Runtime.InteropServices.Marshal.Copy(bmpData.Scan0, buffer, 0, buffer.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bmpData.Scan0, buffer, 0, length);
 
                 var frame = new PreviewFrameMessage(
                     _backend,
@@ -195,6 +197,7 @@ internal sealed class CaptureRunner
             finally
             {
                 processed.UnlockBits(bmpData);
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
         finally
@@ -207,13 +210,23 @@ internal sealed class CaptureRunner
     {
         if (!resolution.HasValidSize || (source.Width == resolution.LogicalWidth && source.Height == resolution.LogicalHeight))
         {
-            return source.Clone(new Rectangle(0, 0, source.Width, source.Height), PixelFormat.Format32bppPArgb);
+            // Avoid expensive Clone when dimensions already match; convert pixel format in-place if needed.
+            if (source.PixelFormat == PixelFormat.Format32bppPArgb)
+            {
+                return source;
+            }
+
+            var converted = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppPArgb);
+            using var cg = Graphics.FromImage(converted);
+            cg.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+            cg.DrawImage(source, 0, 0, source.Width, source.Height);
+            return converted;
         }
 
         var target = new Bitmap(resolution.LogicalWidth, resolution.LogicalHeight, PixelFormat.Format32bppPArgb);
         using var g = Graphics.FromImage(target);
         g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
-        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighSpeed;
         g.DrawImage(source, new Rectangle(0, 0, target.Width, target.Height));
         return target;

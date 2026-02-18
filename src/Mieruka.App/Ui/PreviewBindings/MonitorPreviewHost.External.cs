@@ -180,6 +180,11 @@ internal sealed class PreviewHostSession : IAsyncDisposable
         }
     }
 
+    // Ring buffer of reusable bitmaps for IPC frame dispatch.
+    // 4 slots allow the consumer to hold one frame while we render the next.
+    private readonly Bitmap?[] _ipcBitmapPool = new Bitmap?[4];
+    private int _ipcPoolIndex;
+
     private void DispatchFrame(PreviewFrameMessage frame)
     {
         if (frame.Buffer.Length < frame.ExpectedLength)
@@ -191,13 +196,29 @@ internal sealed class PreviewHostSession : IAsyncDisposable
         try
         {
             using var bitmap = new Bitmap(frame.Width, frame.Height, frame.Stride, frame.PixelFormat, handle.AddrOfPinnedObject());
-            var managedCopy = new Bitmap(frame.Width, frame.Height, PixelFormat.Format32bppPArgb);
-            using (var g = Graphics.FromImage(managedCopy))
+
+            var poolIndex = _ipcPoolIndex % _ipcBitmapPool.Length;
+            var reusable = _ipcBitmapPool[poolIndex];
+
+            // Reuse existing bitmap when dimensions match.
+            if (reusable is null || reusable.Width != frame.Width || reusable.Height != frame.Height)
             {
-                g.DrawImage(bitmap, new Rectangle(0, 0, managedCopy.Width, managedCopy.Height));
+                reusable?.Dispose();
+                reusable = new Bitmap(frame.Width, frame.Height, PixelFormat.Format32bppPArgb);
+                _ipcBitmapPool[poolIndex] = reusable;
             }
 
-            FrameReceived?.Invoke(managedCopy, frame.Timestamp);
+            using (var g = Graphics.FromImage(reusable))
+            {
+                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+                g.DrawImage(bitmap, new Rectangle(0, 0, reusable.Width, reusable.Height));
+            }
+
+            _ipcPoolIndex = poolIndex + 1;
+
+            // Pass the pooled bitmap directly — the ring buffer ensures previous
+            // frames are not overwritten until enough new frames have arrived.
+            FrameReceived?.Invoke(reusable, frame.Timestamp);
         }
         finally
         {
@@ -247,6 +268,17 @@ internal sealed class PreviewHostSession : IAsyncDisposable
             catch
             {
             }
+        }
+
+        // Dispose the Process handle to prevent handle leaks.
+        _process?.Dispose();
+        _process = null;
+
+        // Dispose pooled IPC bitmaps.
+        for (var i = 0; i < _ipcBitmapPool.Length; i++)
+        {
+            _ipcBitmapPool[i]?.Dispose();
+            _ipcBitmapPool[i] = null;
         }
     }
 }

@@ -17,7 +17,7 @@ internal sealed class BindingBatchService : IBindingService
 {
     private static readonly ILogger Logger = Log.ForContext<BindingBatchService>();
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly List<IBatchParticipant> _participants = new();
     private int _batchDepth;
 

@@ -27,7 +27,7 @@ internal sealed partial class ConfigValidator
         ValidateStrictTls(config.Sites, policy, issues);
     }
 
-    private static void ValidateAllowlist(IList<SiteConfig> sites, ICollection<ConfigValidationIssue> issues)
+    private static void ValidateAllowlist(IReadOnlyList<SiteConfig> sites, ICollection<ConfigValidationIssue> issues)
     {
         if (sites is null)
         {
@@ -60,7 +60,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private static void ValidateLoginProfiles(IList<SiteConfig> sites, ICollection<ConfigValidationIssue> issues)
+    private static void ValidateLoginProfiles(IReadOnlyList<SiteConfig> sites, ICollection<ConfigValidationIssue> issues)
     {
         if (sites is null)
         {
@@ -116,7 +116,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private void ValidateProfileDirectories(IList<SiteConfig> sites, ICollection<ConfigValidationIssue> issues)
+    private void ValidateProfileDirectories(IReadOnlyList<SiteConfig> sites, ICollection<ConfigValidationIssue> issues)
     {
         if (sites is null)
         {
@@ -152,7 +152,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private static void ValidateStrictTls(IList<SiteConfig> sites, SecurityPolicy policy, ICollection<ConfigValidationIssue> issues)
+    private static void ValidateStrictTls(IReadOnlyList<SiteConfig> sites, SecurityPolicy policy, ICollection<ConfigValidationIssue> issues)
     {
         if (!policy.StrictTls || sites is null)
         {

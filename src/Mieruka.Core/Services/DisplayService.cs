@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -20,11 +21,13 @@ public sealed class DisplayService : IDisplayService
 {
     private const int ErrorSuccess = 0;
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly ITelemetry _telemetry;
     private readonly SessionChecker _sessionChecker;
     private readonly bool _ownsSessionChecker;
     private IReadOnlyList<MonitorInfo> _snapshot = Array.Empty<MonitorInfo>();
+    private FrozenDictionary<MonitorKey, MonitorInfo> _keyIndex = FrozenDictionary<MonitorKey, MonitorInfo>.Empty;
+    private FrozenDictionary<string, MonitorInfo> _nameIndex = FrozenDictionary<string, MonitorInfo>.Empty;
     private bool _disposed;
 
     /// <summary>
@@ -67,6 +70,7 @@ public sealed class DisplayService : IDisplayService
             if (_snapshot.Count == 0)
             {
                 _snapshot = EnumerateMonitors();
+                RebuildIndexesLocked();
             }
 
             return _snapshot;
@@ -94,12 +98,13 @@ public sealed class DisplayService : IDisplayService
             return null;
         }
 
-        var comparer = StringComparer.OrdinalIgnoreCase;
-        return Monitors().FirstOrDefault(m =>
-            comparer.Equals(m.Key.DeviceId, key.DeviceId) &&
-            m.Key.AdapterLuidHigh == key.AdapterLuidHigh &&
-            m.Key.AdapterLuidLow == key.AdapterLuidLow &&
-            m.Key.TargetId == key.TargetId);
+        // Ensure snapshot is populated
+        Monitors();
+
+        lock (_gate)
+        {
+            return _keyIndex.GetValueOrDefault(key);
+        }
     }
 
     /// <inheritdoc />
@@ -110,10 +115,13 @@ public sealed class DisplayService : IDisplayService
             return null;
         }
 
-        var comparer = StringComparer.OrdinalIgnoreCase;
-        return Monitors().FirstOrDefault(m =>
-            comparer.Equals(m.DeviceName, deviceName) ||
-            comparer.Equals(m.Key.DeviceId, deviceName));
+        // Ensure snapshot is populated
+        Monitors();
+
+        lock (_gate)
+        {
+            return _nameIndex.GetValueOrDefault(deviceName);
+        }
     }
 
     /// <summary>
@@ -141,7 +149,6 @@ public sealed class DisplayService : IDisplayService
         }
 
         _disposed = true;
-        GC.SuppressFinalize(this);
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -189,7 +196,33 @@ public sealed class DisplayService : IDisplayService
         lock (_gate)
         {
             _snapshot = EnumerateMonitors();
+            RebuildIndexesLocked();
         }
+    }
+
+    private void RebuildIndexesLocked()
+    {
+        var keyIndex = new Dictionary<MonitorKey, MonitorInfo>(_snapshot.Count);
+        var nameIndex = new Dictionary<string, MonitorInfo>(_snapshot.Count, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var monitor in _snapshot)
+        {
+            keyIndex[monitor.Key] = monitor;
+
+            if (!string.IsNullOrEmpty(monitor.DeviceName))
+            {
+                nameIndex[monitor.DeviceName] = monitor;
+            }
+
+            if (!string.IsNullOrEmpty(monitor.Key.DeviceId)
+                && !nameIndex.ContainsKey(monitor.Key.DeviceId))
+            {
+                nameIndex[monitor.Key.DeviceId] = monitor;
+            }
+        }
+
+        _keyIndex = keyIndex.ToFrozenDictionary();
+        _nameIndex = nameIndex.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<MonitorInfo> EnumerateMonitors()

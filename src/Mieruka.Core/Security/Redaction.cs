@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -46,7 +47,7 @@ public static class Redaction
     public static HttpLogEntry Redact(HttpLogEntry entry)
     {
         var headers = entry.Headers
-            .ToDictionary(
+            .ToFrozenDictionary(
                 pair => pair.Key,
                 pair => Redact(pair.Value),
                 StringComparer.OrdinalIgnoreCase);
@@ -72,7 +73,7 @@ public sealed record class HttpLogEntry(string Method, string Url, IReadOnlyDict
     /// <summary>
     /// Gets an empty entry.
     /// </summary>
-    public static HttpLogEntry Empty { get; } = new("GET", string.Empty, new Dictionary<string, string>(), null);
+    public static HttpLogEntry Empty { get; } = new("GET", string.Empty, FrozenDictionary<string, string>.Empty, null);
 }
 
 /// <summary>

@@ -24,12 +24,12 @@ public sealed record class GeneralConfig
     /// <summary>
     /// Describes the monitors available in the environment.
     /// </summary>
-    public IList<MonitorInfo> Monitors { get; init; } = new List<MonitorInfo>();
+    public IReadOnlyList<MonitorInfo> Monitors { get; init; } = [];
 
     /// <summary>
     /// Applications managed by the configurator.
     /// </summary>
-    public IList<AppConfig> Applications { get; init; } = new List<AppConfig>();
+    public IReadOnlyList<AppConfig> Applications { get; init; } = [];
 
     /// <summary>
     /// Global browser arguments applied to launched sites.
@@ -39,12 +39,12 @@ public sealed record class GeneralConfig
     /// <summary>
     /// Sites managed by the configurator.
     /// </summary>
-    public IList<SiteConfig> Sites { get; init; } = new List<SiteConfig>();
+    public IReadOnlyList<SiteConfig> Sites { get; init; } = [];
 
     /// <summary>
     /// Zone presets available for layouts.
     /// </summary>
-    public IList<ZonePreset> ZonePresets { get; init; } = new List<ZonePreset>(ZonePreset.Defaults);
+    public IReadOnlyList<ZonePreset> ZonePresets { get; init; } = new List<ZonePreset>(ZonePreset.Defaults);
 
     /// <summary>
     /// Playback cycle definition.

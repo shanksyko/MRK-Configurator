@@ -435,7 +435,13 @@ internal sealed partial class ConfigValidator
 
     private static bool MonitorExists(IEnumerable<MonitorInfo> monitors, MonitorKey key)
     {
-        return monitors?.Any(monitor => monitor is not null && KeysEqual(monitor.Key, key)) ?? false;
+        if (monitors is null) return false;
+        foreach (var monitor in monitors)
+        {
+            if (monitor is not null && KeysEqual(monitor.Key, key))
+                return true;
+        }
+        return false;
     }
 
     private void ValidateCycle(GeneralConfig config, ICollection<ConfigValidationIssue> issues)
@@ -665,8 +671,14 @@ internal sealed class ConfigValidationReport
 
         var list = issues.ToList();
         Issues = list.AsReadOnly();
-        ErrorCount = list.Count(issue => issue.Severity == ConfigValidationSeverity.Error);
-        WarningCount = list.Count(issue => issue.Severity == ConfigValidationSeverity.Warning);
+        int errors = 0, warnings = 0;
+        foreach (var issue in list)
+        {
+            if (issue.Severity == ConfigValidationSeverity.Error) errors++;
+            else if (issue.Severity == ConfigValidationSeverity.Warning) warnings++;
+        }
+        ErrorCount = errors;
+        WarningCount = warnings;
     }
 
     /// <summary>

@@ -3,7 +3,7 @@ namespace Mieruka.Core.Models;
 /// <summary>
 /// Identifies a monitor in the system.
 /// </summary>
-public sealed record class MonitorKey
+public readonly record struct MonitorKey()
 {
     /// <summary>
     /// Device identifier exposed by the operating system.

@@ -24,6 +24,11 @@ public sealed class JsonStore<T>
     private readonly TimeSpan _lockRetryDelay;
 
     /// <summary>
+    /// Gets the full path to the storage file.
+    /// </summary>
+    public string FilePath => _filePath;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="JsonStore{T}"/> class.
     /// </summary>
     /// <param name="filePath">Target file path.</param>

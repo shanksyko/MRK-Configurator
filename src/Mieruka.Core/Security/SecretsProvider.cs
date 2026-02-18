@@ -9,12 +9,13 @@ namespace Mieruka.Core.Security;
 /// <summary>
 /// Provides unified access to the credential vault and cookie store while caching secrets in memory.
 /// </summary>
-public sealed class SecretsProvider
+public sealed class SecretsProvider : IDisposable
 {
     private readonly CredentialVault _vault;
     private readonly CookieSafeStore _cookieStore;
     private readonly ConcurrentDictionary<string, CacheEntry> _secretCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly TimeSpan _cacheDuration;
+    private bool _disposed;
 
     public event EventHandler<CredentialChangedEventArgs>? CredentialsChanged;
 
@@ -164,6 +165,14 @@ public sealed class SecretsProvider
         }
 
         CredentialsChanged?.Invoke(this, e);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _vault.CredentialsChanged -= OnVaultCredentialsChanged;
     }
 
     private sealed class CacheEntry

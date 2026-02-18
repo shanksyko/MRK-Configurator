@@ -55,7 +55,7 @@ public sealed record class AppConfig
     /// <summary>
     /// Optional environment variables applied when launching the application.
     /// </summary>
-    public IDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
     /// Watchdog related settings that describe how the application should be supervised.

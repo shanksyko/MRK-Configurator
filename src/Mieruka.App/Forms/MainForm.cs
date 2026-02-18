@@ -7,6 +7,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -76,10 +77,10 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     public event EventHandler<string>? MonitorSelected;
 
-    public MainForm()
+    public MainForm(PreviewGraphicsOptions? preloadedOptions = null)
     {
         _graphicsOptionsStore = CreateGraphicsOptionsStore();
-        _graphicsOptions = LoadGraphicsOptions();
+        _graphicsOptions = preloadedOptions?.Normalize() ?? LoadGraphicsOptions();
 
         InitializeComponent();
         // MIERUKA_FIX
@@ -345,7 +346,16 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     {
         try
         {
-            var options = _graphicsOptionsStore.LoadAsync().GetAwaiter().GetResult();
+            // Use synchronous file I/O during construction to avoid
+            // blocking the thread pool via GetAwaiter().GetResult().
+            var path = _graphicsOptionsStore.FilePath;
+            if (!File.Exists(path))
+            {
+                return new PreviewGraphicsOptions();
+            }
+
+            var json = File.ReadAllText(path);
+            var options = System.Text.Json.JsonSerializer.Deserialize<PreviewGraphicsOptions>(json);
             return options?.Normalize() ?? new PreviewGraphicsOptions();
         }
         catch (Exception ex)
@@ -463,7 +473,8 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             {
                 _profileExecutor?.Stop();
                 _profileExecutionCts?.Cancel();
-                _profileExecutionTask?.Wait(TimeSpan.FromSeconds(5));
+                // Use non-blocking wait with a timeout to avoid freezing the UI thread.
+                _profileExecutionTask?.ContinueWith(_ => { }, TaskScheduler.Default).Wait(TimeSpan.FromSeconds(3));
             }
             catch
             {
@@ -474,6 +485,16 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         _profileExecutionCts?.Dispose();
         _profileExecutionCts = null;
         _profileExecutionTask = null;
+
+        // Unsubscribe event handlers to prevent potential leaks before disposing.
+        if (_profileExecutor is not null)
+        {
+            _profileExecutor.AppStarted -= ProfileExecutor_AppStarted;
+            _profileExecutor.AppPositioned -= ProfileExecutor_AppPositioned;
+            _profileExecutor.Completed -= ProfileExecutor_Completed;
+            _profileExecutor.Failed -= ProfileExecutor_Failed;
+        }
+
         _profileExecutor?.Dispose();
         _profileExecutor = null;
 
@@ -1996,9 +2017,12 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private string GerarIdentificadorUnico(string baseId)
     {
+        var existingIds = new HashSet<string>(
+            _programas.Select(p => p.Id),
+            StringComparer.OrdinalIgnoreCase);
         var id = baseId;
         var contador = 1;
-        while (_programas.Any(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase)))
+        while (existingIds.Contains(id))
         {
             id = $"{baseId}_{contador++}";
         }

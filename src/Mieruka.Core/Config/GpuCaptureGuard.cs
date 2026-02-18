@@ -89,14 +89,15 @@ public static class GpuCaptureGuard
 
     /// <summary>
     /// Determines whether GPU backed capture can currently be used.
+    /// This is a lock-free read; the flags are set under lock but once
+    /// initialized they are effectively read-only, making volatile reads safe.
     /// </summary>
     /// <returns><c>true</c> when GPU usage is allowed; otherwise, <c>false</c>.</returns>
     public static bool CanUseGpu()
     {
-        lock (Gate)
-        {
-            return _initialized && _gpuAllowed && !_gpuPermanentlyDisabled;
-        }
+        return Volatile.Read(ref _initialized)
+            && Volatile.Read(ref _gpuAllowed)
+            && !Volatile.Read(ref _gpuPermanentlyDisabled);
     }
 
     /// <summary>
@@ -159,9 +160,8 @@ public static class GpuCaptureGuard
     /// <returns>Reason text when available; otherwise, <see langword="null"/>.</returns>
     public static string? GetDisabledReason()
     {
-        lock (Gate)
-        {
-            return _gpuAllowed && !_gpuPermanentlyDisabled ? null : _disabledReason;
-        }
+        return Volatile.Read(ref _gpuAllowed) && !Volatile.Read(ref _gpuPermanentlyDisabled)
+            ? null
+            : Volatile.Read(ref _disabledReason);
     }
 }

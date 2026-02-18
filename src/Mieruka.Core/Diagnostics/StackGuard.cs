@@ -6,12 +6,14 @@ namespace Mieruka.Core.Diagnostics;
 
 /// <summary>
 /// Guard genérico para evitar StackOverflow por recursão/reentrância excessiva.
+/// Uses [ThreadStatic] instead of AsyncLocal for minimal overhead in hot paths.
 /// </summary>
 public readonly struct StackGuard : IDisposable
 {
     private const int MaxDepth = 32;
 
-    private static readonly AsyncLocal<int> _depth = new();
+    [ThreadStatic]
+    private static int _depth;
 
     private readonly bool _entered;
 
@@ -26,7 +28,7 @@ public readonly struct StackGuard : IDisposable
     /// <param name="name">Name used for logging context.</param>
     public StackGuard(string name)
     {
-        var nextDepth = _depth.Value + 1;
+        var nextDepth = _depth + 1;
         if (nextDepth > MaxDepth)
         {
             Log.Warning(
@@ -38,7 +40,7 @@ public readonly struct StackGuard : IDisposable
         }
         else
         {
-            _depth.Value = nextDepth;
+            _depth = nextDepth;
             _entered = true;
         }
     }
@@ -48,14 +50,14 @@ public readonly struct StackGuard : IDisposable
     {
         if (_entered)
         {
-            var currentDepth = _depth.Value;
+            var currentDepth = _depth;
             if (currentDepth <= 0)
             {
-                _depth.Value = 0;
+                _depth = 0;
             }
             else
             {
-                _depth.Value = currentDepth - 1;
+                _depth = currentDepth - 1;
             }
         }
     }

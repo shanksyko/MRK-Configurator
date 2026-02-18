@@ -89,6 +89,5 @@ public sealed class TelemetryService : ITelemetry, IDisposable
     public void Dispose()
     {
         _logger.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

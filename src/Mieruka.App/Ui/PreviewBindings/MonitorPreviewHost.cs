@@ -1690,8 +1690,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
     }
 
     // Pool de bitmaps reutilizáveis para evitar ~8MB de alocação por frame.
-    // Ring buffer com 3 slots — suficiente para pipeline de preview sem GC pressure.
-    private readonly Drawing.Bitmap?[] _bitmapPool = new Drawing.Bitmap?[3];
+    // Ring buffer com 4 slots — allows producer to write to one while consumer displays another.
+    private readonly Drawing.Bitmap?[] _bitmapPool = new Drawing.Bitmap?[4];
     private int _bitmapPoolIndex;
 
     private Drawing.Bitmap? TryCloneFrame(Drawing.Image frame, int width, int height)
@@ -1720,9 +1720,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             _bitmapPoolIndex = poolIndex + 1;
 
-            // Return a lightweight clone that owns its own pixel data so the pool
-            // bitmap can be reused on the next frame while this one is displayed.
-            return reusable.Clone(new Drawing.Rectangle(0, 0, width, height), reusable.PixelFormat);
+            // Return the pool bitmap directly instead of cloning.
+            // The ring buffer has enough slots to ensure the PictureBox
+            // still holds a valid previous frame while we write the next one.
+            return reusable;
         }
         catch (Exception ex) when (ex is ArgumentException or ExternalException or InvalidOperationException)
         {
@@ -2210,8 +2211,17 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
-    private static void DisposeFrame(Drawing.Image frame)
+    private void DisposeFrame(Drawing.Image frame)
     {
+        // Do not dispose bitmaps that belong to the pool ring buffer — they are reused.
+        for (var i = 0; i < _bitmapPool.Length; i++)
+        {
+            if (ReferenceEquals(_bitmapPool[i], frame))
+            {
+                return;
+            }
+        }
+
         try
         {
             frame.Dispose();

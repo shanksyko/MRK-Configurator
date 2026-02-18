@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using Mieruka.App.Services;
@@ -88,6 +89,7 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
     /// <summary>
     /// Gets or sets the monitor displayed by the control.
     /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public MonitorInfo? Monitor
     {
         get => _canvas.Monitor;
@@ -121,6 +123,7 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
     /// <summary>
     /// Gets or sets a value indicating whether the monitor preview is selected.
     /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool IsSelected
     {
         get => _isSelected;
@@ -281,6 +284,7 @@ internal sealed class MonitorPreviewControl : WinForms.UserControl
             BackColor = Drawing.Color.FromArgb(248, 248, 248);
         }
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public MonitorInfo? Monitor { get; set; }
 
         public event EventHandler<Drawing.Rectangle>? SelectionApplied;

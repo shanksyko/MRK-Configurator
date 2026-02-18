@@ -10,10 +10,10 @@ public sealed record class BrowserArgumentsSettings
     /// <summary>
     /// Global arguments applied to Google Chrome instances.
     /// </summary>
-    public IList<string> Chrome { get; init; } = new List<string>();
+    public IReadOnlyList<string> Chrome { get; init; } = [];
 
     /// <summary>
     /// Global arguments applied to Microsoft Edge instances.
     /// </summary>
-    public IList<string> Edge { get; init; } = new List<string>();
+    public IReadOnlyList<string> Edge { get; init; } = [];
 }

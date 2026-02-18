@@ -264,7 +264,16 @@ public sealed class PreviewFrameScheduler
         {
             if (!TryBeginFrame(out var frameStartTimestamp))
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(1), cancellationToken).ConfigureAwait(false);
+                // Calculate remaining time until the next frame instead of busy-spinning at 1ms.
+                TimeSpan remaining;
+                lock (_gate)
+                {
+                    var nowTicks = _stopwatch.Elapsed.Ticks;
+                    var waitTicks = _nextFrameAtTicks - nowTicks;
+                    remaining = waitTicks > 0 ? TimeSpan.FromTicks(waitTicks) : TimeSpan.FromMilliseconds(1);
+                }
+
+                await Task.Delay(remaining, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
