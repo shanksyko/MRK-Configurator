@@ -17,16 +17,11 @@ public sealed class UserEditorForm : Form
     private readonly IUserManagementService _userService;
     private readonly User? _existingUser;
 
-    private readonly Label lblUsername = new();
     private readonly TextBox txtUsername = new();
-    private readonly Label lblPassword = new();
     private readonly TextBox txtPassword = new();
     private readonly Label lblPasswordHint = new();
-    private readonly Label lblFullName = new();
     private readonly TextBox txtFullName = new();
-    private readonly Label lblEmail = new();
     private readonly TextBox txtEmail = new();
-    private readonly Label lblRole = new();
     private readonly ComboBox cmbRole = new();
     private readonly Button btnSave = new();
     private readonly Button btnCancel = new();
@@ -43,78 +38,97 @@ public sealed class UserEditorForm : Form
     private void BuildLayout()
     {
         Text = _existingUser == null ? "Novo Usuário" : "Editar Usuário";
-        ClientSize = new Size(400, 320);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MinimumSize = new Size(400, 320);
+        ClientSize = new Size(420, 330);
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
 
-        int y = 20;
-        AddField(lblUsername, "Usuário:", txtUsername, ref y);
-        txtUsername.Enabled = _existingUser == null; // can't rename
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            Padding = new Padding(12),
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
 
-        AddField(lblPassword, "Senha:", txtPassword, ref y);
+        txtUsername.Dock = DockStyle.Fill;
+        txtUsername.Enabled = _existingUser == null;
+        AddRow(layout, "Usuário:", txtUsername);
+
+        txtPassword.Dock = DockStyle.Fill;
         txtPassword.UseSystemPasswordChar = true;
+        AddRow(layout, "Senha:", txtPassword);
 
         lblPasswordHint.AutoSize = true;
         lblPasswordHint.ForeColor = Color.Gray;
         lblPasswordHint.Font = new Font("Segoe UI", 8F);
-        lblPasswordHint.Location = new Point(120, y - 12);
         lblPasswordHint.Text = _existingUser == null
             ? "(obrigatório, mín. 6 chars)"
             : "(deixe em branco para não alterar)";
-        Controls.Add(lblPasswordHint);
-        y += 6;
+        var rowHint = layout.RowCount++;
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.Controls.Add(new Label { AutoSize = true }, 0, rowHint);
+        layout.Controls.Add(lblPasswordHint, 1, rowHint);
 
-        AddField(lblFullName, "Nome Completo:", txtFullName, ref y);
-        AddField(lblEmail, "E-mail:", txtEmail, ref y);
+        txtFullName.Dock = DockStyle.Fill;
+        AddRow(layout, "Nome Completo:", txtFullName);
 
-        lblRole.AutoSize = true;
-        lblRole.Location = new Point(20, y);
-        lblRole.Text = "Perfil:";
-        Controls.Add(lblRole);
+        txtEmail.Dock = DockStyle.Fill;
+        AddRow(layout, "E-mail:", txtEmail);
 
-        cmbRole.Location = new Point(120, y - 3);
-        cmbRole.Size = new Size(260, 23);
+        cmbRole.Dock = DockStyle.Fill;
         cmbRole.DropDownStyle = ComboBoxStyle.DropDownList;
         foreach (var role in Enum.GetValues<UserRole>())
             cmbRole.Items.Add(role.ToString());
         cmbRole.SelectedIndex = 0;
-        Controls.Add(cmbRole);
-        y += 40;
+        AddRow(layout, "Perfil:", cmbRole);
 
+        // Button bar
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+        btnCancel.Text = "Cancelar";
+        btnCancel.AutoSize = true;
+        btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         btnSave.BackColor = Color.FromArgb(0, 120, 215);
         btnSave.FlatStyle = FlatStyle.Flat;
         btnSave.ForeColor = Color.White;
-        btnSave.Location = new Point(120, y);
-        btnSave.Size = new Size(120, 30);
         btnSave.Text = "Salvar";
+        btnSave.AutoSize = true;
         btnSave.UseVisualStyleBackColor = false;
         btnSave.Click += async (_, _) => await SaveAsync();
-        Controls.Add(btnSave);
+        buttonPanel.Controls.Add(btnCancel);
+        buttonPanel.Controls.Add(btnSave);
 
-        btnCancel.Location = new Point(260, y);
-        btnCancel.Size = new Size(120, 30);
-        btnCancel.Text = "Cancelar";
-        btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        Controls.Add(btnCancel);
+        Controls.Add(layout);
+        Controls.Add(buttonPanel);
 
         AcceptButton = btnSave;
         CancelButton = btnCancel;
     }
 
-    private void AddField(Label lbl, string labelText, TextBox txt, ref int y)
+    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
     {
-        lbl.AutoSize = true;
-        lbl.Location = new Point(20, y + 3);
-        lbl.Text = labelText;
-        Controls.Add(lbl);
-
-        txt.Location = new Point(120, y);
-        txt.Size = new Size(260, 23);
-        Controls.Add(txt);
-        y += 35;
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label
+        {
+            Text = caption,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 6, 6),
+        }, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
     }
 
     private void FillExistingValues(User user)
@@ -195,40 +209,71 @@ public sealed class ResetPasswordForm : Form
     public ResetPasswordForm()
     {
         Text = "Definir Nova Senha";
-        ClientSize = new Size(340, 160);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MinimumSize = new Size(340, 180);
+        ClientSize = new Size(360, 180);
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
 
-        var lblPass = new Label { AutoSize = true, Location = new Point(20, 23), Text = "Nova Senha:" };
-        txtPassword.Location = new Point(120, 20);
-        txtPassword.Size = new Size(200, 23);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            Padding = new Padding(12),
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
+
+        txtPassword.Dock = DockStyle.Fill;
         txtPassword.UseSystemPasswordChar = true;
+        AddRow(layout, "Nova Senha:", txtPassword);
 
-        var lblConf = new Label { AutoSize = true, Location = new Point(20, 58), Text = "Confirmar:" };
-        txtConfirm.Location = new Point(120, 55);
-        txtConfirm.Size = new Size(200, 23);
+        txtConfirm.Dock = DockStyle.Fill;
         txtConfirm.UseSystemPasswordChar = true;
+        AddRow(layout, "Confirmar:", txtConfirm);
 
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+        btnCancel.Text = "Cancelar";
+        btnCancel.AutoSize = true;
+        btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         btnOk.BackColor = Color.FromArgb(0, 120, 215);
         btnOk.FlatStyle = FlatStyle.Flat;
         btnOk.ForeColor = Color.White;
-        btnOk.Location = new Point(60, 100);
-        btnOk.Size = new Size(100, 30);
         btnOk.Text = "Confirmar";
+        btnOk.AutoSize = true;
         btnOk.UseVisualStyleBackColor = false;
         btnOk.Click += BtnOk_Click;
+        buttonPanel.Controls.Add(btnCancel);
+        buttonPanel.Controls.Add(btnOk);
 
-        btnCancel.Location = new Point(180, 100);
-        btnCancel.Size = new Size(100, 30);
-        btnCancel.Text = "Cancelar";
-        btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-
-        Controls.AddRange(new Control[] { lblPass, txtPassword, lblConf, txtConfirm, btnOk, btnCancel });
+        Controls.Add(layout);
+        Controls.Add(buttonPanel);
         AcceptButton = btnOk;
         CancelButton = btnCancel;
+    }
+
+    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
+    {
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label
+        {
+            Text = caption,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 6, 6),
+        }, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
     }
 
     private void BtnOk_Click(object? sender, EventArgs e)

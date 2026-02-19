@@ -47,92 +47,129 @@ public sealed class CategoryEditorForm : Form
     private void BuildLayout()
     {
         Text = "Gerenciar Categorias";
-        ClientSize = new Size(720, 520);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MinimumSize = new Size(720, 520);
+        ClientSize = new Size(760, 540);
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
 
-        // ── Left panel: list + reorder buttons ──
-        var lblList = new Label { Text = "Categorias:", AutoSize = true, Location = new Point(12, 12) };
-        Controls.Add(lblList);
+        // ── Left panel: list + action buttons ──
+        var leftPanel = new Panel { Dock = DockStyle.Left, Width = 220, Padding = new Padding(8) };
 
-        _lstCategories.Location = new Point(12, 32);
-        _lstCategories.Size = new Size(200, 360);
+        var lblList = new Label
+        {
+            Text = "Categorias:",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
+        };
+
+        _lstCategories.Dock = DockStyle.Fill;
         _lstCategories.SelectedIndexChanged += OnCategorySelected;
-        Controls.Add(_lstCategories);
+
+        var leftButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Padding = new Padding(0, 4, 0, 0),
+        };
 
         _btnMoveUp.Text = "▲";
-        _btnMoveUp.Size = new Size(40, 28);
-        _btnMoveUp.Location = new Point(12, 398);
+        _btnMoveUp.AutoSize = true;
         _btnMoveUp.Click += async (_, _) => await OnMoveUpAsync();
-        Controls.Add(_btnMoveUp);
-
         _btnMoveDown.Text = "▼";
-        _btnMoveDown.Size = new Size(40, 28);
-        _btnMoveDown.Location = new Point(56, 398);
+        _btnMoveDown.AutoSize = true;
         _btnMoveDown.Click += async (_, _) => await OnMoveDownAsync();
-        Controls.Add(_btnMoveDown);
-
         _btnAdd.Text = "+ Nova";
-        _btnAdd.Size = new Size(80, 28);
-        _btnAdd.Location = new Point(100, 398);
+        _btnAdd.AutoSize = true;
         _btnAdd.Click += OnAddClicked;
-        Controls.Add(_btnAdd);
-
         _btnDelete.Text = "Excluir";
-        _btnDelete.Size = new Size(72, 28);
-        _btnDelete.Location = new Point(140, 432);
+        _btnDelete.AutoSize = true;
         _btnDelete.ForeColor = Color.DarkRed;
         _btnDelete.Click += async (_, _) => await OnDeleteAsync();
-        Controls.Add(_btnDelete);
+
+        leftButtons.Controls.AddRange(new Control[] { _btnMoveUp, _btnMoveDown, _btnAdd, _btnDelete });
+
+        leftPanel.Controls.Add(_lstCategories);
+        leftPanel.Controls.Add(leftButtons);
+        leftPanel.Controls.Add(lblList);
 
         // ── Right panel: details ──
-        int x = 230, y = 12;
+        var rightPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
 
-        AddField("Nome:*", _txtName, x, ref y, 240);
+        var detailLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            AutoScroll = true,
+        };
+        detailLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
+        detailLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72f));
+
+        _txtName.Dock = DockStyle.Fill;
         _txtName.MaxLength = 120;
+        AddRow(detailLayout, "Nome:*", _txtName);
 
-        AddField("Descrição:", _txtDescription, x, ref y, 240);
-        AddField("Ícone (emoji):", _txtIcon, x, ref y, 120);
+        _txtDescription.Dock = DockStyle.Fill;
+        AddRow(detailLayout, "Descrição:", _txtDescription);
 
-        // Color
-        var lblColor = new Label { Text = "Cor (hex):", AutoSize = true, Location = new Point(x, y + 3) };
-        Controls.Add(lblColor);
-        _txtColor.Location = new Point(x + 120, y);
-        _txtColor.Size = new Size(100, 23);
+        _txtIcon.Dock = DockStyle.Left;
+        _txtIcon.Width = 120;
+        AddRow(detailLayout, "Ícone (emoji):", _txtIcon);
+
+        // Color row — text + preview side-by-side
+        var colorPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+        };
+        _txtColor.Width = 100;
         _txtColor.TextChanged += OnColorTextChanged;
-        Controls.Add(_txtColor);
-
-        _pnlColorPreview.Location = new Point(x + 226, y);
         _pnlColorPreview.Size = new Size(24, 23);
         _pnlColorPreview.BorderStyle = BorderStyle.FixedSingle;
-        Controls.Add(_pnlColorPreview);
-        y += 32;
+        _pnlColorPreview.Margin = new Padding(6, 0, 0, 0);
+        colorPanel.Controls.Add(_txtColor);
+        colorPanel.Controls.Add(_pnlColorPreview);
+        AddRow(detailLayout, "Cor (hex):", colorPanel);
 
-        // Custom fields grid
-        var lblFields = new Label { Text = "Campos Customizados:", AutoSize = true, Location = new Point(x, y) };
-        Controls.Add(lblFields);
-        y += 20;
+        // Custom fields label
+        var lblFields = new Label
+        {
+            Text = "Campos Customizados:",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+        };
+        var rowFields = detailLayout.RowCount++;
+        detailLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        detailLayout.Controls.Add(lblFields, 0, rowFields);
+        detailLayout.SetColumnSpan(lblFields, 2);
 
-        _gridCustomFields.Location = new Point(x, y);
-        _gridCustomFields.Size = new Size(470, 200);
+        // Custom fields grid — fill remaining space
+        _gridCustomFields.Dock = DockStyle.Fill;
         _gridCustomFields.AllowUserToDeleteRows = true;
         _gridCustomFields.AutoGenerateColumns = false;
         _gridCustomFields.RowHeadersVisible = true;
         _gridCustomFields.BackgroundColor = SystemColors.Window;
+        _gridCustomFields.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _gridCustomFields.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "colFieldName",
             HeaderText = "Nome do Campo",
-            Width = 200,
+            FillWeight = 40,
+            MinimumWidth = 100,
         });
         var colType = new DataGridViewComboBoxColumn
         {
             Name = "colFieldType",
             HeaderText = "Tipo",
-            Width = 120,
+            FillWeight = 25,
+            MinimumWidth = 80,
         };
         colType.Items.AddRange("text", "number", "date", "boolean", "select");
         _gridCustomFields.Columns.Add(colType);
@@ -140,40 +177,62 @@ public sealed class CategoryEditorForm : Form
         {
             Name = "colFieldOptions",
             HeaderText = "Opções (vírgula)",
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            FillWeight = 35,
+            MinimumWidth = 100,
         });
-        Controls.Add(_gridCustomFields);
-        y += 210;
 
-        // Save + Close buttons
+        var rowGrid = detailLayout.RowCount++;
+        detailLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        detailLayout.Controls.Add(_gridCustomFields, 0, rowGrid);
+        detailLayout.SetColumnSpan(_gridCustomFields, 2);
+
+        rightPanel.Controls.Add(detailLayout);
+
+        // ── Bottom button bar ──
+        var buttonBar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+
+        _btnClose.Text = "Fechar";
+        _btnClose.AutoSize = true;
+        _btnClose.Click += (_, _) => Close();
         _btnSave.BackColor = Color.FromArgb(0, 120, 215);
         _btnSave.FlatStyle = FlatStyle.Flat;
         _btnSave.ForeColor = Color.White;
         _btnSave.Text = "Salvar Categoria";
-        _btnSave.Size = new Size(150, 32);
-        _btnSave.Location = new Point(x, y);
+        _btnSave.AutoSize = true;
         _btnSave.UseVisualStyleBackColor = false;
         _btnSave.Click += async (_, _) => await OnSaveAsync();
-        Controls.Add(_btnSave);
 
-        _btnClose.Text = "Fechar";
-        _btnClose.Size = new Size(100, 32);
-        _btnClose.Location = new Point(x + 164, y);
-        _btnClose.Click += (_, _) => Close();
-        Controls.Add(_btnClose);
+        buttonBar.Controls.Add(_btnClose);
+        buttonBar.Controls.Add(_btnSave);
+
+        Controls.Add(rightPanel);
+        Controls.Add(leftPanel);
+        Controls.Add(buttonBar);
 
         CancelButton = _btnClose;
         UpdateButtonStates();
     }
 
-    private void AddField(string labelText, TextBox txt, int x, ref int y, int width)
+    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
     {
-        var lbl = new Label { AutoSize = true, Location = new Point(x, y + 3), Text = labelText };
-        Controls.Add(lbl);
-        txt.Location = new Point(x + 120, y);
-        txt.Size = new Size(width, 23);
-        Controls.Add(txt);
-        y += 32;
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label
+        {
+            Text = caption,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 6, 6),
+        }, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
     }
 
     // ── Data ──────────────────────────────────────────────────────────────────

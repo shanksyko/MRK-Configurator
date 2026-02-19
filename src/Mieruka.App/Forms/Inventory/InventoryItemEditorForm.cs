@@ -54,69 +54,75 @@ public sealed class InventoryItemEditorForm : Form
     private void BuildLayout(IReadOnlyList<InventoryCategoryEntity> categories, IReadOnlyList<MonitorInfo> monitors)
     {
         Text = _existing is null ? "Novo Item" : "Editar Item";
-        ClientSize = new Size(480, 540);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MinimumSize = new Size(500, 580);
+        ClientSize = new Size(520, 620);
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
-        AutoScroll = true;
 
-        int y = 12;
-
-        AddField("Nome:*", _txtName, ref y);
-        _txtName.MaxLength = 200;
-
-        AddCategoryField(categories, ref y);
-
-        AddField("Nº de Série:", _txtSerialNumber, ref y);
-        AddField("Patrimônio:", _txtAssetTag, ref y);
-        AddField("Fabricante:", _txtManufacturer, ref y);
-        AddField("Modelo:", _txtModel, ref y);
-
-        // Description
-        var lblDesc = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Descrição:" };
-        Controls.Add(lblDesc);
-        _txtDescription.Location = new Point(150, y);
-        _txtDescription.Size = new Size(290, 46);
-        _txtDescription.Multiline = true;
-        _txtDescription.ScrollBars = ScrollBars.Vertical;
-        Controls.Add(_txtDescription);
-        y += 54;
-
-        AddField("Localização:", _txtLocation, ref y);
-        AddField("Responsável:", _txtAssignedTo, ref y);
-
-        // Status
-        AddLabel("Status:", ref y, out var lblStatus);
-        Controls.Add(lblStatus);
-        _cmbStatus.Location = new Point(150, y - 28);
-        _cmbStatus.Size = new Size(290, 23);
-        _cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
-        foreach (var s in StatusOptions)
+        var layout = new TableLayoutPanel
         {
-            _cmbStatus.Items.Add(s);
-        }
-        _cmbStatus.SelectedIndex = 0;
-        Controls.Add(_cmbStatus);
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            Padding = new Padding(12),
+            AutoScroll = true,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
 
-        // Quantity
-        y += 6;
-        AddLabel("Quantidade:", ref y, out var lblQty);
-        Controls.Add(lblQty);
-        _numQuantity.Location = new Point(150, y - 28);
+        _txtName.Dock = DockStyle.Fill;
+        _txtName.MaxLength = 200;
+        AddRow(layout, "Nome:*", _txtName);
+
+        // Category with AutoComplete
+        _txtCategory.Dock = DockStyle.Fill;
+        var source = new AutoCompleteStringCollection();
+        foreach (var cat in categories) source.Add(cat.Name);
+        _txtCategory.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+        _txtCategory.AutoCompleteSource = AutoCompleteSource.CustomSource;
+        _txtCategory.AutoCompleteCustomSource = source;
+        AddRow(layout, "Categoria:", _txtCategory);
+
+        _txtSerialNumber.Dock = DockStyle.Fill;
+        AddRow(layout, "Nº de Série:", _txtSerialNumber);
+
+        _txtAssetTag.Dock = DockStyle.Fill;
+        AddRow(layout, "Patrimônio:", _txtAssetTag);
+
+        _txtManufacturer.Dock = DockStyle.Fill;
+        AddRow(layout, "Fabricante:", _txtManufacturer);
+
+        _txtModel.Dock = DockStyle.Fill;
+        AddRow(layout, "Modelo:", _txtModel);
+
+        _txtDescription.Dock = DockStyle.Fill;
+        _txtDescription.Multiline = true;
+        _txtDescription.Height = 46;
+        _txtDescription.ScrollBars = ScrollBars.Vertical;
+        AddRow(layout, "Descrição:", _txtDescription);
+
+        _txtLocation.Dock = DockStyle.Fill;
+        AddRow(layout, "Localização:", _txtLocation);
+
+        _txtAssignedTo.Dock = DockStyle.Fill;
+        AddRow(layout, "Responsável:", _txtAssignedTo);
+
+        _cmbStatus.Dock = DockStyle.Fill;
+        _cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
+        foreach (var s in StatusOptions) _cmbStatus.Items.Add(s);
+        _cmbStatus.SelectedIndex = 0;
+        AddRow(layout, "Status:", _cmbStatus);
+
+        _numQuantity.Dock = DockStyle.Left;
         _numQuantity.Width = 80;
         _numQuantity.Minimum = 0;
         _numQuantity.Maximum = 9999;
         _numQuantity.Value = 1;
-        Controls.Add(_numQuantity);
+        AddRow(layout, "Quantidade:", _numQuantity);
 
-        // Monitor
-        y += 6;
-        AddLabel("Monitor vinculado:", ref y, out var lblMonitor);
-        Controls.Add(lblMonitor);
-        _cmbMonitor.Location = new Point(150, y - 28);
-        _cmbMonitor.Size = new Size(290, 23);
+        _cmbMonitor.Dock = DockStyle.Fill;
         _cmbMonitor.DropDownStyle = ComboBoxStyle.DropDownList;
         _cmbMonitor.Items.Add("(Nenhum)");
         foreach (var mon in monitors)
@@ -125,120 +131,103 @@ public sealed class InventoryItemEditorForm : Form
             _cmbMonitor.Items.Add(new MonitorComboItem(mon.StableId ?? mon.DeviceName, label));
         }
         _cmbMonitor.SelectedIndex = 0;
-        Controls.Add(_cmbMonitor);
+        AddRow(layout, "Monitor vinculado:", _cmbMonitor);
 
-        // Unit cost (R$)
-        y += 6;
-        AddLabel("Custo Unitário (R$):", ref y, out var lblCost);
-        Controls.Add(lblCost);
-        _numUnitCost.Location = new Point(150, y - 28);
+        _numUnitCost.Dock = DockStyle.Left;
         _numUnitCost.Width = 140;
         _numUnitCost.Minimum = 0;
         _numUnitCost.Maximum = 99_999_999;
         _numUnitCost.DecimalPlaces = 2;
         _numUnitCost.ThousandsSeparator = true;
         _numUnitCost.Value = 0;
-        Controls.Add(_numUnitCost);
+        AddRow(layout, "Custo Unitário (R$):", _numUnitCost);
 
-        // Acquired date
-        y += 4;
+        // Acquired date — checkbox + picker side-by-side
+        var acquiredPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+        };
         _chkAcquired.AutoSize = true;
-        _chkAcquired.Location = new Point(12, y);
-        _chkAcquired.Text = "Adquirido em:";
+        _chkAcquired.Text = "Sim";
         _chkAcquired.CheckedChanged += (_, _) => _dtpAcquired.Enabled = _chkAcquired.Checked;
-        Controls.Add(_chkAcquired);
-
-        _dtpAcquired.Location = new Point(200, y - 2);
         _dtpAcquired.Width = 150;
         _dtpAcquired.Value = DateTime.Today;
         _dtpAcquired.Enabled = false;
-        Controls.Add(_dtpAcquired);
-        y += 32;
+        _dtpAcquired.Margin = new Padding(6, 0, 0, 0);
+        acquiredPanel.Controls.Add(_chkAcquired);
+        acquiredPanel.Controls.Add(_dtpAcquired);
+        AddRow(layout, "Adquirido em:", acquiredPanel);
 
-        // Warranty
-        y += 10;
+        // Warranty — checkbox + picker side-by-side
+        var warrantyPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+        };
         _chkWarranty.AutoSize = true;
-        _chkWarranty.Location = new Point(12, y);
-        _chkWarranty.Text = "Garantia expira em:";
+        _chkWarranty.Text = "Sim";
         _chkWarranty.CheckedChanged += (_, _) => _dtpWarranty.Enabled = _chkWarranty.Checked;
-        Controls.Add(_chkWarranty);
-
-        _dtpWarranty.Location = new Point(200, y - 2);
         _dtpWarranty.Width = 150;
         _dtpWarranty.Value = DateTime.Today.AddYears(1);
         _dtpWarranty.Enabled = false;
-        Controls.Add(_dtpWarranty);
-        y += 32;
+        _dtpWarranty.Margin = new Padding(6, 0, 0, 0);
+        warrantyPanel.Controls.Add(_chkWarranty);
+        warrantyPanel.Controls.Add(_dtpWarranty);
+        AddRow(layout, "Garantia expira em:", warrantyPanel);
 
-        // Notes
-        var lblNotes = new Label { AutoSize = true, Location = new Point(12, y), Text = "Notas:" };
-        Controls.Add(lblNotes);
-        y += 20;
-        _txtNotes.Location = new Point(12, y);
-        _txtNotes.Size = new Size(440, 60);
+        _txtNotes.Dock = DockStyle.Fill;
         _txtNotes.Multiline = true;
+        _txtNotes.Height = 60;
         _txtNotes.ScrollBars = ScrollBars.Vertical;
-        Controls.Add(_txtNotes);
-        y += 70;
+        AddRow(layout, "Notas:", _txtNotes);
 
-        // Buttons
+        // Button bar
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+        _btnCancel.Text = "Cancelar";
+        _btnCancel.AutoSize = true;
+        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         _btnSave.BackColor = Color.FromArgb(0, 120, 215);
         _btnSave.FlatStyle = FlatStyle.Flat;
         _btnSave.ForeColor = Color.White;
-        _btnSave.Location = new Point(150, y);
-        _btnSave.Size = new Size(120, 30);
         _btnSave.Text = "Salvar";
+        _btnSave.AutoSize = true;
         _btnSave.UseVisualStyleBackColor = false;
         _btnSave.Click += OnSaveClicked;
-        Controls.Add(_btnSave);
+        buttonPanel.Controls.Add(_btnCancel);
+        buttonPanel.Controls.Add(_btnSave);
 
-        _btnCancel.Location = new Point(290, y);
-        _btnCancel.Size = new Size(120, 30);
-        _btnCancel.Text = "Cancelar";
-        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        Controls.Add(_btnCancel);
-
-        ClientSize = new Size(480, y + 50);
+        Controls.Add(layout);
+        Controls.Add(buttonPanel);
 
         AcceptButton = _btnSave;
         CancelButton = _btnCancel;
     }
 
-    private void AddField(string labelText, TextBox txt, ref int y)
+    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
     {
-        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = labelText };
-        Controls.Add(lbl);
-        txt.Location = new Point(150, y);
-        txt.Size = new Size(290, 23);
-        Controls.Add(txt);
-        y += 32;
-    }
-
-    private void AddCategoryField(IReadOnlyList<InventoryCategoryEntity> categories, ref int y)
-    {
-        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Categoria:" };
-        Controls.Add(lbl);
-        _txtCategory.Location = new Point(150, y);
-        _txtCategory.Size = new Size(290, 23);
-
-        // Use AutoComplete from existing categories
-        var source = new AutoCompleteStringCollection();
-        foreach (var cat in categories)
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label
         {
-            source.Add(cat.Name);
-        }
-        _txtCategory.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
-        _txtCategory.AutoCompleteSource = AutoCompleteSource.CustomSource;
-        _txtCategory.AutoCompleteCustomSource = source;
-
-        Controls.Add(_txtCategory);
-        y += 32;
-    }
-
-    private static void AddLabel(string text, ref int y, out Label lbl)
-    {
-        lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = text };
-        y += 32;
+            Text = caption,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 6, 6),
+        }, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
     }
 
     private void FillValues(InventoryItemEntity item)
