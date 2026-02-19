@@ -100,16 +100,18 @@ public sealed class InventoryForm : Form
             ColumnCount = 1,
             Padding = new Padding(4, 0, 4, 4),
         };
-        rightPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        rightPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         rightPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         rightPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         // Search bar
         var searchPanel = new FlowLayoutPanel
         {
-            Dock = DockStyle.Top,
-            AutoSize = true,
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            Height = 32,
             Padding = new Padding(0, 4, 0, 4),
+            WrapContents = false,
         };
 
         var lblSearch = new Label { Text = "Buscar:", AutoSize = true, Margin = new Padding(0, 4, 4, 0) };
