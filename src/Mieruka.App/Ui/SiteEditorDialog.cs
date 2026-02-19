@@ -83,8 +83,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
             Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
             Padding = new WinForms.Padding(16),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            AutoScroll = true,
         };
         layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 28f));
         layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 72f));

@@ -107,7 +107,7 @@ public sealed class InventoryForm : Form
         // Search bar
         var searchPanel = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             AutoSize = true,
             Padding = new Padding(0, 4, 0, 4),
         };

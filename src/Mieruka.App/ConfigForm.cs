@@ -235,12 +235,18 @@ internal sealed class ConfigForm : WinForms.Form
             _searchDebounce.Start();
         };
 
-        var tabWithSearchPanel = new WinForms.Panel
+        var tabWithSearchPanel = new WinForms.TableLayoutPanel
         {
             Dock = WinForms.DockStyle.Fill,
+            RowCount = 2,
+            ColumnCount = 1,
         };
-        tabWithSearchPanel.Controls.Add(tabControl);
-        tabWithSearchPanel.Controls.Add(_searchBox);
+        tabWithSearchPanel.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
+        tabWithSearchPanel.RowStyles.Add(new WinForms.RowStyle(SizeType.Percent, 100f));
+        _searchBox.Dock = WinForms.DockStyle.Fill;
+        _searchBox.Margin = new WinForms.Padding(0, 0, 0, 4);
+        tabWithSearchPanel.Controls.Add(_searchBox, 0, 0);
+        tabWithSearchPanel.Controls.Add(tabControl, 0, 1);
 
         var monitorContainer = new WinForms.Panel
         {
