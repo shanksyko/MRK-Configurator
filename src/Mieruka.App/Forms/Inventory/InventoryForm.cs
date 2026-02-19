@@ -425,9 +425,35 @@ public sealed class InventoryForm : Form
 
         try
         {
+            var isSaida = string.Equals(dlg.MovementType, "Saída", StringComparison.Ordinal);
+
+            if (isSaida)
+            {
+                if (string.IsNullOrWhiteSpace(dlg.ExitReason))
+                {
+                    MessageBox.Show("O motivo da saída é obrigatório.", "Validação",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (dlg.ExitQuantity > item.Quantity)
+                {
+                    MessageBox.Show($"Quantidade de saída ({dlg.ExitQuantity}) excede o disponível ({item.Quantity}).",
+                        "Validação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
             using var transaction = await _db.Database.BeginTransactionAsync().ConfigureAwait(true);
             try
             {
+                var notes = dlg.Notes;
+                if (isSaida)
+                {
+                    notes = $"[Saída: Qtd={dlg.ExitQuantity}] Motivo: {dlg.ExitReason}" +
+                        (string.IsNullOrWhiteSpace(notes) ? "" : $" | {notes}");
+                }
+
                 await _movementService.RecordMovementAsync(
                     item.Id,
                     dlg.MovementType,
@@ -436,11 +462,31 @@ public sealed class InventoryForm : Form
                     item.AssignedTo,
                     dlg.ToAssignee,
                     dlg.PerformedBy,
-                    dlg.Notes).ConfigureAwait(true);
+                    notes).ConfigureAwait(true);
 
                 // Update item location/assignee
                 item.Location = dlg.ToLocation ?? item.Location;
                 item.AssignedTo = dlg.ToAssignee ?? item.AssignedTo;
+
+                if (isSaida)
+                {
+                    item.Quantity -= dlg.ExitQuantity;
+
+                    if (item.Quantity <= 0)
+                    {
+                        var answer = MessageBox.Show(
+                            this,
+                            "A quantidade chegou a zero. Deseja marcar o item como 'Disposed'?",
+                            "Saída de Material",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Question);
+                        if (answer == DialogResult.Yes)
+                        {
+                            item.Status = InventoryItemStatus.Disposed;
+                        }
+                    }
+                }
+
                 await _inventoryService.UpdateAsync(item).ConfigureAwait(true);
                 await transaction.CommitAsync().ConfigureAwait(true);
             }
@@ -564,6 +610,10 @@ internal sealed class MovementDialogForm : Form
     private readonly TextBox _txtToAssignee = new();
     private readonly TextBox _txtPerformedBy = new();
     private readonly TextBox _txtNotes = new();
+    private readonly NumericUpDown _numExitQuantity = new();
+    private readonly TextBox _txtExitReason = new();
+    private readonly Label _lblExitQuantity = new();
+    private readonly Label _lblExitReason = new();
     private readonly Button _btnOk = new();
     private readonly Button _btnCancel = new();
 
@@ -572,64 +622,136 @@ internal sealed class MovementDialogForm : Form
     public string? ToAssignee => string.IsNullOrWhiteSpace(_txtToAssignee.Text) ? null : _txtToAssignee.Text.Trim();
     public string? PerformedBy => string.IsNullOrWhiteSpace(_txtPerformedBy.Text) ? null : _txtPerformedBy.Text.Trim();
     public string? Notes => string.IsNullOrWhiteSpace(_txtNotes.Text) ? null : _txtNotes.Text.Trim();
+    public int ExitQuantity => (int)_numExitQuantity.Value;
+    public string? ExitReason => string.IsNullOrWhiteSpace(_txtExitReason.Text) ? null : _txtExitReason.Text.Trim();
 
     public MovementDialogForm(InventoryItemEntity item)
     {
         Text = $"Registrar Movimentação — {item.Name}";
-        ClientSize = new Size(420, 280);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MinimumSize = new Size(440, 340);
+        ClientSize = new Size(460, 380);
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
-        int y = 12;
-        AddField("Tipo:", _cmbType, ref y, useCombo: true);
-        foreach (var t in new[] { "Transfer", "Assignment", "Return", "Disposal", "Repair" })
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            Padding = new Padding(12),
+            AutoScroll = true,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
+
+        _cmbType.Dock = DockStyle.Fill;
+        _cmbType.DropDownStyle = ComboBoxStyle.DropDownList;
+        foreach (var t in new[] { "Transfer", "Assignment", "Return", "Disposal", "Repair", "Saída" })
         {
             _cmbType.Items.Add(t);
         }
         _cmbType.SelectedIndex = 0;
+        _cmbType.SelectedIndexChanged += (_, _) => UpdateExitFieldsVisibility();
+        AddRow(layout, "Tipo:", _cmbType);
 
-        AddField("Para (Local):", _txtToLocation, ref y);
+        _txtToLocation.Dock = DockStyle.Fill;
         _txtToLocation.Text = item.Location ?? string.Empty;
-        AddField("Para (Responsável):", _txtToAssignee, ref y);
+        AddRow(layout, "Para (Local):", _txtToLocation);
+
+        _txtToAssignee.Dock = DockStyle.Fill;
         _txtToAssignee.Text = item.AssignedTo ?? string.Empty;
-        AddField("Realizado por:", _txtPerformedBy, ref y);
-        AddField("Notas:", _txtNotes, ref y);
+        AddRow(layout, "Para (Responsável):", _txtToAssignee);
+
+        _txtPerformedBy.Dock = DockStyle.Fill;
+        AddRow(layout, "Realizado por:", _txtPerformedBy);
+
+        _txtNotes.Dock = DockStyle.Fill;
+        AddRow(layout, "Notas:", _txtNotes);
+
+        // Exit-specific fields
+        _numExitQuantity.Dock = DockStyle.Left;
+        _numExitQuantity.Minimum = 1;
+        _numExitQuantity.Maximum = Math.Max(1, item.Quantity);
+        _numExitQuantity.Value = 1;
+        _numExitQuantity.Width = 100;
+        _lblExitQuantity.Text = $"Quantidade (disponível: {item.Quantity}):";
+        AddRowWithLabel(layout, _lblExitQuantity, _numExitQuantity);
+
+        _txtExitReason.Dock = DockStyle.Fill;
+        _lblExitReason.Text = "Motivo da saída:*";
+        AddRowWithLabel(layout, _lblExitReason, _txtExitReason);
+
+        // Buttons
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12),
+        };
+
+        _btnCancel.Text = "Cancelar";
+        _btnCancel.AutoSize = true;
+        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
 
         _btnOk.BackColor = Color.FromArgb(0, 120, 215);
         _btnOk.FlatStyle = FlatStyle.Flat;
         _btnOk.ForeColor = Color.White;
-        _btnOk.Location = new Point(100, y);
-        _btnOk.Size = new Size(100, 28);
         _btnOk.Text = "Confirmar";
+        _btnOk.AutoSize = true;
         _btnOk.UseVisualStyleBackColor = false;
         _btnOk.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
-        Controls.Add(_btnOk);
 
-        _btnCancel.Location = new Point(215, y);
-        _btnCancel.Size = new Size(100, 28);
-        _btnCancel.Text = "Cancelar";
-        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        Controls.Add(_btnCancel);
+        buttonPanel.Controls.Add(_btnCancel);
+        buttonPanel.Controls.Add(_btnOk);
 
-        ClientSize = new Size(420, y + 44);
+        Controls.Add(layout);
+        Controls.Add(buttonPanel);
         AcceptButton = _btnOk;
         CancelButton = _btnCancel;
+
+        UpdateExitFieldsVisibility();
     }
 
-    private void AddField(string label, Control ctrl, ref int y, bool useCombo = false)
+    private void UpdateExitFieldsVisibility()
     {
-        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = label };
-        Controls.Add(lbl);
-        ctrl.Location = new Point(160, y);
-        ctrl.Width = 240;
-        if (!useCombo && ctrl is ComboBox cb)
+        var isSaida = string.Equals(_cmbType.SelectedItem as string, "Saída", StringComparison.Ordinal);
+        _numExitQuantity.Visible = isSaida;
+        _txtExitReason.Visible = isSaida;
+        _lblExitQuantity.Visible = isSaida;
+        _lblExitReason.Visible = isSaida;
+    }
+
+    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
+    {
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label
         {
-            cb.DropDownStyle = ComboBoxStyle.DropDownList;
-        }
-        Controls.Add(ctrl);
-        y += 32;
+            Text = caption,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 6, 6),
+        }, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
+    }
+
+    private static void AddRowWithLabel(TableLayoutPanel panel, Label label, Control control)
+    {
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        label.Dock = DockStyle.Fill;
+        label.TextAlign = ContentAlignment.MiddleLeft;
+        label.AutoSize = true;
+        label.Margin = new Padding(0, 0, 6, 6);
+        panel.Controls.Add(label, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
     }
 }
 
