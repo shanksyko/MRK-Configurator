@@ -41,6 +41,7 @@ public sealed class CredentialsManagementForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(560, 360);
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         _statusStrip = new StatusStrip();
         _statusLabel = new ToolStripStatusLabel("Carregando...");
@@ -56,10 +57,10 @@ public sealed class CredentialsManagementForm : Form
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
             BorderStyle = BorderStyle.None,
         };
-        _listView.Columns.Add("Nome", 180, HorizontalAlignment.Left);
-        _listView.Columns.Add("Site ID", 140, HorizontalAlignment.Left);
-        _listView.Columns.Add("Usuário", 140, HorizontalAlignment.Left);
-        _listView.Columns.Add("URL", 140, HorizontalAlignment.Left);
+        _listView.Columns.Add("Nome", 160, HorizontalAlignment.Left);
+        _listView.Columns.Add("Site ID", 130, HorizontalAlignment.Left);
+        _listView.Columns.Add("Usuário", 130, HorizontalAlignment.Left);
+        _listView.Columns.Add("URL", -2, HorizontalAlignment.Left);
         _listView.SelectedIndexChanged += (_, _) => UpdateButtonStates();
         _listView.DoubleClick += (_, _) => OnEditClicked();
 

@@ -36,6 +36,7 @@ internal sealed class ChangePasswordForm : Form
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new System.Drawing.Size(380, 260);
         ShowInTaskbar = false;
+        DoubleBuffered = true;
 
         var currentLabel = new Label
         {

@@ -35,6 +35,7 @@ internal sealed class ConfigHistoryForm : Form
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(500, 350);
+        DoubleBuffered = true;
 
         _listView = new ListView
         {
@@ -45,7 +46,7 @@ internal sealed class ConfigHistoryForm : Form
             GridLines = true,
         };
         _listView.Columns.Add("Data", 180);
-        _listView.Columns.Add("Label", 250);
+        _listView.Columns.Add("Label", -2);
         _listView.Columns.Add("Tamanho", 100);
         _listView.SelectedIndexChanged += (_, _) => UpdateButtons();
 

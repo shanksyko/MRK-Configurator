@@ -30,6 +30,7 @@ internal sealed class DataRetentionForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
+        DoubleBuffered = true;
 
         var layout = new TableLayoutPanel
         {

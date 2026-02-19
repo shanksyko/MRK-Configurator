@@ -72,6 +72,7 @@ public sealed class InventoryForm : Form
         MinimumSize = new Size(800, 500);
         FormBorderStyle = FormBorderStyle.Sizable;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         // ── ToolStrip ──────────────────────────────────────────────────────────
         BuildToolStrip();
@@ -194,15 +195,16 @@ public sealed class InventoryForm : Form
         _grid.SelectionChanged += (_, _) => UpdateButtonStates();
         _grid.CellDoubleClick += async (_, e) => { if (e.RowIndex >= 0) await OnEditClickedAsync(); };
 
+        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.Columns.AddRange(new DataGridViewColumn[]
         {
-            new DataGridViewTextBoxColumn { Name = "colName",         HeaderText = "Nome",         MinimumWidth = 140, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill  },
-            new DataGridViewTextBoxColumn { Name = "colCategory",     HeaderText = "Categoria",    Width = 120 },
-            new DataGridViewTextBoxColumn { Name = "colStatus",       HeaderText = "Status",       Width = 110 },
-            new DataGridViewTextBoxColumn { Name = "colSerialNumber", HeaderText = "Nº de Série",  Width = 120 },
-            new DataGridViewTextBoxColumn { Name = "colLocation",     HeaderText = "Localização",  Width = 120 },
-            new DataGridViewTextBoxColumn { Name = "colAssignedTo",   HeaderText = "Responsável",  Width = 120 },
-            new DataGridViewTextBoxColumn { Name = "colWarranty",     HeaderText = "Garantia",     Width = 100 },
+            new DataGridViewTextBoxColumn { Name = "colName",         HeaderText = "Nome",         FillWeight = 22, MinimumWidth = 120 },
+            new DataGridViewTextBoxColumn { Name = "colCategory",     HeaderText = "Categoria",    FillWeight = 14, MinimumWidth = 80  },
+            new DataGridViewTextBoxColumn { Name = "colStatus",       HeaderText = "Status",       FillWeight = 12, MinimumWidth = 70  },
+            new DataGridViewTextBoxColumn { Name = "colSerialNumber", HeaderText = "Nº de Série",  FillWeight = 14, MinimumWidth = 80  },
+            new DataGridViewTextBoxColumn { Name = "colLocation",     HeaderText = "Localização",  FillWeight = 14, MinimumWidth = 80  },
+            new DataGridViewTextBoxColumn { Name = "colAssignedTo",   HeaderText = "Responsável",  FillWeight = 14, MinimumWidth = 80  },
+            new DataGridViewTextBoxColumn { Name = "colWarranty",     HeaderText = "Garantia",     FillWeight = 10, MinimumWidth = 70  },
         });
     }
 
@@ -664,14 +666,15 @@ internal sealed class MaintenanceDialogForm : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.BackgroundColor = SystemColors.Window;
+        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.Columns.AddRange(new DataGridViewColumn[]
         {
-            new DataGridViewTextBoxColumn { HeaderText = "Data",        Name = "colDate",   Width = 110 },
-            new DataGridViewTextBoxColumn { HeaderText = "Tipo",        Name = "colType",   Width = 100 },
-            new DataGridViewTextBoxColumn { HeaderText = "Status",      Name = "colStatus", Width = 90  },
-            new DataGridViewTextBoxColumn { HeaderText = "Descrição",   Name = "colDesc",  AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill },
-            new DataGridViewTextBoxColumn { HeaderText = "Responsável", Name = "colBy",    Width = 120 },
-            new DataGridViewTextBoxColumn { HeaderText = "Custo (R$)",  Name = "colCost",  Width = 90  },
+            new DataGridViewTextBoxColumn { HeaderText = "Data",        Name = "colDate",   FillWeight = 15, MinimumWidth = 90  },
+            new DataGridViewTextBoxColumn { HeaderText = "Tipo",        Name = "colType",   FillWeight = 14, MinimumWidth = 80  },
+            new DataGridViewTextBoxColumn { HeaderText = "Status",      Name = "colStatus", FillWeight = 12, MinimumWidth = 70  },
+            new DataGridViewTextBoxColumn { HeaderText = "Descrição",   Name = "colDesc",   FillWeight = 30, MinimumWidth = 120 },
+            new DataGridViewTextBoxColumn { HeaderText = "Responsável", Name = "colBy",     FillWeight = 17, MinimumWidth = 90  },
+            new DataGridViewTextBoxColumn { HeaderText = "Custo (R$)",  Name = "colCost",   FillWeight = 12, MinimumWidth = 70  },
         });
 
         var panelBottom = new FlowLayoutPanel

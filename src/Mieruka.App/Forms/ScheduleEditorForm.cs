@@ -29,6 +29,7 @@ internal sealed class ScheduleEditorForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
+        DoubleBuffered = true;
 
         var layout = new TableLayoutPanel
         {

@@ -28,6 +28,7 @@ internal sealed class StatusDashboardForm : Form
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(600, 350);
+        DoubleBuffered = true;
 
         _listView = new ListView
         {
@@ -42,7 +43,7 @@ internal sealed class StatusDashboardForm : Form
         _listView.Columns.Add("PID", 70);
         _listView.Columns.Add("Status", 100);
         _listView.Columns.Add("Falhas", 70);
-        _listView.Columns.Add("Último Check", 150);
+        _listView.Columns.Add("Último Check", -2);
 
         var buttonPanel = new FlowLayoutPanel
         {

@@ -157,6 +157,7 @@ partial class UserManagementForm
         // UserManagementForm
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
+        DoubleBuffered = true;
         ClientSize = new Size(780, 450);
         Controls.Add(dgvUsers);
         Controls.Add(panelBottom);

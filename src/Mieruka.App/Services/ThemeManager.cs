@@ -33,13 +33,21 @@ public static class ThemeManager
 
         CurrentTheme = theme;
 
-        if (theme == AppTheme.Light)
+        root.SuspendLayout();
+        try
         {
-            ApplyLightTheme(root);
+            if (theme == AppTheme.Light)
+            {
+                ApplyLightTheme(root);
+            }
+            else
+            {
+                ApplyDarkTheme(root);
+            }
         }
-        else
+        finally
         {
-            ApplyDarkTheme(root);
+            root.ResumeLayout(true);
         }
     }
 

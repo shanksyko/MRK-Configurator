@@ -45,51 +45,50 @@ public sealed class AuditLogViewerForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(700, 420);
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         // ── Filter bar ──
-        var filterPanel = new Panel
+        var filterPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 48,
-            Padding = new Padding(8, 10, 8, 4),
+            AutoSize = true,
+            WrapContents = true,
+            Padding = new Padding(6, 8, 6, 4),
         };
 
-        var lblFrom = new Label { AutoSize = true, Text = "De:", Top = 14, Left = 8 };
+        var lblFrom = new Label { AutoSize = true, Text = "De:", Margin = new Padding(3, 6, 0, 0) };
         _dtpFrom = new DateTimePicker
         {
             Format = DateTimePickerFormat.Short,
             Value = DateTime.Today.AddDays(-30),
-            Location = new Point(30, 11),
             Width = 100,
         };
 
-        var lblTo = new Label { AutoSize = true, Text = "Até:", Top = 14, Left = 138 };
+        var lblTo = new Label { AutoSize = true, Text = "Até:", Margin = new Padding(6, 6, 0, 0) };
         _dtpTo = new DateTimePicker
         {
             Format = DateTimePickerFormat.Short,
             Value = DateTime.Today.AddDays(1),
-            Location = new Point(162, 11),
             Width = 100,
         };
 
-        var lblUser = new Label { AutoSize = true, Text = "Usuário:", Top = 14, Left = 270 };
+        var lblUser = new Label { AutoSize = true, Text = "Usuário:", Margin = new Padding(6, 6, 0, 0) };
         _cmbUser = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Location = new Point(322, 11),
             Width = 130,
         };
         _cmbUser.Items.Add("(todos)");
         _cmbUser.SelectedIndex = 0;
 
-        var lblSearch = new Label { AutoSize = true, Text = "Ação:", Top = 14, Left = 460 };
-        _txtSearch = new TextBox { Location = new Point(496, 11), Width = 130 };
+        var lblSearch = new Label { AutoSize = true, Text = "Ação:", Margin = new Padding(6, 6, 0, 0) };
+        _txtSearch = new TextBox { Width = 130 };
 
         _btnFilter = new Button
         {
             Text = "Filtrar",
-            Location = new Point(634, 10),
             Size = new Size(80, 26),
+            Margin = new Padding(6, 1, 0, 0),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(0, 120, 215),
             ForeColor = Color.White,
@@ -112,7 +111,7 @@ public sealed class AuditLogViewerForm : Form
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = false,
             RowHeadersVisible = false,
@@ -120,12 +119,12 @@ public sealed class AuditLogViewerForm : Form
             BorderStyle = BorderStyle.None,
         };
 
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colTimestamp", HeaderText = "Timestamp", Width = 155, ReadOnly = true });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colUsername", HeaderText = "Usuário", Width = 120, ReadOnly = true });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colAction", HeaderText = "Ação", Width = 180, ReadOnly = true });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEntityType", HeaderText = "Tipo", Width = 100, ReadOnly = true });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEntityId", HeaderText = "ID", Width = 80, ReadOnly = true });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colDetails", HeaderText = "Detalhes", Width = 240, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colTimestamp", HeaderText = "Timestamp", FillWeight = 18, MinimumWidth = 130, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colUsername", HeaderText = "Usuário", FillWeight = 13, MinimumWidth = 80, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colAction", HeaderText = "Ação", FillWeight = 20, MinimumWidth = 100, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEntityType", HeaderText = "Tipo", FillWeight = 12, MinimumWidth = 70, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEntityId", HeaderText = "ID", FillWeight = 9, MinimumWidth = 60, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colDetails", HeaderText = "Detalhes", FillWeight = 28, MinimumWidth = 120, ReadOnly = true });
 
         // ── Bottom button bar ──
         var bottomPanel = new FlowLayoutPanel
