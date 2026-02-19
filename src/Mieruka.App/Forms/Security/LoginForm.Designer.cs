@@ -42,103 +42,128 @@ partial class LoginForm
         this.panelMain.SuspendLayout();
         this.SuspendLayout();
 
-        // panelMain
-        this.panelMain.BackColor = Color.White;
-        this.panelMain.Controls.Add(this.lblTitle);
-        this.panelMain.Controls.Add(this.lblUsername);
-        this.panelMain.Controls.Add(this.txtUsername);
-        this.panelMain.Controls.Add(this.lblPassword);
-        this.panelMain.Controls.Add(this.txtPassword);
-        this.panelMain.Controls.Add(this.btnLogin);
-        this.panelMain.Controls.Add(this.btnCancel);
-        this.panelMain.Controls.Add(this.lblStatus);
-        this.panelMain.Dock = DockStyle.Fill;
-        this.panelMain.Location = new Point(0, 0);
-        this.panelMain.Name = "panelMain";
-        this.panelMain.Padding = new Padding(20);
-        this.panelMain.Size = new Size(400, 250);
-        this.panelMain.TabIndex = 0;
+        // panelMain — TableLayoutPanel for responsive layout
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 7,
+            Padding = new Padding(20),
+            BackColor = Color.White,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // title
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // lblUsername
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // txtUsername
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // lblPassword
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // txtPassword
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // buttons
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // status
 
         // lblTitle
-        this.lblTitle.AutoSize = false;
+        this.lblTitle.Dock = DockStyle.Fill;
         this.lblTitle.Font = new Font("Segoe UI", 14F, FontStyle.Bold, GraphicsUnit.Point);
-        this.lblTitle.Location = new Point(20, 20);
         this.lblTitle.Name = "lblTitle";
-        this.lblTitle.Size = new Size(360, 30);
-        this.lblTitle.TabIndex = 0;
         this.lblTitle.Text = "Mieruka Configurator - Login";
         this.lblTitle.TextAlign = ContentAlignment.MiddleCenter;
+        this.lblTitle.AutoSize = true;
+        this.lblTitle.Margin = new Padding(0, 0, 0, 12);
+        layout.Controls.Add(this.lblTitle, 0, 0);
 
         // lblUsername
         this.lblUsername.AutoSize = true;
-        this.lblUsername.Location = new Point(20, 70);
         this.lblUsername.Name = "lblUsername";
-        this.lblUsername.Size = new Size(53, 15);
-        this.lblUsername.TabIndex = 1;
         this.lblUsername.Text = "Usuário:";
+        this.lblUsername.Margin = new Padding(0, 0, 0, 2);
+        layout.Controls.Add(this.lblUsername, 0, 1);
 
         // txtUsername
-        this.txtUsername.Location = new Point(20, 90);
+        this.txtUsername.Dock = DockStyle.Fill;
         this.txtUsername.Name = "txtUsername";
-        this.txtUsername.Size = new Size(360, 23);
         this.txtUsername.TabIndex = 0;
+        this.txtUsername.Margin = new Padding(0, 0, 0, 8);
         this.txtUsername.KeyPress += new KeyPressEventHandler(this.txtUsername_KeyPress);
+        layout.Controls.Add(this.txtUsername, 0, 2);
 
         // lblPassword
         this.lblPassword.AutoSize = true;
-        this.lblPassword.Location = new Point(20, 120);
         this.lblPassword.Name = "lblPassword";
-        this.lblPassword.Size = new Size(42, 15);
-        this.lblPassword.TabIndex = 3;
         this.lblPassword.Text = "Senha:";
+        this.lblPassword.Margin = new Padding(0, 0, 0, 2);
+        layout.Controls.Add(this.lblPassword, 0, 3);
 
         // txtPassword
-        this.txtPassword.Location = new Point(20, 140);
+        this.txtPassword.Dock = DockStyle.Fill;
         this.txtPassword.Name = "txtPassword";
-        this.txtPassword.Size = new Size(360, 23);
         this.txtPassword.TabIndex = 1;
         this.txtPassword.UseSystemPasswordChar = true;
+        this.txtPassword.Margin = new Padding(0, 0, 0, 12);
         this.txtPassword.KeyPress += new KeyPressEventHandler(this.txtPassword_KeyPress);
+        layout.Controls.Add(this.txtPassword, 0, 4);
+
+        // Buttons FlowLayoutPanel
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(0, 0, 0, 8),
+            WrapContents = false,
+        };
 
         // btnLogin
         this.btnLogin.BackColor = Color.FromArgb(0, 120, 215);
         this.btnLogin.FlatStyle = FlatStyle.Flat;
         this.btnLogin.ForeColor = Color.White;
-        this.btnLogin.Location = new Point(120, 180);
         this.btnLogin.Name = "btnLogin";
-        this.btnLogin.Size = new Size(120, 30);
+        this.btnLogin.AutoSize = true;
+        this.btnLogin.MinimumSize = new Size(120, 30);
         this.btnLogin.TabIndex = 2;
         this.btnLogin.Text = "Entrar";
         this.btnLogin.UseVisualStyleBackColor = false;
+        this.btnLogin.Margin = new Padding(0, 0, 8, 0);
         this.btnLogin.Click += new System.EventHandler(this.btnLogin_Click);
 
         // btnCancel
-        this.btnCancel.Location = new Point(260, 180);
         this.btnCancel.Name = "btnCancel";
-        this.btnCancel.Size = new Size(120, 30);
+        this.btnCancel.AutoSize = true;
+        this.btnCancel.MinimumSize = new Size(120, 30);
         this.btnCancel.TabIndex = 3;
         this.btnCancel.Text = "Cancelar";
         this.btnCancel.UseVisualStyleBackColor = true;
         this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
 
+        buttonPanel.Controls.Add(this.btnLogin);
+        buttonPanel.Controls.Add(this.btnCancel);
+        layout.Controls.Add(buttonPanel, 0, 5);
+
         // lblStatus
         this.lblStatus.ForeColor = Color.Red;
-        this.lblStatus.Location = new Point(20, 215);
+        this.lblStatus.Dock = DockStyle.Fill;
         this.lblStatus.Name = "lblStatus";
-        this.lblStatus.Size = new Size(360, 15);
-        this.lblStatus.TabIndex = 7;
+        this.lblStatus.AutoSize = true;
         this.lblStatus.Text = "";
         this.lblStatus.TextAlign = ContentAlignment.MiddleCenter;
         this.lblStatus.Visible = false;
+        layout.Controls.Add(this.lblStatus, 0, 6);
+
+        // panelMain
+        this.panelMain.BackColor = Color.White;
+        this.panelMain.Controls.Add(layout);
+        this.panelMain.Dock = DockStyle.Fill;
+        this.panelMain.Name = "panelMain";
+        this.panelMain.TabIndex = 0;
 
         // LoginForm
         this.AcceptButton = this.btnLogin;
         this.AutoScaleDimensions = new SizeF(7F, 15F);
         this.AutoScaleMode = AutoScaleMode.Font;
         this.DoubleBuffered = true;
-        this.ClientSize = new Size(400, 250);
+        this.ClientSize = new Size(400, 260);
+        this.MinimumSize = new Size(350, 240);
         this.Controls.Add(this.panelMain);
-        this.FormBorderStyle = FormBorderStyle.FixedDialog;
+        this.FormBorderStyle = FormBorderStyle.Sizable;
         this.MaximizeBox = false;
         this.MinimizeBox = false;
         this.Name = "LoginForm";

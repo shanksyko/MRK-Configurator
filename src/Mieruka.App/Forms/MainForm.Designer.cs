@@ -22,9 +22,6 @@ partial class MainForm
     internal ToolStripSeparator menuSegurancaSeparador = null!;
     internal ToolStripMenuItem menuSegurancaAuditoria = null!;
 
-    internal ToolStripMenuItem menuInventario = null!;
-    internal ToolStripMenuItem menuInventarioAbrir = null!;
-
     internal ToolStripMenuItem menuConfiguracao = null!;
     internal ToolStripMenuItem menuConfiguracaoExportar = null!;
     internal ToolStripMenuItem menuConfiguracaoImportar = null!;
@@ -89,9 +86,6 @@ partial class MainForm
         menuSegurancaSeparador = new ToolStripSeparator();
         menuSegurancaAuditoria = new ToolStripMenuItem();
 
-        menuInventario = new ToolStripMenuItem();
-        menuInventarioAbrir = new ToolStripMenuItem();
-
         menuConfiguracao = new ToolStripMenuItem();
         menuConfiguracaoExportar = new ToolStripMenuItem();
         menuConfiguracaoImportar = new ToolStripMenuItem();
@@ -146,7 +140,7 @@ partial class MainForm
         // menuPrincipal
         //
         menuPrincipal.ImageScalingSize = new System.Drawing.Size(24, 24);
-        menuPrincipal.Items.AddRange(new ToolStripItem[] { menuPerfis, menuConfiguracao, menuSeguranca, menuInventario });
+        menuPrincipal.Items.AddRange(new ToolStripItem[] { menuPerfis, menuConfiguracao, menuSeguranca });
         menuPrincipal.Location = new System.Drawing.Point(0, 0);
         menuPrincipal.Name = "menuPrincipal";
         menuPrincipal.Padding = new Padding(8, 3, 0, 3);
@@ -228,18 +222,6 @@ partial class MainForm
         menuSegurancaAuditoria.Name = "menuSegurancaAuditoria";
         menuSegurancaAuditoria.Text = "Log de Auditoria";
         menuSegurancaAuditoria.Click += menuSegurancaAuditoria_Click;
-        //
-        // menuInventario
-        //
-        menuInventario.DropDownItems.AddRange(new ToolStripItem[] { menuInventarioAbrir });
-        menuInventario.Name = "menuInventario";
-        menuInventario.Text = "&Inventário";
-        //
-        // menuInventarioAbrir
-        //
-        menuInventarioAbrir.Name = "menuInventarioAbrir";
-        menuInventarioAbrir.Text = "Abrir Inventário";
-        menuInventarioAbrir.Click += menuInventarioAbrir_Click;
         //
         // menuConfiguracao
         //

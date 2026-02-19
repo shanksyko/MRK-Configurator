@@ -1638,27 +1638,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         }
     }
 
-    private void menuInventarioAbrir_Click(object? sender, EventArgs e)
-    {
-        try
-        {
-            using var db = new Mieruka.Core.Data.MierukaDbContext();
-            var inventoryService = new Mieruka.Core.Data.Services.InventoryService(db);
-            var categoryService = new Mieruka.Core.Data.Services.InventoryCategoryService(db);
-            var movementService = new Mieruka.Core.Data.Services.InventoryMovementService(db);
-            var maintenanceService = new Mieruka.Core.Data.Services.MaintenanceRecordService(db);
-            var monitors = _monitorSnapshot.Count > 0 ? _monitorSnapshot.ToList() : (IReadOnlyList<MonitorInfo>)Array.Empty<MonitorInfo>();
-
-            using var form = new InventoryForm(db, inventoryService, categoryService, movementService, maintenanceService, monitors);
-            form.ShowDialog(this);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error("Falha ao abrir inventário.", ex);
-            WinForms.MessageBox.Show(this, $"Erro ao abrir inventário: {ex.Message}", "Inventário", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
-        }
-    }
-
     private void menuConfiguracaoExportar_Click(object? sender, EventArgs e)
     {
         try

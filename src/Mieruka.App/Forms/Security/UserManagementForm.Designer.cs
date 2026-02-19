@@ -51,44 +51,60 @@ partial class UserManagementForm
         ((System.ComponentModel.ISupportInitialize)dgvUsers).BeginInit();
         SuspendLayout();
 
-        // panelTop
-        panelTop.BackColor = Color.FromArgb(240, 240, 240);
-        panelTop.Controls.Add(lblTitle);
-        panelTop.Controls.Add(lblSearch);
-        panelTop.Controls.Add(txtSearch);
-        panelTop.Controls.Add(lblRoleFilter);
-        panelTop.Controls.Add(cmbRoleFilter);
-        panelTop.Dock = DockStyle.Top;
-        panelTop.Height = 80;
-        panelTop.Padding = new Padding(10, 8, 10, 8);
+        // panelTop — use TableLayoutPanel for responsive search bar
+        var topLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            RowCount = 2,
+            Padding = new Padding(0),
+        };
+        topLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // title
+        topLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // search row
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // lblSearch
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f)); // txtSearch
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // lblRole
+        topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f)); // cmbRole
 
         // lblTitle
-        lblTitle.AutoSize = false;
         lblTitle.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
-        lblTitle.Location = new Point(10, 8);
-        lblTitle.Size = new Size(300, 24);
         lblTitle.Text = "Gerenciamento de Usuários";
+        lblTitle.AutoSize = true;
+        lblTitle.Margin = new Padding(0, 0, 0, 6);
+        topLayout.Controls.Add(lblTitle, 0, 0);
+        topLayout.SetColumnSpan(lblTitle, 4);
 
         // lblSearch
         lblSearch.AutoSize = true;
-        lblSearch.Location = new Point(10, 48);
         lblSearch.Text = "Buscar:";
+        lblSearch.Anchor = AnchorStyles.Left;
+        lblSearch.Margin = new Padding(0, 0, 4, 0);
+        topLayout.Controls.Add(lblSearch, 0, 1);
 
         // txtSearch
-        txtSearch.Location = new Point(60, 44);
-        txtSearch.Size = new Size(200, 23);
+        txtSearch.Dock = DockStyle.Fill;
+        txtSearch.Margin = new Padding(0, 0, 12, 0);
         txtSearch.TextChanged += txtSearch_TextChanged;
+        topLayout.Controls.Add(txtSearch, 1, 1);
 
         // lblRoleFilter
         lblRoleFilter.AutoSize = true;
-        lblRoleFilter.Location = new Point(280, 48);
         lblRoleFilter.Text = "Perfil:";
+        lblRoleFilter.Anchor = AnchorStyles.Left;
+        lblRoleFilter.Margin = new Padding(0, 0, 4, 0);
+        topLayout.Controls.Add(lblRoleFilter, 2, 1);
 
         // cmbRoleFilter
-        cmbRoleFilter.Location = new Point(320, 44);
-        cmbRoleFilter.Size = new Size(150, 23);
+        cmbRoleFilter.Dock = DockStyle.Fill;
         cmbRoleFilter.DropDownStyle = ComboBoxStyle.DropDownList;
         cmbRoleFilter.SelectedIndexChanged += cmbRoleFilter_SelectedIndexChanged;
+        topLayout.Controls.Add(cmbRoleFilter, 3, 1);
+
+        panelTop.BackColor = Color.FromArgb(240, 240, 240);
+        panelTop.Controls.Add(topLayout);
+        panelTop.Dock = DockStyle.Top;
+        panelTop.Height = 80;
+        panelTop.Padding = new Padding(10, 8, 10, 8);
 
         // dgvUsers
         dgvUsers.AllowUserToAddRows = false;
@@ -105,54 +121,68 @@ partial class UserManagementForm
         dgvUsers.CellDoubleClick += dgvUsers_CellDoubleClick;
         dgvUsers.SelectionChanged += dgvUsers_SelectionChanged;
 
-        // panelBottom
-        panelBottom.BackColor = Color.FromArgb(240, 240, 240);
-        panelBottom.Controls.Add(btnNew);
-        panelBottom.Controls.Add(btnEdit);
-        panelBottom.Controls.Add(btnDeactivate);
-        panelBottom.Controls.Add(btnResetPassword);
-        panelBottom.Controls.Add(btnClose);
-        panelBottom.Dock = DockStyle.Bottom;
-        panelBottom.Height = 50;
-        panelBottom.Padding = new Padding(10, 8, 10, 8);
+        // panelBottom — use FlowLayoutPanel for responsive buttons
+        var bottomFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = false,
+            WrapContents = false,
+            Padding = new Padding(0),
+        };
 
         // btnNew
         btnNew.BackColor = Color.FromArgb(0, 120, 215);
         btnNew.FlatStyle = FlatStyle.Flat;
         btnNew.ForeColor = Color.White;
-        btnNew.Location = new Point(10, 10);
-        btnNew.Size = new Size(100, 30);
+        btnNew.AutoSize = true;
+        btnNew.MinimumSize = new Size(90, 30);
         btnNew.Text = "Novo";
         btnNew.UseVisualStyleBackColor = false;
+        btnNew.Margin = new Padding(0, 0, 6, 0);
         btnNew.Click += btnNew_Click;
 
         // btnEdit
-        btnEdit.Location = new Point(120, 10);
-        btnEdit.Size = new Size(100, 30);
+        btnEdit.AutoSize = true;
+        btnEdit.MinimumSize = new Size(90, 30);
         btnEdit.Text = "Editar";
         btnEdit.Enabled = false;
+        btnEdit.Margin = new Padding(0, 0, 6, 0);
         btnEdit.Click += btnEdit_Click;
 
         // btnDeactivate
-        btnDeactivate.Location = new Point(230, 10);
-        btnDeactivate.Size = new Size(110, 30);
+        btnDeactivate.AutoSize = true;
+        btnDeactivate.MinimumSize = new Size(100, 30);
         btnDeactivate.Text = "Desativar";
         btnDeactivate.Enabled = false;
+        btnDeactivate.Margin = new Padding(0, 0, 6, 0);
         btnDeactivate.Click += btnDeactivate_Click;
 
         // btnResetPassword
-        btnResetPassword.Location = new Point(350, 10);
-        btnResetPassword.Size = new Size(130, 30);
+        btnResetPassword.AutoSize = true;
+        btnResetPassword.MinimumSize = new Size(120, 30);
         btnResetPassword.Text = "Resetar Senha";
         btnResetPassword.Enabled = false;
+        btnResetPassword.Margin = new Padding(0, 0, 6, 0);
         btnResetPassword.Click += btnResetPassword_Click;
 
         // btnClose
-        btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        btnClose.Location = new Point(660, 10);
-        btnClose.Size = new Size(100, 30);
+        btnClose.AutoSize = true;
+        btnClose.MinimumSize = new Size(90, 30);
         btnClose.Text = "Fechar";
         btnClose.Click += (_, _) => Close();
+
+        bottomFlow.Controls.Add(btnNew);
+        bottomFlow.Controls.Add(btnEdit);
+        bottomFlow.Controls.Add(btnDeactivate);
+        bottomFlow.Controls.Add(btnResetPassword);
+        bottomFlow.Controls.Add(btnClose);
+
+        panelBottom.BackColor = Color.FromArgb(240, 240, 240);
+        panelBottom.Controls.Add(bottomFlow);
+        panelBottom.Dock = DockStyle.Bottom;
+        panelBottom.Height = 50;
+        panelBottom.Padding = new Padding(10, 8, 10, 8);
 
         // UserManagementForm
         AutoScaleDimensions = new SizeF(7F, 15F);

@@ -901,113 +901,155 @@ internal sealed class MaintenanceRecordEditorForm : Form
     public MaintenanceRecordEditorForm()
     {
         Text = "Novo Registro de Manutenção";
-        ClientSize = new Size(440, 460);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MinimumSize = new Size(460, 420);
+        ClientSize = new Size(480, 460);
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
         BuildLayout();
     }
 
     private void BuildLayout()
     {
-        int y = 12;
-        AddComboField("Tipo:", _cmbType, MaintenanceTypes, ref y);
-        AddComboField("Status:", _cmbStatus, StatusOptions, ref y);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            Padding = new Padding(12),
+            AutoScroll = true,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70f));
 
-        var lblDesc = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Descrição:*" };
-        Controls.Add(lblDesc);
-        _txtDescription.Location = new Point(150, y);
-        _txtDescription.Size = new Size(268, 23);
-        Controls.Add(_txtDescription);
-        y += 32;
+        // Type
+        _cmbType.Dock = DockStyle.Fill;
+        _cmbType.DropDownStyle = ComboBoxStyle.DropDownList;
+        foreach (var item in MaintenanceTypes) _cmbType.Items.Add(item);
+        _cmbType.SelectedIndex = 0;
+        AddRow(layout, "Tipo:", _cmbType);
 
-        AddTextField("Responsável:", _txtPerformedBy, ref y);
+        // Status
+        _cmbStatus.Dock = DockStyle.Fill;
+        _cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
+        foreach (var item in StatusOptions) _cmbStatus.Items.Add(item);
+        _cmbStatus.SelectedIndex = 0;
+        AddRow(layout, "Status:", _cmbStatus);
 
-        var lblNotes = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Notas:" };
-        Controls.Add(lblNotes);
-        _txtNotes.Location = new Point(150, y);
-        _txtNotes.Size = new Size(268, 50);
+        // Description
+        _txtDescription.Dock = DockStyle.Fill;
+        AddRow(layout, "Descrição:*", _txtDescription);
+
+        // PerformedBy
+        _txtPerformedBy.Dock = DockStyle.Fill;
+        AddRow(layout, "Responsável:", _txtPerformedBy);
+
+        // Notes
+        _txtNotes.Dock = DockStyle.Fill;
         _txtNotes.Multiline = true;
-        Controls.Add(_txtNotes);
-        y += 60;
+        _txtNotes.Height = 50;
+        AddRow(layout, "Notas:", _txtNotes);
 
-        var lblCost = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Custo (R$):" };
-        Controls.Add(lblCost);
-        _numCost.Location = new Point(150, y);
-        _numCost.Width = 100;
+        // Cost
+        _numCost.Dock = DockStyle.Left;
+        _numCost.Width = 120;
         _numCost.DecimalPlaces = 2;
         _numCost.Maximum = 9999999;
-        Controls.Add(_numCost);
-        y += 32;
+        AddRow(layout, "Custo (R$):", _numCost);
 
+        // Scheduled date
+        var schedPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Margin = new Padding(0),
+        };
         _chkScheduled.AutoSize = true;
-        _chkScheduled.Location = new Point(12, y);
         _chkScheduled.Text = "Agendado para:";
         _chkScheduled.CheckedChanged += (_, _) => _dtpScheduled.Enabled = _chkScheduled.Checked;
-        Controls.Add(_chkScheduled);
-        _dtpScheduled.Location = new Point(160, y - 2);
         _dtpScheduled.Width = 140;
         _dtpScheduled.Enabled = false;
-        Controls.Add(_dtpScheduled);
-        y += 32;
+        _dtpScheduled.Margin = new Padding(4, 0, 0, 0);
+        schedPanel.Controls.Add(_chkScheduled);
+        schedPanel.Controls.Add(_dtpScheduled);
+        AddRowSpan(layout, schedPanel);
 
+        // Completed date
+        var compPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Margin = new Padding(0),
+        };
         _chkCompleted.AutoSize = true;
-        _chkCompleted.Location = new Point(12, y);
         _chkCompleted.Text = "Concluído em:";
         _chkCompleted.CheckedChanged += (_, _) => _dtpCompleted.Enabled = _chkCompleted.Checked;
-        Controls.Add(_chkCompleted);
-        _dtpCompleted.Location = new Point(160, y - 2);
         _dtpCompleted.Width = 140;
         _dtpCompleted.Enabled = false;
-        Controls.Add(_dtpCompleted);
-        y += 40;
+        _dtpCompleted.Margin = new Padding(4, 0, 0, 0);
+        compPanel.Controls.Add(_chkCompleted);
+        compPanel.Controls.Add(_dtpCompleted);
+        AddRowSpan(layout, compPanel);
+
+        // Buttons
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12),
+        };
+
+        _btnCancel.Text = "Cancelar";
+        _btnCancel.AutoSize = true;
+        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
 
         _btnOk.BackColor = Color.FromArgb(0, 120, 215);
         _btnOk.FlatStyle = FlatStyle.Flat;
         _btnOk.ForeColor = Color.White;
-        _btnOk.Location = new Point(110, y);
-        _btnOk.Size = new Size(100, 28);
         _btnOk.Text = "Salvar";
+        _btnOk.AutoSize = true;
         _btnOk.UseVisualStyleBackColor = false;
         _btnOk.Click += OnSaveClicked;
-        Controls.Add(_btnOk);
 
-        _btnCancel.Location = new Point(225, y);
-        _btnCancel.Size = new Size(100, 28);
-        _btnCancel.Text = "Cancelar";
-        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        Controls.Add(_btnCancel);
+        buttonPanel.Controls.Add(_btnCancel);
+        buttonPanel.Controls.Add(_btnOk);
 
-        ClientSize = new Size(440, y + 48);
+        Controls.Add(layout);
+        Controls.Add(buttonPanel);
         AcceptButton = _btnOk;
         CancelButton = _btnCancel;
     }
 
-    private void AddComboField(string label, ComboBox cmb, string[] items, ref int y)
+    private static void AddRow(TableLayoutPanel panel, string caption, Control control)
     {
-        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = label };
-        Controls.Add(lbl);
-        cmb.Location = new Point(150, y);
-        cmb.Width = 268;
-        cmb.DropDownStyle = ComboBoxStyle.DropDownList;
-        foreach (var item in items)
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(new Label
         {
-            cmb.Items.Add(item);
-        }
-        cmb.SelectedIndex = 0;
-        Controls.Add(cmb);
-        y += 32;
+            Text = caption,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 6, 6),
+        }, 0, row);
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 1, row);
     }
 
-    private void AddTextField(string label, TextBox txt, ref int y)
+    private static void AddRowSpan(TableLayoutPanel panel, Control control)
     {
-        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = label };
-        Controls.Add(lbl);
-        txt.Location = new Point(150, y);
-        txt.Width = 268;
-        Controls.Add(txt);
-        y += 32;
+        var row = panel.RowCount++;
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        control.Margin = new Padding(0, 0, 0, 6);
+        panel.Controls.Add(control, 0, row);
+        panel.SetColumnSpan(control, 2);
     }
 
     private void OnSaveClicked(object? sender, EventArgs e)
