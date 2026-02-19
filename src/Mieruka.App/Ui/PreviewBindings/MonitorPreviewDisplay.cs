@@ -531,7 +531,13 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// Pauses frame processing while keeping the current frame visible.
     /// </summary>
     public void Pause()
-        => PauseAsync().GetAwaiter().GetResult();
+    {
+        // Fire-and-forget: starts PauseAsync on the UI thread (no ConfigureAwait(false) at
+        // entry), so its continuation will also resume on the UI thread once it is free.
+        // Never use .GetAwaiter().GetResult() here — it would deadlock when called from the
+        // UI thread because PauseAsync needs the UI thread for its own continuation.
+        _ = PauseAsync();
+    }
 
     public async Task PauseAsync(CancellationToken cancellationToken = default)
     {
@@ -554,7 +560,10 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     /// Resumes frame processing after a pause.
     /// </summary>
     public void Resume()
-        => ResumeAsync().GetAwaiter().GetResult();
+    {
+        // Same rationale as Pause(): fire-and-forget to prevent UI thread deadlock.
+        _ = ResumeAsync();
+    }
 
     public async Task ResumeAsync()
     {
@@ -608,7 +617,56 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
     private void Unbind()
     {
-        UnbindAsync().GetAwaiter().GetResult();
+        // This runs on the UI thread (called from Dispose). We cannot block on UnbindAsync()
+        // because UnbindAsync uses ConfigureAwait(true) which needs the UI thread for its
+        // continuation — blocking it would deadlock.
+        //
+        // Solution: replicate synchronous state cleanup here, then fire-and-forget the async
+        // stop on the thread pool so the UI thread is never blocked.
+
+        using var guard = new StackGuard(nameof(UnbindAsync));
+        if (!guard.Entered)
+        {
+            return;
+        }
+
+        var host = _host;
+        _host = null;
+        _monitor = null;
+        _coordinateMapper = null;
+        var wasRunning = _previewRunning;
+        _previewStarted = false;
+        _previewRunning = false;
+
+        SetPlaceholder(null);
+        _pictureBox.Image = null;
+        SetSimulationRects(Array.Empty<SimRect>());
+
+        if (host is not null)
+        {
+            host.SetPreviewRequestedByUser(false);
+            // Stop + dispose async on the thread pool — no sync context is captured.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await host.StopSafeAsync(default).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Ignore stop failures during disposal.
+                }
+                finally
+                {
+                    host.Dispose();
+                }
+            });
+        }
+
+        if (wasRunning)
+        {
+            PreviewStopped?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>

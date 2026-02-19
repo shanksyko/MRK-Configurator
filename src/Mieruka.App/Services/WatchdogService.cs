@@ -8,8 +8,10 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
+using Mieruka.App.Forms;
 
 namespace Mieruka.App.Services;
 
@@ -105,6 +107,47 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
     {
         await StopInternalAsync().ConfigureAwait(false);
         await StartAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Returns a snapshot of the current status of all monitored entries for the dashboard.
+    /// </summary>
+    public IReadOnlyList<WatchdogStatusEntry> GetStatusSnapshot()
+    {
+        var entries = new List<WatchdogStatusEntry>();
+
+        lock (_gate)
+        {
+            foreach (var context in _applications.Values)
+            {
+                var isAlive = context.Process is not null && !context.Process.HasExited;
+                entries.Add(new WatchdogStatusEntry
+                {
+                    Name = context.Config.Name ?? context.Config.Id,
+                    Type = "App",
+                    ProcessId = isAlive ? context.Process!.Id : 0,
+                    IsAlive = isAlive,
+                    FailureCount = context.FailureCount,
+                    LastHealthCheck = context.NextHealthCheck > DateTimeOffset.MinValue ? context.NextHealthCheck : null,
+                });
+            }
+
+            foreach (var context in _sites.Values)
+            {
+                var isAlive = context.Process is not null && !context.Process.HasExited;
+                entries.Add(new WatchdogStatusEntry
+                {
+                    Name = context.Config.Id,
+                    Type = "Site",
+                    ProcessId = isAlive ? context.Process!.Id : 0,
+                    IsAlive = isAlive,
+                    FailureCount = context.FailureCount,
+                    LastHealthCheck = context.NextHealthCheck > DateTimeOffset.MinValue ? context.NextHealthCheck : null,
+                });
+            }
+        }
+
+        return entries;
     }
 
     /// <summary>
@@ -216,6 +259,56 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
 
         EnsureSiteBinding(context, now);
         await EnsureHealthAsync(context, now, cancellationToken).ConfigureAwait(false);
+
+        TryPeriodicReload(context, now);
+    }
+
+    private void TryPeriodicReload(SiteWatchContext context, DateTimeOffset now)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var reloadIntervalSeconds = context.Config.ReloadIntervalSeconds;
+        if (reloadIntervalSeconds is null or <= 0)
+        {
+            return;
+        }
+
+        var reloadInterval = TimeSpan.FromSeconds(reloadIntervalSeconds.Value);
+
+        if (context.LastReloadTime != DateTimeOffset.MinValue && now - context.LastReloadTime < reloadInterval)
+        {
+            return;
+        }
+
+        // Don't reload while the browser is still in its restart grace period.
+        if (now < context.HealthCheckGraceUntil)
+        {
+            return;
+        }
+
+        var handle = context.LastHandle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        const uint WmKeyDown = 0x0100;
+        const uint WmKeyUp = 0x0101;
+        const int VkF5 = 0x74;
+
+        try
+        {
+            User32.PostMessage(handle, WmKeyDown, new IntPtr(VkF5), IntPtr.Zero);
+            User32.PostMessage(handle, WmKeyUp, new IntPtr(VkF5), IntPtr.Zero);
+            context.LastReloadTime = now;
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Info($"Periodic reload interop failed for site '{context.Config.Id}'.", ex);
+        }
     }
 
     private bool EnsureApplicationProcess(AppWatchContext context, DateTimeOffset now)
@@ -623,9 +716,9 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
                         return true;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore inaccessible processes.
+                    _telemetry.Info("Cannot access process during site attach.", ex);
                 }
                 finally
                 {
@@ -717,8 +810,9 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
                     process.Kill(true);
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                _telemetry.Info($"Fallback kill failed for {context.DisplayName}.", ex);
             }
         }
         finally
@@ -974,7 +1068,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
 
     private static string FormatArgument(string name, string value)
     {
-        var sanitized = value.Replace("\"", "\\\"");
+        var sanitized = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
         return $"{name}=\"{sanitized}\"";
     }
 
@@ -1117,6 +1211,9 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
         public override string DisplayName => $"site '{Config.Id}'";
 
         public override string? DefaultHealthUrl => Config.Url;
+
+        /// <summary>Tracks the last time a periodic page reload was sent to this site's browser window.</summary>
+        public DateTimeOffset LastReloadTime { get; set; } = DateTimeOffset.MinValue;
     }
 
     private abstract class WatchContextBase<TConfig> : IDisposable where TConfig : class

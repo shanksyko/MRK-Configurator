@@ -46,7 +46,10 @@ internal static class Program
 
             // Defer GPU environment checks to a background thread so the main
             // window appears immediately while the heavier COM/DX11 probes run.
-            _ = Task.Run(() => InitializeGpuCapture(graphicsOptions));
+            _ = Task.Run(() => InitializeGpuCapture(graphicsOptions))
+                .ContinueWith(
+                    t => Log.Warning(t.Exception, "GPU capture initialization failed."),
+                    TaskContinuationOptions.OnlyOnFaulted);
 
             var mainForm = new MainForm(graphicsOptions);
             TabLayoutGuard.Attach(mainForm);

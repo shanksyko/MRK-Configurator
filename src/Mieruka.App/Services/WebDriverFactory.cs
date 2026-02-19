@@ -49,8 +49,16 @@ internal static class WebDriverFactory
         ApplyArguments(options, arguments);
 
         var driver = new ChromeDriver(options);
-        NavigateIfNeeded(driver, site);
-        return driver;
+        try
+        {
+            NavigateIfNeeded(driver, site);
+            return driver;
+        }
+        catch
+        {
+            driver.Dispose();
+            throw;
+        }
     }
 
     private static IWebDriver CreateEdgeDriver(SiteConfig site, IReadOnlyCollection<string> arguments)
@@ -60,8 +68,16 @@ internal static class WebDriverFactory
         ApplyArguments(options, arguments);
 
         var driver = new EdgeDriver(options);
-        NavigateIfNeeded(driver, site);
-        return driver;
+        try
+        {
+            NavigateIfNeeded(driver, site);
+            return driver;
+        }
+        catch
+        {
+            driver.Dispose();
+            throw;
+        }
     }
 
     private static void ApplyArguments(ChromiumOptions options, IEnumerable<string> arguments)

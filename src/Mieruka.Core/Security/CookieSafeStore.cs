@@ -6,6 +6,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Serilog;
 
 #nullable enable
 
@@ -351,9 +352,11 @@ public sealed class CookieSafeStore
                         }
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    File.Delete(file);
+                    Log.ForContext<CookieSafeStore>()
+                        .Information(ex, "Cookie file could not be read and will be purged: {File}", file);
+                    try { File.Delete(file); } catch { /* best-effort cleanup */ }
                 }
             }
         }

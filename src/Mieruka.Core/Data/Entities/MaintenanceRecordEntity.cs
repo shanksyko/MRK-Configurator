@@ -10,6 +10,9 @@ public sealed class MaintenanceRecordEntity
     /// <summary>FK para o item.</summary>
     public int ItemId { get; set; }
 
+    /// <summary>Navigation property para o item.</summary>
+    public InventoryItemEntity? Item { get; set; }
+
     /// <summary>Tipo: Preventive, Corrective, Inspection.</summary>
     public string MaintenanceType { get; set; } = "Corrective";
 

@@ -328,7 +328,7 @@ public sealed class HotkeyManager : IDisposable
             };
             _thread.SetApartmentState(ApartmentState.STA);
             _thread.Start();
-            _windowReady.Wait();
+            _windowReady.Wait(TimeSpan.FromSeconds(10));
         }
 
         public int Register(HotkeyBinding binding, Action handler)
@@ -403,7 +403,7 @@ public sealed class HotkeyManager : IDisposable
                 WinForms.Application.ExitThread();
             }, null);
 
-            _threadExited.Wait();
+            _threadExited.Wait(TimeSpan.FromSeconds(5));
             _windowReady.Dispose();
             _threadExited.Dispose();
         }

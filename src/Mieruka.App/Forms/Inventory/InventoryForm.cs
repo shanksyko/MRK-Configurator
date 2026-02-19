@@ -1,0 +1,914 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Microsoft.EntityFrameworkCore;
+using Mieruka.Core.Data;
+using Mieruka.Core.Data.Entities;
+using Mieruka.Core.Data.Services;
+using Mieruka.Core.Models;
+
+namespace Mieruka.App.Forms.Inventory;
+
+public sealed class InventoryForm : Form
+{
+    private readonly MierukaDbContext _db;
+    private readonly InventoryService _inventoryService;
+    private readonly InventoryCategoryService _categoryService;
+    private readonly InventoryMovementService _movementService;
+    private readonly MaintenanceRecordService _maintenanceService;
+    private readonly IReadOnlyList<MonitorInfo> _monitors;
+
+    private List<InventoryItemEntity> _allItems = new();
+    private List<InventoryCategoryEntity> _categories = new();
+    private string? _selectedCategory;
+
+    // Controls
+    private readonly TreeView _treeCategories = new();
+    private readonly DataGridView _grid = new();
+    private readonly TextBox _txtSearch = new();
+    private readonly ComboBox _cmbStatus = new();
+    private readonly ToolStrip _toolStrip = new();
+    private readonly Label _lblCount = new();
+
+    private ToolStripButton _btnNew = null!;
+    private ToolStripButton _btnEdit = null!;
+    private ToolStripButton _btnDelete = null!;
+    private ToolStripButton _btnMove = null!;
+    private ToolStripButton _btnMaintenance = null!;
+    private ToolStripButton _btnHistory = null!;
+    private ToolStripButton _btnRefresh = null!;
+    private ToolStripButton _btnCategories = null!;
+    private ToolStripButton _btnDashboard = null!;
+    private ToolStripButton _btnExport = null!;
+
+    public InventoryForm(
+        MierukaDbContext db,
+        InventoryService inventoryService,
+        InventoryCategoryService categoryService,
+        InventoryMovementService movementService,
+        MaintenanceRecordService maintenanceService,
+        IReadOnlyList<MonitorInfo>? monitors = null)
+    {
+        _db = db ?? throw new ArgumentNullException(nameof(db));
+        _inventoryService = inventoryService ?? throw new ArgumentNullException(nameof(inventoryService));
+        _categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+        _movementService = movementService ?? throw new ArgumentNullException(nameof(movementService));
+        _maintenanceService = maintenanceService ?? throw new ArgumentNullException(nameof(maintenanceService));
+        _monitors = monitors ?? Array.Empty<MonitorInfo>();
+
+        BuildLayout();
+        Shown += async (_, _) => await LoadAllAsync();
+    }
+
+    private void BuildLayout()
+    {
+        Text = "Inventário";
+        ClientSize = new Size(1100, 680);
+        MinimumSize = new Size(800, 500);
+        FormBorderStyle = FormBorderStyle.Sizable;
+        StartPosition = FormStartPosition.CenterParent;
+
+        // ── ToolStrip ──────────────────────────────────────────────────────────
+        BuildToolStrip();
+        Controls.Add(_toolStrip);
+
+        // ── Main SplitContainer ───────────────────────────────────────────────
+        var split = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            SplitterDistance = 210,
+            FixedPanel = FixedPanel.Panel1,
+        };
+
+        // Left panel — categories tree
+        _treeCategories.Dock = DockStyle.Fill;
+        _treeCategories.HideSelection = false;
+        _treeCategories.AfterSelect += (_, _) => ApplyFilter();
+        split.Panel1.Controls.Add(_treeCategories);
+
+        // Right panel — search bar + grid + status bar
+        var rightPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 3,
+            ColumnCount = 1,
+            Padding = new Padding(4, 0, 4, 4),
+        };
+        rightPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        rightPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        rightPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Search bar
+        var searchPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Padding = new Padding(0, 4, 0, 4),
+        };
+
+        var lblSearch = new Label { Text = "Buscar:", AutoSize = true, Margin = new Padding(0, 4, 4, 0) };
+        _txtSearch.Width = 240;
+        _txtSearch.Margin = new Padding(0, 0, 8, 0);
+        _txtSearch.TextChanged += (_, _) => ApplyFilter();
+
+        var lblStatus = new Label { Text = "Status:", AutoSize = true, Margin = new Padding(0, 4, 4, 0) };
+        _cmbStatus.Width = 140;
+        _cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cmbStatus.Items.Add("(Todos)");
+        foreach (var status in Mieruka.Core.Data.Services.InventoryItemStatus.All)
+            _cmbStatus.Items.Add(status);
+        _cmbStatus.SelectedIndex = 0;
+        _cmbStatus.SelectedIndexChanged += (_, _) => ApplyFilter();
+
+        searchPanel.Controls.Add(lblSearch);
+        searchPanel.Controls.Add(_txtSearch);
+        searchPanel.Controls.Add(lblStatus);
+        searchPanel.Controls.Add(_cmbStatus);
+        rightPanel.Controls.Add(searchPanel, 0, 0);
+
+        // Grid
+        BuildGrid();
+        rightPanel.Controls.Add(_grid, 0, 1);
+
+        // Status bar
+        _lblCount.AutoSize = true;
+        _lblCount.Text = "0 itens";
+        _lblCount.Margin = new Padding(2, 2, 0, 0);
+        rightPanel.Controls.Add(_lblCount, 0, 2);
+
+        split.Panel2.Controls.Add(rightPanel);
+        Controls.Add(split);
+    }
+
+    private void BuildToolStrip()
+    {
+        _toolStrip.GripStyle = ToolStripGripStyle.Hidden;
+        _toolStrip.RenderMode = ToolStripRenderMode.System;
+        _toolStrip.Dock = DockStyle.Top;
+
+        _btnNew = new ToolStripButton("Novo",        null, async (_, _) => await OnNewClickedAsync())        { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnEdit = new ToolStripButton("Editar",     null, async (_, _) => await OnEditClickedAsync())       { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnDelete = new ToolStripButton("Excluir",  null, async (_, _) => await OnDeleteClickedAsync())     { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnMove = new ToolStripButton("Movimentação", null, async (_, _) => await OnMoveClickedAsync())     { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnMaintenance = new ToolStripButton("Manutenção", null, async (_, _) => await OnMaintenanceClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnHistory = new ToolStripButton("Histórico", null, async (_, _) => await OnHistoryClickedAsync())  { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnRefresh = new ToolStripButton("Atualizar", null, async (_, _) => await LoadAllAsync())           { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnCategories = new ToolStripButton("Categorias", null, (_, _) => OnCategoriesClicked())           { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnDashboard = new ToolStripButton("Dashboard", null, (_, _) => OnDashboardClicked())              { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnExport = new ToolStripButton("Exportar CSV", null, (_, _) => OnExportCsvClicked())              { DisplayStyle = ToolStripItemDisplayStyle.Text };
+
+        _toolStrip.Items.AddRange(new ToolStripItem[]
+        {
+            _btnNew,
+            _btnEdit,
+            _btnDelete,
+            new ToolStripSeparator(),
+            _btnMove,
+            _btnMaintenance,
+            _btnHistory,
+            new ToolStripSeparator(),
+            _btnCategories,
+            _btnDashboard,
+            _btnExport,
+            new ToolStripSeparator(),
+            _btnRefresh,
+        });
+    }
+
+    private void BuildGrid()
+    {
+        _grid.Dock = DockStyle.Fill;
+        _grid.AllowUserToAddRows = false;
+        _grid.AllowUserToDeleteRows = false;
+        _grid.AutoGenerateColumns = false;
+        _grid.ReadOnly = true;
+        _grid.MultiSelect = false;
+        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _grid.RowHeadersVisible = false;
+        _grid.BackgroundColor = SystemColors.Window;
+        _grid.SelectionChanged += (_, _) => UpdateButtonStates();
+        _grid.CellDoubleClick += async (_, e) => { if (e.RowIndex >= 0) await OnEditClickedAsync(); };
+
+        _grid.Columns.AddRange(new DataGridViewColumn[]
+        {
+            new DataGridViewTextBoxColumn { Name = "colName",         HeaderText = "Nome",         MinimumWidth = 140, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill  },
+            new DataGridViewTextBoxColumn { Name = "colCategory",     HeaderText = "Categoria",    Width = 120 },
+            new DataGridViewTextBoxColumn { Name = "colStatus",       HeaderText = "Status",       Width = 110 },
+            new DataGridViewTextBoxColumn { Name = "colSerialNumber", HeaderText = "Nº de Série",  Width = 120 },
+            new DataGridViewTextBoxColumn { Name = "colLocation",     HeaderText = "Localização",  Width = 120 },
+            new DataGridViewTextBoxColumn { Name = "colAssignedTo",   HeaderText = "Responsável",  Width = 120 },
+            new DataGridViewTextBoxColumn { Name = "colWarranty",     HeaderText = "Garantia",     Width = 100 },
+        });
+    }
+
+    // ── Data Loading ──────────────────────────────────────────────────────────
+
+    private async Task LoadAllAsync()
+    {
+        try
+        {
+            _categories = (await _categoryService.GetAllAsync().ConfigureAwait(true)).ToList();
+            _allItems = (await _inventoryService.GetAllAsync().ConfigureAwait(true)).ToList();
+            RebuildCategoryTree();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao carregar inventário: {ex.Message}", "Inventário",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void RebuildCategoryTree()
+    {
+        _treeCategories.BeginUpdate();
+        _treeCategories.Nodes.Clear();
+
+        var root = _treeCategories.Nodes.Add("Todas as categorias");
+        root.Tag = null;
+
+        var categoryNames = _allItems.Select(i => i.Category)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c)
+            .ToList();
+
+        foreach (var cat in categoryNames)
+        {
+            var node = root.Nodes.Add(cat);
+            node.Tag = cat;
+        }
+
+        _treeCategories.ExpandAll();
+        _treeCategories.SelectedNode = root;
+        _treeCategories.EndUpdate();
+    }
+
+    private void ApplyFilter()
+    {
+        _selectedCategory = _treeCategories.SelectedNode?.Tag as string;
+        var search = _txtSearch.Text.Trim();
+        var statusFilter = _cmbStatus.SelectedItem as string;
+
+        var filtered = _allItems.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_selectedCategory))
+        {
+            filtered = filtered.Where(i =>
+                string.Equals(i.Category, _selectedCategory, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            filtered = filtered.Where(i =>
+                Contains(i.Name, search) ||
+                Contains(i.SerialNumber, search) ||
+                Contains(i.AssetTag, search) ||
+                Contains(i.Location, search) ||
+                Contains(i.AssignedTo, search));
+        }
+
+        if (!string.IsNullOrWhiteSpace(statusFilter) && statusFilter != "(Todos)")
+        {
+            filtered = filtered.Where(i =>
+                string.Equals(i.Status, statusFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var list = filtered.ToList();
+        PopulateGrid(list);
+        _lblCount.Text = $"{list.Count} item(ns)";
+        UpdateButtonStates();
+    }
+
+    private static bool Contains(string? text, string search) =>
+        text is not null && text.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private void PopulateGrid(List<InventoryItemEntity> items)
+    {
+        _grid.Rows.Clear();
+
+        foreach (var item in items)
+        {
+            var rowIndex = _grid.Rows.Add();
+            var row = _grid.Rows[rowIndex];
+            row.Cells["colName"].Value = item.Name;
+            row.Cells["colCategory"].Value = item.Category;
+            row.Cells["colStatus"].Value = item.Status;
+            row.Cells["colSerialNumber"].Value = item.SerialNumber;
+            row.Cells["colLocation"].Value = item.Location;
+            row.Cells["colAssignedTo"].Value = item.AssignedTo;
+            row.Cells["colWarranty"].Value = item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? string.Empty;
+            row.Tag = item;
+        }
+    }
+
+    private InventoryItemEntity? GetSelectedItem()
+    {
+        if (_grid.SelectedRows.Count == 0)
+        {
+            return null;
+        }
+
+        return _grid.SelectedRows[0].Tag as InventoryItemEntity;
+    }
+
+    private void UpdateButtonStates()
+    {
+        var hasSelection = GetSelectedItem() is not null;
+        _btnEdit.Enabled = hasSelection;
+        _btnDelete.Enabled = hasSelection;
+        _btnMove.Enabled = hasSelection;
+        _btnMaintenance.Enabled = hasSelection;
+        _btnHistory.Enabled = hasSelection;
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+
+    private async Task OnNewClickedAsync()
+    {
+        using var editor = new InventoryItemEditorForm(null, _categories, _monitors);
+        if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _inventoryService.CreateAsync(editor.Result).ConfigureAwait(true);
+            await LoadAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao salvar item: {ex.Message}", "Inventário",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task OnEditClickedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        using var editor = new InventoryItemEditorForm(item, _categories, _monitors);
+        if (editor.ShowDialog(this) != DialogResult.OK || editor.Result is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _inventoryService.UpdateAsync(editor.Result).ConfigureAwait(true);
+            await LoadAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao atualizar item: {ex.Message}", "Inventário",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task OnDeleteClickedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            this,
+            $"Deseja excluir o item '{item.Name}'?",
+            "Excluir Item",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await _inventoryService.DeleteAsync(item.Id).ConfigureAwait(true);
+            await LoadAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao excluir item: {ex.Message}", "Inventário",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task OnMoveClickedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        using var dlg = new MovementDialogForm(item);
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            using var transaction = await _db.Database.BeginTransactionAsync().ConfigureAwait(true);
+            try
+            {
+                await _movementService.RecordMovementAsync(
+                    item.Id,
+                    dlg.MovementType,
+                    item.Location,
+                    dlg.ToLocation,
+                    item.AssignedTo,
+                    dlg.ToAssignee,
+                    dlg.PerformedBy,
+                    dlg.Notes).ConfigureAwait(true);
+
+                // Update item location/assignee
+                item.Location = dlg.ToLocation ?? item.Location;
+                item.AssignedTo = dlg.ToAssignee ?? item.AssignedTo;
+                await _inventoryService.UpdateAsync(item).ConfigureAwait(true);
+                await transaction.CommitAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                await transaction.RollbackAsync().ConfigureAwait(true);
+                throw;
+            }
+
+            await LoadAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao registrar movimentação: {ex.Message}", "Inventário",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task OnMaintenanceClickedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        using var dlg = new MaintenanceDialogForm(item, _maintenanceService);
+        _ = dlg.ShowDialog(this);
+        await LoadAllAsync().ConfigureAwait(true);
+    }
+
+    private async Task OnHistoryClickedAsync()
+    {
+        var item = GetSelectedItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        using var form = new MovementHistoryForm(item.Id, item.Name, _movementService);
+        form.ShowDialog(this);
+        await Task.CompletedTask.ConfigureAwait(true);
+    }
+
+    // ── Categorias / Dashboard / Export ───────────────────────────────────────
+
+    private async void OnCategoriesClicked()
+    {
+        using var form = new CategoryEditorForm(_categoryService);
+        form.ShowDialog(this);
+        await LoadAllAsync().ConfigureAwait(true);
+    }
+
+    private void OnDashboardClicked()
+    {
+        using var form = new InventoryDashboardForm(_inventoryService, _maintenanceService, _categoryService);
+        form.ShowDialog(this);
+    }
+
+    private void OnExportCsvClicked()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Exportar Inventário",
+            Filter = "CSV (*.csv)|*.csv",
+            DefaultExt = "csv",
+            FileName = $"inventario_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Nome,Categoria,Status,Nº Série,Patrimônio,Fabricante,Modelo,Localização,Responsável,Quantidade,Custo Unitário,Garantia,Notas");
+
+            foreach (var item in _allItems)
+            {
+                sb.Append(CsvEscape(item.Name)).Append(',');
+                sb.Append(CsvEscape(item.Category)).Append(',');
+                sb.Append(CsvEscape(item.Status)).Append(',');
+                sb.Append(CsvEscape(item.SerialNumber)).Append(',');
+                sb.Append(CsvEscape(item.AssetTag)).Append(',');
+                sb.Append(CsvEscape(item.Manufacturer)).Append(',');
+                sb.Append(CsvEscape(item.Model)).Append(',');
+                sb.Append(CsvEscape(item.Location)).Append(',');
+                sb.Append(CsvEscape(item.AssignedTo)).Append(',');
+                sb.Append(item.Quantity).Append(',');
+                sb.Append(item.UnitCostCents.HasValue ? (item.UnitCostCents.Value / 100.0).ToString("F2") : "").Append(',');
+                sb.Append(item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "").Append(',');
+                sb.AppendLine(CsvEscape(item.Notes));
+            }
+
+            System.IO.File.WriteAllText(dlg.FileName, sb.ToString(), System.Text.Encoding.UTF8);
+            MessageBox.Show($"Exportados {_allItems.Count} item(ns) para:\n{dlg.FileName}",
+                "Exportação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao exportar: {ex.Message}", "Exportação",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static string CsvEscape(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        return value;
+    }
+}
+
+// ── Simple inline dialogs ─────────────────────────────────────────────────────
+
+internal sealed class MovementDialogForm : Form
+{
+    private readonly ComboBox _cmbType = new();
+    private readonly TextBox _txtToLocation = new();
+    private readonly TextBox _txtToAssignee = new();
+    private readonly TextBox _txtPerformedBy = new();
+    private readonly TextBox _txtNotes = new();
+    private readonly Button _btnOk = new();
+    private readonly Button _btnCancel = new();
+
+    public string MovementType => (_cmbType.SelectedItem as string) ?? "Transfer";
+    public string? ToLocation => string.IsNullOrWhiteSpace(_txtToLocation.Text) ? null : _txtToLocation.Text.Trim();
+    public string? ToAssignee => string.IsNullOrWhiteSpace(_txtToAssignee.Text) ? null : _txtToAssignee.Text.Trim();
+    public string? PerformedBy => string.IsNullOrWhiteSpace(_txtPerformedBy.Text) ? null : _txtPerformedBy.Text.Trim();
+    public string? Notes => string.IsNullOrWhiteSpace(_txtNotes.Text) ? null : _txtNotes.Text.Trim();
+
+    public MovementDialogForm(InventoryItemEntity item)
+    {
+        Text = $"Registrar Movimentação — {item.Name}";
+        ClientSize = new Size(420, 280);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterParent;
+
+        int y = 12;
+        AddField("Tipo:", _cmbType, ref y, useCombo: true);
+        foreach (var t in new[] { "Transfer", "Assignment", "Return", "Disposal", "Repair" })
+        {
+            _cmbType.Items.Add(t);
+        }
+        _cmbType.SelectedIndex = 0;
+
+        AddField("Para (Local):", _txtToLocation, ref y);
+        _txtToLocation.Text = item.Location ?? string.Empty;
+        AddField("Para (Responsável):", _txtToAssignee, ref y);
+        _txtToAssignee.Text = item.AssignedTo ?? string.Empty;
+        AddField("Realizado por:", _txtPerformedBy, ref y);
+        AddField("Notas:", _txtNotes, ref y);
+
+        _btnOk.BackColor = Color.FromArgb(0, 120, 215);
+        _btnOk.FlatStyle = FlatStyle.Flat;
+        _btnOk.ForeColor = Color.White;
+        _btnOk.Location = new Point(100, y);
+        _btnOk.Size = new Size(100, 28);
+        _btnOk.Text = "Confirmar";
+        _btnOk.UseVisualStyleBackColor = false;
+        _btnOk.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
+        Controls.Add(_btnOk);
+
+        _btnCancel.Location = new Point(215, y);
+        _btnCancel.Size = new Size(100, 28);
+        _btnCancel.Text = "Cancelar";
+        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+        Controls.Add(_btnCancel);
+
+        ClientSize = new Size(420, y + 44);
+        AcceptButton = _btnOk;
+        CancelButton = _btnCancel;
+    }
+
+    private void AddField(string label, Control ctrl, ref int y, bool useCombo = false)
+    {
+        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = label };
+        Controls.Add(lbl);
+        ctrl.Location = new Point(160, y);
+        ctrl.Width = 240;
+        if (!useCombo && ctrl is ComboBox cb)
+        {
+            cb.DropDownStyle = ComboBoxStyle.DropDownList;
+        }
+        Controls.Add(ctrl);
+        y += 32;
+    }
+}
+
+internal sealed class MaintenanceDialogForm : Form
+{
+    private readonly InventoryItemEntity _item;
+    private readonly MaintenanceRecordService _service;
+
+    private readonly DataGridView _grid = new();
+    private readonly Button _btnNew = new();
+    private readonly Button _btnClose = new();
+    private List<MaintenanceRecordEntity> _records = new();
+
+    public MaintenanceDialogForm(InventoryItemEntity item, MaintenanceRecordService service)
+    {
+        _item = item;
+        _service = service;
+        Text = $"Manutenção — {item.Name}";
+        ClientSize = new Size(700, 460);
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MinimumSize = new Size(600, 360);
+        StartPosition = FormStartPosition.CenterParent;
+
+        BuildLayout();
+        Shown += async (_, _) => await LoadAsync();
+    }
+
+    private void BuildLayout()
+    {
+        _grid.Dock = DockStyle.Fill;
+        _grid.AllowUserToAddRows = false;
+        _grid.AllowUserToDeleteRows = false;
+        _grid.AutoGenerateColumns = false;
+        _grid.ReadOnly = true;
+        _grid.RowHeadersVisible = false;
+        _grid.BackgroundColor = SystemColors.Window;
+        _grid.Columns.AddRange(new DataGridViewColumn[]
+        {
+            new DataGridViewTextBoxColumn { HeaderText = "Data",        Name = "colDate",   Width = 110 },
+            new DataGridViewTextBoxColumn { HeaderText = "Tipo",        Name = "colType",   Width = 100 },
+            new DataGridViewTextBoxColumn { HeaderText = "Status",      Name = "colStatus", Width = 90  },
+            new DataGridViewTextBoxColumn { HeaderText = "Descrição",   Name = "colDesc",  AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill },
+            new DataGridViewTextBoxColumn { HeaderText = "Responsável", Name = "colBy",    Width = 120 },
+            new DataGridViewTextBoxColumn { HeaderText = "Custo (R$)",  Name = "colCost",  Width = 90  },
+        });
+
+        var panelBottom = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(4),
+        };
+
+        _btnClose.Text = "Fechar";
+        _btnClose.Size = new Size(90, 28);
+        _btnClose.Click += (_, _) => Close();
+
+        _btnNew.BackColor = Color.FromArgb(0, 120, 215);
+        _btnNew.FlatStyle = FlatStyle.Flat;
+        _btnNew.ForeColor = Color.White;
+        _btnNew.Text = "Novo registro";
+        _btnNew.Size = new Size(110, 28);
+        _btnNew.UseVisualStyleBackColor = false;
+        _btnNew.Click += async (_, _) => await OnNewMaintenanceAsync();
+
+        panelBottom.Controls.Add(_btnClose);
+        panelBottom.Controls.Add(_btnNew);
+
+        Controls.Add(_grid);
+        Controls.Add(panelBottom);
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _records = (await _service.GetByItemAsync(_item.Id).ConfigureAwait(true)).ToList();
+            PopulateGrid();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao carregar manutenção: {ex.Message}", "Manutenção",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void PopulateGrid()
+    {
+        _grid.Rows.Clear();
+        foreach (var rec in _records)
+        {
+            var row = _grid.Rows[_grid.Rows.Add()];
+            row.Cells["colDate"].Value = (rec.CompletedAt ?? rec.ScheduledAt ?? rec.CreatedAt).ToLocalTime().ToString("dd/MM/yyyy");
+            row.Cells["colType"].Value = rec.MaintenanceType;
+            row.Cells["colStatus"].Value = rec.Status;
+            row.Cells["colDesc"].Value = rec.Description;
+            row.Cells["colBy"].Value = rec.PerformedBy ?? string.Empty;
+            row.Cells["colCost"].Value = rec.CostCents.HasValue ? (rec.CostCents.Value / 100.0).ToString("F2") : string.Empty;
+            row.Tag = rec;
+        }
+    }
+
+    private async Task OnNewMaintenanceAsync()
+    {
+        using var dlg = new MaintenanceRecordEditorForm();
+        if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result is null)
+        {
+            return;
+        }
+
+        try
+        {
+            dlg.Result.ItemId = _item.Id;
+            await _service.CreateAsync(dlg.Result).ConfigureAwait(true);
+            await LoadAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao salvar: {ex.Message}", "Manutenção",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+}
+
+internal sealed class MaintenanceRecordEditorForm : Form
+{
+    private static readonly string[] MaintenanceTypes = { "Preventive", "Corrective", "Inspection" };
+    private static readonly string[] StatusOptions = { "Scheduled", "InProgress", "Completed", "Cancelled" };
+
+    private readonly ComboBox _cmbType = new();
+    private readonly ComboBox _cmbStatus = new();
+    private readonly TextBox _txtDescription = new();
+    private readonly TextBox _txtPerformedBy = new();
+    private readonly TextBox _txtNotes = new();
+    private readonly NumericUpDown _numCost = new();
+    private readonly CheckBox _chkScheduled = new();
+    private readonly DateTimePicker _dtpScheduled = new();
+    private readonly CheckBox _chkCompleted = new();
+    private readonly DateTimePicker _dtpCompleted = new();
+    private readonly Button _btnOk = new();
+    private readonly Button _btnCancel = new();
+
+    public MaintenanceRecordEntity? Result { get; private set; }
+
+    public MaintenanceRecordEditorForm()
+    {
+        Text = "Novo Registro de Manutenção";
+        ClientSize = new Size(440, 460);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterParent;
+        BuildLayout();
+    }
+
+    private void BuildLayout()
+    {
+        int y = 12;
+        AddComboField("Tipo:", _cmbType, MaintenanceTypes, ref y);
+        AddComboField("Status:", _cmbStatus, StatusOptions, ref y);
+
+        var lblDesc = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Descrição:*" };
+        Controls.Add(lblDesc);
+        _txtDescription.Location = new Point(150, y);
+        _txtDescription.Size = new Size(268, 23);
+        Controls.Add(_txtDescription);
+        y += 32;
+
+        AddTextField("Responsável:", _txtPerformedBy, ref y);
+
+        var lblNotes = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Notas:" };
+        Controls.Add(lblNotes);
+        _txtNotes.Location = new Point(150, y);
+        _txtNotes.Size = new Size(268, 50);
+        _txtNotes.Multiline = true;
+        Controls.Add(_txtNotes);
+        y += 60;
+
+        var lblCost = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = "Custo (R$):" };
+        Controls.Add(lblCost);
+        _numCost.Location = new Point(150, y);
+        _numCost.Width = 100;
+        _numCost.DecimalPlaces = 2;
+        _numCost.Maximum = 9999999;
+        Controls.Add(_numCost);
+        y += 32;
+
+        _chkScheduled.AutoSize = true;
+        _chkScheduled.Location = new Point(12, y);
+        _chkScheduled.Text = "Agendado para:";
+        _chkScheduled.CheckedChanged += (_, _) => _dtpScheduled.Enabled = _chkScheduled.Checked;
+        Controls.Add(_chkScheduled);
+        _dtpScheduled.Location = new Point(160, y - 2);
+        _dtpScheduled.Width = 140;
+        _dtpScheduled.Enabled = false;
+        Controls.Add(_dtpScheduled);
+        y += 32;
+
+        _chkCompleted.AutoSize = true;
+        _chkCompleted.Location = new Point(12, y);
+        _chkCompleted.Text = "Concluído em:";
+        _chkCompleted.CheckedChanged += (_, _) => _dtpCompleted.Enabled = _chkCompleted.Checked;
+        Controls.Add(_chkCompleted);
+        _dtpCompleted.Location = new Point(160, y - 2);
+        _dtpCompleted.Width = 140;
+        _dtpCompleted.Enabled = false;
+        Controls.Add(_dtpCompleted);
+        y += 40;
+
+        _btnOk.BackColor = Color.FromArgb(0, 120, 215);
+        _btnOk.FlatStyle = FlatStyle.Flat;
+        _btnOk.ForeColor = Color.White;
+        _btnOk.Location = new Point(110, y);
+        _btnOk.Size = new Size(100, 28);
+        _btnOk.Text = "Salvar";
+        _btnOk.UseVisualStyleBackColor = false;
+        _btnOk.Click += OnSaveClicked;
+        Controls.Add(_btnOk);
+
+        _btnCancel.Location = new Point(225, y);
+        _btnCancel.Size = new Size(100, 28);
+        _btnCancel.Text = "Cancelar";
+        _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+        Controls.Add(_btnCancel);
+
+        ClientSize = new Size(440, y + 48);
+        AcceptButton = _btnOk;
+        CancelButton = _btnCancel;
+    }
+
+    private void AddComboField(string label, ComboBox cmb, string[] items, ref int y)
+    {
+        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = label };
+        Controls.Add(lbl);
+        cmb.Location = new Point(150, y);
+        cmb.Width = 268;
+        cmb.DropDownStyle = ComboBoxStyle.DropDownList;
+        foreach (var item in items)
+        {
+            cmb.Items.Add(item);
+        }
+        cmb.SelectedIndex = 0;
+        Controls.Add(cmb);
+        y += 32;
+    }
+
+    private void AddTextField(string label, TextBox txt, ref int y)
+    {
+        var lbl = new Label { AutoSize = true, Location = new Point(12, y + 3), Text = label };
+        Controls.Add(lbl);
+        txt.Location = new Point(150, y);
+        txt.Width = 268;
+        Controls.Add(txt);
+        y += 32;
+    }
+
+    private void OnSaveClicked(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_txtDescription.Text))
+        {
+            MessageBox.Show("A descrição é obrigatória.", "Validação",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _txtDescription.Focus();
+            return;
+        }
+
+        Result = new MaintenanceRecordEntity
+        {
+            MaintenanceType = (_cmbType.SelectedItem as string) ?? "Corrective",
+            Status = (_cmbStatus.SelectedItem as string) ?? "Completed",
+            Description = _txtDescription.Text.Trim(),
+            PerformedBy = string.IsNullOrWhiteSpace(_txtPerformedBy.Text) ? null : _txtPerformedBy.Text.Trim(),
+            Notes = string.IsNullOrWhiteSpace(_txtNotes.Text) ? null : _txtNotes.Text.Trim(),
+            CostCents = _numCost.Value > 0 ? (long?)((long)(_numCost.Value * 100)) : null,
+            ScheduledAt = _chkScheduled.Checked ? (DateTime?)_dtpScheduled.Value.ToUniversalTime() : null,
+            CompletedAt = _chkCompleted.Checked ? (DateTime?)_dtpCompleted.Value.ToUniversalTime() : null,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+}

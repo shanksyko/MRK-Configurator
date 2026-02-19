@@ -84,6 +84,9 @@ internal sealed class ConfigForm : WinForms.Form
     private EntryReference? _selectedEntry;
     private bool _isUpdatingSelection;
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(30);
+    private readonly WinForms.TextBox _searchBox;
+    private readonly WinForms.Timer _searchDebounce;
+    private string _searchFilter = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConfigForm"/> class.
@@ -212,6 +215,33 @@ internal sealed class ConfigForm : WinForms.Form
         tabControl.TabPages.Add(appsTab);
         tabControl.TabPages.Add(sitesTab);
 
+        _searchBox = new WinForms.TextBox
+        {
+            Dock = WinForms.DockStyle.Top,
+            PlaceholderText = "Filtrar...",
+            Font = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont,
+        };
+        _searchDebounce = new WinForms.Timer { Interval = 300 };
+        _searchDebounce.Tick += (_, _) =>
+        {
+            _searchDebounce.Stop();
+            _searchFilter = _searchBox.Text.Trim();
+            RefreshApplicationsList();
+            RefreshSitesList();
+        };
+        _searchBox.TextChanged += (_, _) =>
+        {
+            _searchDebounce.Stop();
+            _searchDebounce.Start();
+        };
+
+        var tabWithSearchPanel = new WinForms.Panel
+        {
+            Dock = WinForms.DockStyle.Fill,
+        };
+        tabWithSearchPanel.Controls.Add(tabControl);
+        tabWithSearchPanel.Controls.Add(_searchBox);
+
         var monitorContainer = new WinForms.Panel
         {
             Dock = WinForms.DockStyle.Fill,
@@ -235,7 +265,7 @@ internal sealed class ConfigForm : WinForms.Form
             Dock = WinForms.DockStyle.Fill,
         };
 
-        _contentContainer.Panel1.Controls.Add(tabControl);
+        _contentContainer.Panel1.Controls.Add(tabWithSearchPanel);
         _contentContainer.Panel2.Controls.Add(monitorContainer);
 
         _issuesList = new WinForms.ListView
@@ -456,6 +486,7 @@ internal sealed class ConfigForm : WinForms.Form
             _imageList?.Dispose();
             _issueImageList?.Dispose();
             _toolTip.Dispose();
+            _searchDebounce.Dispose();
         }
 
         base.Dispose(disposing);
@@ -606,48 +637,15 @@ internal sealed class ConfigForm : WinForms.Form
 
     private bool TryValidateBeforeSave(GeneralConfig config, out string message)
     {
-        foreach (var app in config.Applications)
+        var report = _validator.Validate(config, _workspace.Monitors);
+        if (report.HasErrors)
         {
-            if (string.IsNullOrWhiteSpace(app.Id))
-            {
-                message = "Existe um aplicativo sem nome. Informe um identificador antes de salvar.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(app.ExecutablePath) || !File.Exists(app.ExecutablePath))
-            {
-                message = $"O executável configurado para '{app.Id}' não foi encontrado.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(app.TargetMonitorStableId))
-            {
-                message = $"Selecione um monitor para o aplicativo '{app.Id}'.";
-                return false;
-            }
-        }
-
-        foreach (var site in config.Sites)
-        {
-            if (string.IsNullOrWhiteSpace(site.Id))
-            {
-                message = "Existe um site sem nome configurado. Ajuste o identificador antes de salvar.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(site.Url)
-                || !Uri.TryCreate(site.Url, UriKind.Absolute, out var uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            {
-                message = $"Informe uma URL http/https válida para o site '{site.Id}'.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(site.TargetMonitorStableId))
-            {
-                message = $"Selecione um monitor para o site '{site.Id}'.";
-                return false;
-            }
+            message = string.Join(
+                Environment.NewLine,
+                report.Issues
+                    .Where(i => i.Severity == ConfigValidationSeverity.Error)
+                    .Select(i => $"• {i.Message}"));
+            return false;
         }
 
         message = string.Empty;
@@ -819,6 +817,9 @@ internal sealed class ConfigForm : WinForms.Form
 
         foreach (var app in _workspace.Applications)
         {
+            if (!string.IsNullOrEmpty(_searchFilter) && !MatchesFilter(app))
+                continue;
+
             var item = CreateApplicationItem(app);
             _applicationsList.Items.Add(item);
         }
@@ -857,6 +858,9 @@ internal sealed class ConfigForm : WinForms.Form
 
         foreach (var site in _workspace.Sites)
         {
+            if (!string.IsNullOrEmpty(_searchFilter) && !MatchesFilter(site))
+                continue;
+
             var item = CreateSiteItem(site);
             _sitesList.Items.Add(item);
         }
@@ -922,6 +926,28 @@ internal sealed class ConfigForm : WinForms.Form
         item.SubItems.Add(site.Login is not null ? "✓" : "—");
         item.SubItems.Add(DescribeWindow(site.Window));
         return item;
+    }
+
+    private bool MatchesFilter(AppConfig app)
+    {
+        return Contains(app.Id, _searchFilter)
+            || Contains(app.Name, _searchFilter)
+            || Contains(app.ExecutablePath, _searchFilter)
+            || Contains(app.Arguments, _searchFilter)
+            || Contains(app.Window.Title, _searchFilter);
+    }
+
+    private bool MatchesFilter(SiteConfig site)
+    {
+        return Contains(site.Id, _searchFilter)
+            || Contains(site.Url, _searchFilter)
+            || Contains(site.Browser.ToString(), _searchFilter)
+            || Contains(site.Window.Title, _searchFilter);
+    }
+
+    private static bool Contains(string? value, string filter)
+    {
+        return !string.IsNullOrEmpty(value) && value.Contains(filter, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AutoSizeColumns(WinForms.ListView listView)
@@ -1787,11 +1813,11 @@ internal sealed class ConfigForm : WinForms.Form
             return false;
         }
 
-        return string.Equals(left.DeviceId, right.DeviceId, StringComparison.OrdinalIgnoreCase)
-            && left.DisplayIndex == right.DisplayIndex
-            && left.AdapterLuidHigh == right.AdapterLuidHigh
-            && left.AdapterLuidLow == right.AdapterLuidLow
-            && left.TargetId == right.TargetId;
+        return string.Equals(left.Value.DeviceId, right.Value.DeviceId, StringComparison.OrdinalIgnoreCase)
+            && left.Value.DisplayIndex == right.Value.DisplayIndex
+            && left.Value.AdapterLuidHigh == right.Value.AdapterLuidHigh
+            && left.Value.AdapterLuidLow == right.Value.AdapterLuidLow
+            && left.Value.TargetId == right.Value.TargetId;
     }
 
     private string DescribeWindow(WindowConfig window)

@@ -26,6 +26,12 @@ public sealed class InventoryCategoryEntity
     /// </summary>
     public string? CustomFieldsJson { get; set; }
 
+    /// <summary>Cor opcional para identificação visual (hex, ex: "#FF5733").</summary>
+    public string? Color { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Navigation: itens pertencentes a esta categoria.</summary>
+    public ICollection<InventoryItemEntity> Items { get; set; } = new List<InventoryItemEntity>();
 }

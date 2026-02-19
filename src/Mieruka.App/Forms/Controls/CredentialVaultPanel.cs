@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Security;
+using Serilog;
 using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls;
@@ -38,8 +39,10 @@ public sealed partial class CredentialVaultPanel : WinForms.UserControl
             _secretsBridge = new UiSecretsBridge(_secretsProvider);
             _secretsProvider.CredentialsChanged += OnCredentialsChanged;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Log.ForContext<CredentialVaultPanel>()
+                .Warning(ex, "Credential vault initialization failed; panel will be disabled.");
             _secretsProvider = null;
             _secretsBridge = null;
         }

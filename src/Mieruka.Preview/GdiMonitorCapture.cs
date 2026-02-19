@@ -62,13 +62,13 @@ namespace Mieruka.Preview
                     throw new PlatformNotSupportedException("Captura GDI não suportada neste sistema.");
                 }
 
-                // Use Task.Run to avoid blocking if StartAsync is truly async
-                Task.Run(async () => await capture.StartAsync(monitor).ConfigureAwait(false)).ConfigureAwait(false).GetAwaiter().GetResult();
+                Task.Run(() => capture.StartAsync(monitor)).GetAwaiter().GetResult();
                 return capture;
             }
             catch
             {
-                SafeDispose(capture);
+                try { capture.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+                catch { /* cleanup failure is secondary */ }
                 throw;
             }
         }
@@ -78,18 +78,6 @@ namespace Mieruka.Preview
             try
             {
                 await capture.DisposeAsync().ConfigureAwait(false);
-            }
-            catch
-            {
-                // Ignore cleanup exceptions when failing to create the capture.
-            }
-        }
-
-        private static void SafeDispose(IMonitorCapture capture)
-        {
-            try
-            {
-                capture.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
             }
             catch
             {

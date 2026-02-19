@@ -608,11 +608,11 @@ internal sealed class AppEditorDialog : WinForms.Form
             return false;
         }
 
-        return string.Equals(left.DeviceId, right.DeviceId, StringComparison.OrdinalIgnoreCase)
-            && left.DisplayIndex == right.DisplayIndex
-            && left.AdapterLuidHigh == right.AdapterLuidHigh
-            && left.AdapterLuidLow == right.AdapterLuidLow
-            && left.TargetId == right.TargetId;
+        return string.Equals(left.DeviceId, right.Value.DeviceId, StringComparison.OrdinalIgnoreCase)
+            && left.DisplayIndex == right.Value.DisplayIndex
+            && left.AdapterLuidHigh == right.Value.AdapterLuidHigh
+            && left.AdapterLuidLow == right.Value.AdapterLuidLow
+            && left.TargetId == right.Value.TargetId;
     }
 
     private bool SelectMonitorByStableId(string? stableId)

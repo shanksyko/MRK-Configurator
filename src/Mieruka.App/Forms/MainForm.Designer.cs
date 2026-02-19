@@ -16,6 +16,29 @@ partial class MainForm
     internal ToolStripSeparator menuPerfisSeparador = null!;
     internal ToolStripMenuItem menuPerfisCarregar = null!;
 
+    internal ToolStripMenuItem menuSeguranca = null!;
+    internal ToolStripMenuItem menuSegurancaUsuarios = null!;
+    internal ToolStripMenuItem menuSegurancaCredenciais = null!;
+    internal ToolStripSeparator menuSegurancaSeparador = null!;
+    internal ToolStripMenuItem menuSegurancaAuditoria = null!;
+
+    internal ToolStripMenuItem menuInventario = null!;
+    internal ToolStripMenuItem menuInventarioAbrir = null!;
+
+    internal ToolStripMenuItem menuConfiguracao = null!;
+    internal ToolStripMenuItem menuConfiguracaoExportar = null!;
+    internal ToolStripMenuItem menuConfiguracaoImportar = null!;
+    internal ToolStripMenuItem menuConfiguracaoBackup = null!;
+    internal ToolStripMenuItem menuConfiguracaoRestaurar = null!;
+    internal ToolStripMenuItem menuConfiguracaoRetencao = null!;
+    internal ToolStripMenuItem menuConfiguracaoHistorico = null!;
+    internal ToolStripMenuItem menuConfiguracaoDashboard = null!;
+    internal ToolStripMenuItem menuConfiguracaoAgendamento = null!;
+    internal ToolStripMenuItem menuConfiguracaoModoEscuro = null!;
+    internal ToolStripMenuItem menuConfiguracaoIdioma = null!;
+    internal ToolStripMenuItem menuConfiguracaoIdiomaPtBr = null!;
+    internal ToolStripMenuItem menuConfiguracaoIdiomaEnUs = null!;
+
     internal TableLayoutPanel layoutPrincipal = null!;
     internal GroupBox grpMonitores = null!;
     internal TableLayoutPanel tlpMonitores = null!;
@@ -60,6 +83,33 @@ partial class MainForm
         menuPerfisSeparador = new ToolStripSeparator();
         menuPerfisCarregar = new ToolStripMenuItem();
 
+        menuSeguranca = new ToolStripMenuItem();
+        menuSegurancaUsuarios = new ToolStripMenuItem();
+        menuSegurancaCredenciais = new ToolStripMenuItem();
+        menuSegurancaSeparador = new ToolStripSeparator();
+        menuSegurancaAuditoria = new ToolStripMenuItem();
+
+        menuInventario = new ToolStripMenuItem();
+        menuInventarioAbrir = new ToolStripMenuItem();
+
+        menuConfiguracao = new ToolStripMenuItem();
+        menuConfiguracaoExportar = new ToolStripMenuItem();
+        menuConfiguracaoImportar = new ToolStripMenuItem();
+        menuConfiguracaoBackup = new ToolStripMenuItem();
+        menuConfiguracaoRestaurar = new ToolStripMenuItem();
+        menuConfiguracaoRetencao = new ToolStripMenuItem();
+        menuConfiguracaoHistorico = new ToolStripMenuItem();
+        menuConfiguracaoDashboard = new ToolStripMenuItem();
+        menuConfiguracaoAgendamento = new ToolStripMenuItem();
+        menuConfiguracaoModoEscuro = new ToolStripMenuItem();
+        menuConfiguracaoIdioma = new ToolStripMenuItem();
+        menuConfiguracaoIdiomaPtBr = new ToolStripMenuItem();
+        menuConfiguracaoIdiomaEnUs = new ToolStripMenuItem();
+        var menuConfiguracaoSep1 = new ToolStripSeparator();
+        var menuConfiguracaoSep2 = new ToolStripSeparator();
+        var menuConfiguracaoSep3 = new ToolStripSeparator();
+        var menuConfiguracaoSep4 = new ToolStripSeparator();
+
         layoutPrincipal = new TableLayoutPanel();
         grpMonitores = new GroupBox();
         tlpMonitores = new TableLayoutPanel();
@@ -96,7 +146,7 @@ partial class MainForm
         // menuPrincipal
         //
         menuPrincipal.ImageScalingSize = new System.Drawing.Size(24, 24);
-        menuPrincipal.Items.AddRange(new ToolStripItem[] { menuPerfis });
+        menuPrincipal.Items.AddRange(new ToolStripItem[] { menuPerfis, menuConfiguracao, menuSeguranca, menuInventario });
         menuPrincipal.Location = new System.Drawing.Point(0, 0);
         menuPrincipal.Name = "menuPrincipal";
         menuPrincipal.Padding = new Padding(8, 3, 0, 3);
@@ -150,9 +200,136 @@ partial class MainForm
         menuPerfisCarregar.Size = new System.Drawing.Size(246, 26);
         menuPerfisCarregar.Text = "Carregar perfil...";
         menuPerfisCarregar.Click += menuPerfisCarregar_Click;
-
         //
-        // layoutPrincipal
+        // menuSeguranca
+        //
+        menuSeguranca.DropDownItems.AddRange(new ToolStripItem[] { menuSegurancaUsuarios, menuSegurancaCredenciais, menuSegurancaSeparador, menuSegurancaAuditoria });
+        menuSeguranca.Name = "menuSeguranca";
+        menuSeguranca.Text = "&Segurança";
+        //
+        // menuSegurancaUsuarios
+        //
+        menuSegurancaUsuarios.Name = "menuSegurancaUsuarios";
+        menuSegurancaUsuarios.Text = "Gerenciar Usuários";
+        menuSegurancaUsuarios.Click += menuSegurancaUsuarios_Click;
+        //
+        // menuSegurancaCredenciais
+        //
+        menuSegurancaCredenciais.Name = "menuSegurancaCredenciais";
+        menuSegurancaCredenciais.Text = "Gerenciar Credenciais";
+        menuSegurancaCredenciais.Click += menuSegurancaCredenciais_Click;
+        //
+        // menuSegurancaSeparador
+        //
+        menuSegurancaSeparador.Name = "menuSegurancaSeparador";
+        //
+        // menuSegurancaAuditoria
+        //
+        menuSegurancaAuditoria.Name = "menuSegurancaAuditoria";
+        menuSegurancaAuditoria.Text = "Log de Auditoria";
+        menuSegurancaAuditoria.Click += menuSegurancaAuditoria_Click;
+        //
+        // menuInventario
+        //
+        menuInventario.DropDownItems.AddRange(new ToolStripItem[] { menuInventarioAbrir });
+        menuInventario.Name = "menuInventario";
+        menuInventario.Text = "&Inventário";
+        //
+        // menuInventarioAbrir
+        //
+        menuInventarioAbrir.Name = "menuInventarioAbrir";
+        menuInventarioAbrir.Text = "Abrir Inventário";
+        menuInventarioAbrir.Click += menuInventarioAbrir_Click;
+        //
+        // menuConfiguracao
+        //
+        menuConfiguracao.DropDownItems.AddRange(new ToolStripItem[] {
+            menuConfiguracaoExportar, menuConfiguracaoImportar,
+            menuConfiguracaoSep1,
+            menuConfiguracaoBackup, menuConfiguracaoRestaurar,
+            menuConfiguracaoSep2,
+            menuConfiguracaoRetencao, menuConfiguracaoHistorico,
+            menuConfiguracaoSep3,
+            menuConfiguracaoDashboard, menuConfiguracaoAgendamento,
+            menuConfiguracaoSep4,
+            menuConfiguracaoModoEscuro, menuConfiguracaoIdioma
+        });
+        menuConfiguracao.Name = "menuConfiguracao";
+        menuConfiguracao.Text = "&Configuração";
+        //
+        // menuConfiguracaoExportar
+        //
+        menuConfiguracaoExportar.Name = "menuConfiguracaoExportar";
+        menuConfiguracaoExportar.Text = "Exportar Configuração...";
+        menuConfiguracaoExportar.Click += menuConfiguracaoExportar_Click;
+        //
+        // menuConfiguracaoImportar
+        //
+        menuConfiguracaoImportar.Name = "menuConfiguracaoImportar";
+        menuConfiguracaoImportar.Text = "Importar Configuração...";
+        menuConfiguracaoImportar.Click += menuConfiguracaoImportar_Click;
+        //
+        // menuConfiguracaoBackup
+        //
+        menuConfiguracaoBackup.Name = "menuConfiguracaoBackup";
+        menuConfiguracaoBackup.Text = "Backup do Banco...";
+        menuConfiguracaoBackup.Click += menuConfiguracaoBackup_Click;
+        //
+        // menuConfiguracaoRestaurar
+        //
+        menuConfiguracaoRestaurar.Name = "menuConfiguracaoRestaurar";
+        menuConfiguracaoRestaurar.Text = "Restaurar Banco...";
+        menuConfiguracaoRestaurar.Click += menuConfiguracaoRestaurar_Click;
+        //
+        // menuConfiguracaoRetencao
+        //
+        menuConfiguracaoRetencao.Name = "menuConfiguracaoRetencao";
+        menuConfiguracaoRetencao.Text = "Retenção de Dados...";
+        menuConfiguracaoRetencao.Click += menuConfiguracaoRetencao_Click;
+        //
+        // menuConfiguracaoHistorico
+        //
+        menuConfiguracaoHistorico.Name = "menuConfiguracaoHistorico";
+        menuConfiguracaoHistorico.Text = "Histórico de Configuração...";
+        menuConfiguracaoHistorico.Click += menuConfiguracaoHistorico_Click;
+        //
+        // menuConfiguracaoDashboard
+        //
+        menuConfiguracaoDashboard.Name = "menuConfiguracaoDashboard";
+        menuConfiguracaoDashboard.Text = "Dashboard de Status";
+        menuConfiguracaoDashboard.Click += menuConfiguracaoDashboard_Click;
+        //
+        // menuConfiguracaoAgendamento
+        //
+        menuConfiguracaoAgendamento.Name = "menuConfiguracaoAgendamento";
+        menuConfiguracaoAgendamento.Text = "Agendamento...";
+        menuConfiguracaoAgendamento.Click += menuConfiguracaoAgendamento_Click;
+        //
+        // menuConfiguracaoModoEscuro
+        //
+        menuConfiguracaoModoEscuro.Name = "menuConfiguracaoModoEscuro";
+        menuConfiguracaoModoEscuro.Text = "Modo Escuro";
+        menuConfiguracaoModoEscuro.CheckOnClick = true;
+        menuConfiguracaoModoEscuro.Click += menuConfiguracaoModoEscuro_Click;
+        //
+        // menuConfiguracaoIdioma
+        //
+        menuConfiguracaoIdioma.DropDownItems.AddRange(new ToolStripItem[] { menuConfiguracaoIdiomaPtBr, menuConfiguracaoIdiomaEnUs });
+        menuConfiguracaoIdioma.Name = "menuConfiguracaoIdioma";
+        menuConfiguracaoIdioma.Text = "Idioma";
+        //
+        // menuConfiguracaoIdiomaPtBr
+        //
+        menuConfiguracaoIdiomaPtBr.Name = "menuConfiguracaoIdiomaPtBr";
+        menuConfiguracaoIdiomaPtBr.Text = "Português";
+        menuConfiguracaoIdiomaPtBr.Checked = true;
+        menuConfiguracaoIdiomaPtBr.Click += menuConfiguracaoIdiomaPtBr_Click;
+        //
+        // menuConfiguracaoIdiomaEnUs
+        //
+        menuConfiguracaoIdiomaEnUs.Name = "menuConfiguracaoIdiomaEnUs";
+        menuConfiguracaoIdiomaEnUs.Text = "English";
+        menuConfiguracaoIdiomaEnUs.Click += menuConfiguracaoIdiomaEnUs_Click;
         //
         layoutPrincipal.ColumnCount = 2;
         layoutPrincipal.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));

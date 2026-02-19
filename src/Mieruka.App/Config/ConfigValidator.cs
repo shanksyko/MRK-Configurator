@@ -125,7 +125,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private static IReadOnlyList<MonitorInfo> BuildMonitorLookup(IList<MonitorInfo>? configured, IReadOnlyList<MonitorInfo>? environment)
+    private static IReadOnlyList<MonitorInfo> BuildMonitorLookup(IReadOnlyList<MonitorInfo>? configured, IReadOnlyList<MonitorInfo>? environment)
     {
         var lookup = new Dictionary<string, MonitorInfo>(StringComparer.OrdinalIgnoreCase);
 
@@ -181,7 +181,7 @@ internal sealed partial class ConfigValidator
             && left.TargetId == right.TargetId;
     }
 
-    private void ValidateMonitors(IList<MonitorInfo>? monitors, ICollection<ConfigValidationIssue> issues)
+    private void ValidateMonitors(IReadOnlyList<MonitorInfo>? monitors, ICollection<ConfigValidationIssue> issues)
     {
         if (monitors is null || monitors.Count == 0)
         {
@@ -212,7 +212,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private void ValidateApplications(IList<AppConfig>? applications, IReadOnlyList<MonitorInfo> monitors, ICollection<ConfigValidationIssue> issues)
+    private void ValidateApplications(IReadOnlyList<AppConfig>? applications, IReadOnlyList<MonitorInfo> monitors, ICollection<ConfigValidationIssue> issues)
     {
         if (applications is null)
         {
@@ -253,7 +253,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private void ValidateSites(IList<SiteConfig>? sites, IReadOnlyList<MonitorInfo> monitors, ICollection<ConfigValidationIssue> issues)
+    private void ValidateSites(IReadOnlyList<SiteConfig>? sites, IReadOnlyList<MonitorInfo> monitors, ICollection<ConfigValidationIssue> issues)
     {
         if (sites is null)
         {
@@ -435,13 +435,7 @@ internal sealed partial class ConfigValidator
 
     private static bool MonitorExists(IEnumerable<MonitorInfo> monitors, MonitorKey key)
     {
-        if (monitors is null) return false;
-        foreach (var monitor in monitors)
-        {
-            if (monitor is not null && KeysEqual(monitor.Key, key))
-                return true;
-        }
-        return false;
+        return monitors?.Any(m => m is not null && KeysEqual(m.Key, key)) ?? false;
     }
 
     private void ValidateCycle(GeneralConfig config, ICollection<ConfigValidationIssue> issues)
@@ -531,7 +525,7 @@ internal sealed partial class ConfigValidator
         }
     }
 
-    private void ValidateDriverAvailability(IList<SiteConfig>? sites, ICollection<ConfigValidationIssue> issues)
+    private void ValidateDriverAvailability(IReadOnlyList<SiteConfig>? sites, ICollection<ConfigValidationIssue> issues)
     {
         if (sites is null || sites.Count == 0)
         {

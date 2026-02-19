@@ -13,13 +13,19 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.App.Config;
 using Mieruka.App.Forms.Controls;
+using Mieruka.App.Forms.Inventory;
+using Mieruka.App.Forms.Security;
 using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui;
 using Mieruka.App.Services;
 using Mieruka.Automation.Execution;
 using Mieruka.Core.Config;
+using Mieruka.Core.Data.Services;
 using Mieruka.Core.Models;
 using Mieruka.Core.Monitors;
+using Mieruka.Core.Security;
+using Mieruka.Core.Security.Data;
+using Mieruka.Core.Security.Services;
 using Mieruka.Core.Services;
 using Mieruka.App.Ui.PreviewBindings;
 using Serilog;
@@ -525,6 +531,8 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             _displayService.Dispose();
             _displayService = null;
         }
+
+        _orchestrator.StateChanged -= Orchestrator_StateChanged;
     }
 
     private void tlpMonitores_SizeChanged(object? sender, EventArgs e)
@@ -724,7 +732,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return byDevice;
         }
 
-        var deviceId = monitor.Key?.DeviceId;
+        var deviceId = monitor.Key.DeviceId;
         if (!string.IsNullOrWhiteSpace(deviceId) && descriptorsByDevice.TryGetValue(deviceId, out var byKey))
         {
             return byKey;
@@ -1569,6 +1577,339 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             _telemetry.Warn("Falha ao carregar perfis.", ex);
             WinForms.MessageBox.Show(this, $"Erro ao carregar perfis: {ex.Message}", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
+    }
+
+    private void menuSegurancaUsuarios_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var securityDb = new Mieruka.Core.Security.Data.SecurityDbContext();
+            var auditLog = new Mieruka.Core.Security.Services.AuditLogService(securityDb);
+            var userService = new Mieruka.Core.Security.Services.UserManagementService(securityDb, auditLog);
+            var systemUser = new Mieruka.Core.Security.Models.User
+            {
+                Id = 0,
+                Username = "system",
+                Role = Mieruka.Core.Security.Models.UserRole.Admin,
+            };
+
+            using var form = new UserManagementForm(userService, systemUser);
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir gerenciamento de usuários.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao abrir gerenciamento de usuários: {ex.Message}", "Segurança", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuSegurancaCredenciais_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var db = new Mieruka.Core.Data.MierukaDbContext();
+            var crudService = new Mieruka.Core.Data.Services.SecurityCrudService(db);
+            var vault = new Mieruka.Core.Security.CredentialVault();
+
+            using var form = new CredentialsManagementForm(crudService, vault, currentUserId: 0);
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir gerenciamento de credenciais.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao abrir gerenciamento de credenciais: {ex.Message}", "Segurança", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuSegurancaAuditoria_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var securityDb = new Mieruka.Core.Security.Data.SecurityDbContext();
+            var auditLog = new Mieruka.Core.Security.Services.AuditLogService(securityDb);
+
+            using var form = new AuditLogViewerForm(auditLog);
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir log de auditoria.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao abrir log de auditoria: {ex.Message}", "Segurança", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuInventarioAbrir_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var db = new Mieruka.Core.Data.MierukaDbContext();
+            var inventoryService = new Mieruka.Core.Data.Services.InventoryService(db);
+            var categoryService = new Mieruka.Core.Data.Services.InventoryCategoryService(db);
+            var movementService = new Mieruka.Core.Data.Services.InventoryMovementService(db);
+            var maintenanceService = new Mieruka.Core.Data.Services.MaintenanceRecordService(db);
+            var monitors = _monitorSnapshot.Count > 0 ? _monitorSnapshot.ToList() : (IReadOnlyList<MonitorInfo>)Array.Empty<MonitorInfo>();
+
+            using var form = new InventoryForm(db, inventoryService, categoryService, movementService, maintenanceService, monitors);
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir inventário.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao abrir inventário: {ex.Message}", "Inventário", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuConfiguracaoExportar_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var dialog = new WinForms.SaveFileDialog
+            {
+                Filter = "JSON (*.json)|*.json",
+                DefaultExt = "json",
+                FileName = "mieruka-config.json",
+                Title = "Exportar Configuração",
+            };
+
+            if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
+            {
+                return;
+            }
+
+            var config = new GeneralConfig
+            {
+                Applications = _programas.Select(CloneAppConfig).ToList(),
+                Monitors = _monitorSnapshot.ToList(),
+            };
+
+            var migrator = new Config.ConfigMigrator();
+            migrator.ExportToFile(dialog.FileName, config);
+            UpdateStatusText("Configuração exportada com sucesso.");
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao exportar configuração.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao exportar: {ex.Message}", "Configuração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuConfiguracaoImportar_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var dialog = new WinForms.OpenFileDialog
+            {
+                Filter = "JSON (*.json)|*.json|Todos (*.*)|*.*",
+                Title = "Importar Configuração",
+            };
+
+            if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
+            {
+                return;
+            }
+
+            var migrator = new Config.ConfigMigrator();
+            var config = migrator.ImportFromFile(dialog.FileName);
+
+            _programas.Clear();
+            foreach (var app in config.Applications)
+            {
+                _programas.Add(CloneAppConfig(app));
+            }
+
+            bsProgramas?.ResetBindings(false);
+            UpdateStatusText("Configuração importada com sucesso.");
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao importar configuração.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao importar: {ex.Message}", "Configuração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private async void menuConfiguracaoBackup_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var dialog = new WinForms.SaveFileDialog
+            {
+                Filter = "SQLite Database (*.db)|*.db",
+                DefaultExt = "db",
+                FileName = $"mieruka-backup-{DateTime.Now:yyyyMMdd-HHmmss}.db",
+                Title = "Backup do Banco",
+            };
+
+            if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
+            {
+                return;
+            }
+
+            var service = new Mieruka.Core.Data.Services.DatabaseBackupService();
+            await service.BackupAsync(dialog.FileName).ConfigureAwait(true);
+            UpdateStatusText("Backup realizado com sucesso.");
+            WinForms.MessageBox.Show(this, "Backup realizado com sucesso.", "Backup", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao realizar backup.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao fazer backup: {ex.Message}", "Backup", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private async void menuConfiguracaoRestaurar_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var dialog = new WinForms.OpenFileDialog
+            {
+                Filter = "SQLite Database (*.db)|*.db|Todos (*.*)|*.*",
+                Title = "Restaurar Banco",
+            };
+
+            if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
+            {
+                return;
+            }
+
+            var confirm = WinForms.MessageBox.Show(
+                this,
+                "A restauração substituirá o banco de dados atual. Deseja continuar?",
+                "Restaurar Banco",
+                WinForms.MessageBoxButtons.YesNo,
+                WinForms.MessageBoxIcon.Warning);
+
+            if (confirm != WinForms.DialogResult.Yes)
+            {
+                return;
+            }
+
+            var service = new Mieruka.Core.Data.Services.DatabaseBackupService();
+            await service.RestoreAsync(dialog.FileName).ConfigureAwait(true);
+            UpdateStatusText("Banco restaurado. Reinicie a aplicação.");
+            WinForms.MessageBox.Show(this, "Banco restaurado com sucesso. Reinicie a aplicação para aplicar as alterações.", "Restauração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao restaurar banco.", ex);
+            WinForms.MessageBox.Show(this, $"Erro ao restaurar: {ex.Message}", "Restauração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuConfiguracaoRetencao_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var form = new DataRetentionForm();
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir retenção de dados.", ex);
+            WinForms.MessageBox.Show(this, $"Erro: {ex.Message}", "Retenção de Dados", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuConfiguracaoHistorico_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var form = new ConfigHistoryForm();
+            form.ConfigRestored += (_, config) =>
+            {
+                _programas.Clear();
+                foreach (var app in config.Applications)
+                {
+                    _programas.Add(CloneAppConfig(app));
+                }
+
+                bsProgramas?.ResetBindings(false);
+                UpdateStatusText("Configuração restaurada do histórico.");
+            };
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir histórico de configuração.", ex);
+            WinForms.MessageBox.Show(this, $"Erro: {ex.Message}", "Histórico", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuConfiguracaoDashboard_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            using var form = new StatusDashboardForm(() => Array.Empty<WatchdogStatusEntry>());
+            form.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao abrir dashboard.", ex);
+            WinForms.MessageBox.Show(this, $"Erro: {ex.Message}", "Dashboard", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private async void menuConfiguracaoAgendamento_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            SchedulerService? scheduler = null;
+
+            try
+            {
+                scheduler = new SchedulerService(_orchestrator);
+            }
+            catch (Exception ex)
+            {
+                _telemetry.Warn("Falha ao criar SchedulerService.", ex);
+            }
+
+            var currentConfig = scheduler?.GetCurrentConfig();
+
+            using var form = new ScheduleEditorForm(currentConfig);
+            if (form.ShowDialog(this) == WinForms.DialogResult.OK && scheduler is not null)
+            {
+                await scheduler.ApplyConfigAsync(form.Result).ConfigureAwait(true);
+                UpdateStatusText("Agendamento salvo.");
+            }
+
+            scheduler?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao configurar agendamento.", ex);
+            WinForms.MessageBox.Show(this, $"Erro: {ex.Message}", "Agendamento", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+        }
+    }
+
+    private void menuConfiguracaoModoEscuro_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            var theme = menuConfiguracaoModoEscuro.Checked
+                ? Services.ThemeManager.AppTheme.Dark
+                : Services.ThemeManager.AppTheme.Light;
+            Services.ThemeManager.ApplyTheme(this, theme);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Error("Falha ao alternar tema.", ex);
+        }
+    }
+
+    private void menuConfiguracaoIdiomaPtBr_Click(object? sender, EventArgs e)
+    {
+        menuConfiguracaoIdiomaPtBr.Checked = true;
+        menuConfiguracaoIdiomaEnUs.Checked = false;
+        Core.Localization.L.SetCulture("pt-BR");
+        UpdateStatusText("Idioma alterado para Português.");
+    }
+
+    private void menuConfiguracaoIdiomaEnUs_Click(object? sender, EventArgs e)
+    {
+        menuConfiguracaoIdiomaPtBr.Checked = false;
+        menuConfiguracaoIdiomaEnUs.Checked = true;
+        Core.Localization.L.SetCulture("en-US");
+        UpdateStatusText("Language changed to English.");
     }
 
     private void Orchestrator_StateChanged(object? sender, OrchestratorStateChangedEventArgs e)

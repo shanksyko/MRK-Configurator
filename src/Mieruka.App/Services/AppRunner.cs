@@ -244,9 +244,9 @@ public sealed class AppRunner : IAppRunner
                 return match;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Swallow exceptions when enumerating running processes.
+            Logger.Information(ex, "Unexpected error while searching for running process.");
         }
 
         return null;

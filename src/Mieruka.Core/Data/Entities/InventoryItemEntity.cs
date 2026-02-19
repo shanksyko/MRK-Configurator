@@ -12,6 +12,9 @@ public sealed class InventoryItemEntity
     /// <summary>FK para a categoria definida pelo usuário.</summary>
     public int? CategoryId { get; set; }
 
+    /// <summary>Navigation property para a categoria.</summary>
+    public InventoryCategoryEntity? CategoryNavigation { get; set; }
+
     /// <summary>Categoria livre (ex: "Monitor", "PC", "Licença", "Cabo", "Periférico").</summary>
     public string Category { get; set; } = string.Empty;
 
@@ -41,8 +44,17 @@ public sealed class InventoryItemEntity
     /// <summary>Valores de campos customizados da categoria, em JSON.</summary>
     public string? CustomFieldValuesJson { get; set; }
 
+    /// <summary>Valor unitário do item (em centavos para evitar floating-point).</summary>
+    public long? UnitCostCents { get; set; }
+
     public DateTime? AcquiredAt { get; set; }
     public DateTime? WarrantyExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Navigation: movimentações deste item.</summary>
+    public ICollection<InventoryMovementEntity> Movements { get; set; } = new List<InventoryMovementEntity>();
+
+    /// <summary>Navigation: registros de manutenção deste item.</summary>
+    public ICollection<MaintenanceRecordEntity> MaintenanceRecords { get; set; } = new List<MaintenanceRecordEntity>();
 }

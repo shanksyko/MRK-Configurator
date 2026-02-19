@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Mieruka.Core.Config;
+using Serilog;
 
 namespace Mieruka.Preview;
 
@@ -49,19 +50,14 @@ public static class MonitorCaptureFactory
                 }
                 else
                 {
-                    try
-                    {
-                        graphics.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                    }
-                    catch
-                    {
-                        // Ignore dispose failures for unsupported providers.
-                    }
+                    try { graphics.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+                    catch { /* cleanup best-effort */ }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore and continue with the fallback provider.
+                Log.ForContext(typeof(MonitorCaptureFactory))
+                    .Warning(ex, "GraphicsCaptureProvider creation failed; falling back to GDI.");
             }
         }
 #endif

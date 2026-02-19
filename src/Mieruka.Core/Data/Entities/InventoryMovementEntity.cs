@@ -10,6 +10,9 @@ public sealed class InventoryMovementEntity
     /// <summary>FK para o item movimentado.</summary>
     public int ItemId { get; set; }
 
+    /// <summary>Navigation property para o item.</summary>
+    public InventoryItemEntity? Item { get; set; }
+
     /// <summary>Tipo da movimentação.</summary>
     public string MovementType { get; set; } = "Transfer";
 

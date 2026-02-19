@@ -48,6 +48,9 @@ public sealed class MierukaDbContext : DbContext
     public DbSet<InventoryMovementEntity> InventoryMovements => Set<InventoryMovementEntity>();
     public DbSet<MaintenanceRecordEntity> MaintenanceRecords => Set<MaintenanceRecordEntity>();
 
+    // ── Versionamento de Configuração ──
+    public DbSet<ConfigSnapshotEntity> ConfigSnapshots => Set<ConfigSnapshotEntity>();
+
     // ── Controle de Acessos ──
     public DbSet<ResourcePermission> ResourcePermissions => Set<ResourcePermission>();
     public DbSet<AccessLogEntry> AccessLogs => Set<AccessLogEntry>();
@@ -203,6 +206,25 @@ public sealed class MierukaDbContext : DbContext
             entity.HasIndex(e => e.SerialNumber);
             entity.HasIndex(e => e.AssetTag);
             entity.HasIndex(e => e.LinkedMonitorStableId);
+
+            entity.HasOne(e => e.CategoryNavigation)
+                .WithMany(c => c.Items)
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(e => e.Movements)
+                .WithOne(m => m.Item)
+                .HasForeignKey(m => m.ItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.MaintenanceRecords)
+                .WithOne(m => m.Item)
+                .HasForeignKey(m => m.ItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Ignore(e => e.CategoryNavigation);
+            entity.Ignore(e => e.Movements);
+            entity.Ignore(e => e.MaintenanceRecords);
         });
 
         modelBuilder.Entity<InventoryCategoryEntity>(entity =>
@@ -213,6 +235,9 @@ public sealed class MierukaDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Icon).HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Color).HasMaxLength(20);
+
+            entity.Ignore(e => e.Items);
         });
 
         modelBuilder.Entity<InventoryMovementEntity>(entity =>
@@ -227,6 +252,8 @@ public sealed class MierukaDbContext : DbContext
             entity.Property(e => e.FromAssignee).HasMaxLength(200);
             entity.Property(e => e.ToAssignee).HasMaxLength(200);
             entity.Property(e => e.PerformedBy).HasMaxLength(200);
+
+            entity.Ignore(e => e.Item);
         });
 
         modelBuilder.Entity<MaintenanceRecordEntity>(entity =>
@@ -239,6 +266,18 @@ public sealed class MierukaDbContext : DbContext
             entity.Property(e => e.Description).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.PerformedBy).HasMaxLength(200);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+
+            entity.Ignore(e => e.Item);
+        });
+
+        // ════════════ Versionamento de Configuração ════════════
+        modelBuilder.Entity<ConfigSnapshotEntity>(entity =>
+        {
+            entity.ToTable("ConfigSnapshots");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.Property(e => e.Label).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ConfigJson).IsRequired();
         });
 
         // ════════════ Controle de Acessos ════════════

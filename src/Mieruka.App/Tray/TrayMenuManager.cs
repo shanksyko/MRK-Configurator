@@ -32,6 +32,7 @@ internal sealed class TrayMenuManager : IDisposable
 
     private bool _disposed;
     private volatile bool _operationInProgress;
+    private OrchestratorState? _lastNotifiedState;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TrayMenuManager"/> class.
@@ -119,7 +120,46 @@ internal sealed class TrayMenuManager : IDisposable
     }
 
     private void OnOrchestratorStateChanged(object? sender, OrchestratorStateChangedEventArgs e)
-        => UpdateMenuState();
+    {
+        UpdateMenuState();
+        ShowStateNotification(e);
+    }
+
+    private void ShowStateNotification(OrchestratorStateChangedEventArgs e)
+    {
+        var newState = _orchestrator.State;
+        if (newState == _lastNotifiedState)
+        {
+            return;
+        }
+
+        _lastNotifiedState = newState;
+
+        switch (newState)
+        {
+            case OrchestratorState.Running:
+                ShowNotification("MRK Configurator", "Orchestrator iniciado.", WinForms.ToolTipIcon.Info);
+                break;
+            case OrchestratorState.Recovering:
+                ShowNotification("MRK Configurator", "Recuperando de falha...", WinForms.ToolTipIcon.Warning);
+                break;
+            case OrchestratorState.Ready when e.PreviousState is OrchestratorState.Running or OrchestratorState.Recovering:
+                ShowNotification("MRK Configurator", "Orchestrator parado.", WinForms.ToolTipIcon.Info);
+                break;
+        }
+    }
+
+    private void ShowNotification(string title, string text, WinForms.ToolTipIcon icon)
+    {
+        try
+        {
+            _notifyIcon.ShowBalloonTip(3000, title, text, icon);
+        }
+        catch
+        {
+            // Ignore failures in balloon tip display.
+        }
+    }
 
     private async void OnToggleClick(object? sender, EventArgs e)
     {
