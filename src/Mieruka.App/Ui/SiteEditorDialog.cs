@@ -73,6 +73,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
+        DoubleBuffered = true;
         Text = template is null ? "Adicionar Site" : "Editar Site";
 
         var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;

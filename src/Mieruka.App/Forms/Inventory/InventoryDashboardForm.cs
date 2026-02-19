@@ -52,6 +52,7 @@ public sealed class InventoryDashboardForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(800, 600);
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
         AutoScroll = true;
 
         var mainPanel = new FlowLayoutPanel

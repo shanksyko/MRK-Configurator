@@ -59,6 +59,7 @@ public sealed class InventoryItemEditorForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
         AutoScroll = true;
 
         int y = 12;

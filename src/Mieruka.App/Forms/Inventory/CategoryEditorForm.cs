@@ -52,6 +52,7 @@ public sealed class CategoryEditorForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         // ── Left panel: list + reorder buttons ──
         var lblList = new Label { Text = "Categorias:", AutoSize = true, Location = new Point(12, 12) };

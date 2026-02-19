@@ -48,6 +48,7 @@ public sealed class UserEditorForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         int y = 20;
         AddField(lblUsername, "Usuário:", txtUsername, ref y);
@@ -199,6 +200,7 @@ public sealed class ResetPasswordForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         var lblPass = new Label { AutoSize = true, Location = new Point(20, 23), Text = "Nova Senha:" };
         txtPassword.Location = new Point(120, 20);

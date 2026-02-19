@@ -49,6 +49,7 @@ internal sealed class AppEditorDialog : WinForms.Form
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
+        DoubleBuffered = true;
         Text = template is null ? "Adicionar Aplicativo" : "Editar Aplicativo";
 
         var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;

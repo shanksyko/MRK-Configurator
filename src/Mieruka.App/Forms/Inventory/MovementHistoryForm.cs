@@ -34,6 +34,7 @@ public sealed class MovementHistoryForm : Form
         MinimumSize = new Size(640, 400);
         FormBorderStyle = FormBorderStyle.Sizable;
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
 
         _listView.Dock = DockStyle.Fill;
         _listView.View = View.Details;
@@ -50,7 +51,7 @@ public sealed class MovementHistoryForm : Form
             new ColumnHeader { Text = "De (Responsável)", Width = 120 },
             new ColumnHeader { Text = "Para (Responsável)", Width = 120 },
             new ColumnHeader { Text = "Realizado por",   Width = 120 },
-            new ColumnHeader { Text = "Notas",           Width = 200 },
+            new ColumnHeader { Text = "Notas",           Width = -2 },
         });
 
         var panelBottom = new FlowLayoutPanel
