@@ -9,7 +9,9 @@ using Mieruka.App.Config;
 using Mieruka.App.Forms;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Config;
+using Mieruka.Core.Data;
 using Mieruka.Core.Diagnostics;
+using Mieruka.Core.Security.Data;
 using Mieruka.Preview;
 using Serilog;
 using Serilog.Events;
@@ -40,6 +42,8 @@ internal static class Program
         try
         {
             Log.Information("Iniciando Mieruka Configurator.");
+
+            InitializeDatabases();
 
             var graphicsOptions = LoadPreviewGraphicsOptions();
             PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
@@ -76,6 +80,31 @@ internal static class Program
             }
 
             Log.Error(e.Exception, "ThreadException");
+        }
+    }
+
+    private static void InitializeDatabases()
+    {
+        try
+        {
+            using var mierukaDb = new MierukaDbContext();
+            mierukaDb.EnsureDatabaseConfigured();
+            Log.Information("MierukaDbContext: banco configurado.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao inicializar MierukaDbContext.");
+        }
+
+        try
+        {
+            using var securityDb = new SecurityDbContext();
+            securityDb.EnsureDatabaseConfigured();
+            Log.Information("SecurityDbContext: banco configurado.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao inicializar SecurityDbContext.");
         }
     }
 

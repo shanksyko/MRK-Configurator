@@ -1,6 +1,10 @@
+using System.Linq;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Mieruka.Core.Data.Entities;
 using Mieruka.Core.Security.Models;
 
@@ -73,13 +77,60 @@ public sealed class MierukaDbContext : DbContext
     /// <summary>
     /// Cria o banco, ativa WAL e ajusta PRAGMAs de desempenho.
     /// Chamar uma vez na inicialização da aplicação.
+    /// Cria tabelas faltantes em bancos existentes (sem necessidade de migrations).
     /// </summary>
     public void EnsureDatabaseConfigured()
     {
-        Database.EnsureCreated();
+        var creator = Database.GetService<IRelationalDatabaseCreator>();
+
+        if (!creator.Exists())
+        {
+            creator.Create();
+            creator.CreateTables();
+        }
+        else
+        {
+            EnsureMissingTablesCreated();
+        }
+
         Database.ExecuteSqlRaw("PRAGMA journal_mode = WAL;");
         Database.ExecuteSqlRaw("PRAGMA synchronous = NORMAL;");
         Database.ExecuteSqlRaw("PRAGMA busy_timeout = 3000;");
+    }
+
+    private void EnsureMissingTablesCreated()
+    {
+        var script = Database.GenerateCreateScript();
+        var statements = Regex.Split(script, @";\s*\r?\n")
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s));
+
+        foreach (var stmt in statements)
+        {
+            string safe;
+            if (stmt.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase))
+            {
+                safe = Regex.Replace(stmt, @"^CREATE\s+TABLE\s+", "CREATE TABLE IF NOT EXISTS ", RegexOptions.IgnoreCase);
+            }
+            else if (stmt.StartsWith("CREATE UNIQUE INDEX", StringComparison.OrdinalIgnoreCase))
+            {
+                safe = Regex.Replace(stmt, @"^CREATE\s+UNIQUE\s+INDEX\s+", "CREATE UNIQUE INDEX IF NOT EXISTS ", RegexOptions.IgnoreCase);
+            }
+            else if (stmt.StartsWith("CREATE INDEX", StringComparison.OrdinalIgnoreCase))
+            {
+                safe = Regex.Replace(stmt, @"^CREATE\s+INDEX\s+", "CREATE INDEX IF NOT EXISTS ", RegexOptions.IgnoreCase);
+            }
+            else if (stmt.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase))
+            {
+                safe = Regex.Replace(stmt, @"^INSERT\s+INTO\s+", "INSERT OR IGNORE INTO ", RegexOptions.IgnoreCase);
+            }
+            else
+            {
+                continue;
+            }
+
+            Database.ExecuteSqlRaw(safe + ";");
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
