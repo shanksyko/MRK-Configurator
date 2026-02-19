@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -80,8 +79,7 @@ public sealed partial class MonitorPreviewHost
     {
         try
         {
-            var assemblyPath = Assembly.GetExecutingAssembly().Location;
-            var directory = Path.GetDirectoryName(assemblyPath);
+            var directory = AppContext.BaseDirectory;
             if (string.IsNullOrWhiteSpace(directory))
             {
                 return null;
