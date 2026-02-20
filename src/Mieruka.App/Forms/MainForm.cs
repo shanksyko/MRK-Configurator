@@ -69,6 +69,8 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     private static readonly Regex ProfileIdSanitizer = new("[^A-Za-z0-9_-]+", RegexOptions.Compiled);
     private const string DefaultProfileId = "workspace";
     private static readonly TimeSpan MonitorPreviewResumeDelay = TimeSpan.FromMilliseconds(150);
+    private System.Windows.Forms.Timer? _resizeDebounce;
+    private System.Windows.Forms.Timer? _topologyDebounce;
 
     private Control PreviewBox => pictureBoxPreview ?? throw new InvalidOperationException("Nenhum controle de preview foi inicializado.");
 
@@ -444,7 +446,18 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         try
         {
-            BeginInvoke(new Action(async () => await RefreshMonitorCardsAsync().ConfigureAwait(true)));
+            BeginInvoke(new Action(() =>
+            {
+                _topologyDebounce?.Stop();
+                _topologyDebounce?.Dispose();
+                _topologyDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+                _topologyDebounce.Tick += async (_, _) =>
+                {
+                    _topologyDebounce?.Stop();
+                    await RefreshMonitorCardsAsync().ConfigureAwait(true);
+                };
+                _topologyDebounce.Start();
+            }));
         }
         catch (ObjectDisposedException)
         {
@@ -474,13 +487,22 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         {
             if (WindowState == WinForms.FormWindowState.Minimized)
             {
+                _resizeDebounce?.Stop();
                 await PausePreviewsAsync().ConfigureAwait(true);
                 return;
             }
 
             if (_previewsRequested)
             {
-                await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+                _resizeDebounce?.Stop();
+                _resizeDebounce?.Dispose();
+                _resizeDebounce = new System.Windows.Forms.Timer { Interval = 200 };
+                _resizeDebounce.Tick += async (_, _) =>
+                {
+                    _resizeDebounce?.Stop();
+                    await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+                };
+                _resizeDebounce.Start();
             }
         }
         catch (Exception ex)
@@ -491,6 +513,11 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private void MainForm_FormClosing(object? sender, WinForms.FormClosingEventArgs e)
     {
+        _resizeDebounce?.Stop();
+        _resizeDebounce?.Dispose();
+        _topologyDebounce?.Stop();
+        _topologyDebounce?.Dispose();
+
         StopAutomaticPreviews(clearManualState: true);
         DisposeMonitorCards();
 
