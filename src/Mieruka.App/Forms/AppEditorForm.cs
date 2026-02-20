@@ -35,8 +35,7 @@ namespace Mieruka.App.Forms;
 
 public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 {
-    private static readonly ILogger Logger = Log.ForContext<AppEditorForm>();
-    private readonly ILogger _logger = Log.ForContext<AppEditorForm>(); // MIERUKA_FIX
+    private readonly ILogger _logger = Log.ForContext<AppEditorForm>();
     private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
@@ -238,7 +237,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         };
 
         var gpuEnabled = GpuCaptureGuard.CanUseGpu();
-        Logger.Information("UI: GPU status when opening editor: {GpuOn}", gpuEnabled);
+        _logger.Information("UI: GPU status when opening editor: {GpuOn}", gpuEnabled);
 
         RefreshMonitorSnapshot();
 
@@ -780,7 +779,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (Exception ex)
         {
-            Logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
+            _logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
             _appsListLoaded = false;
         }
         finally
@@ -2020,11 +2019,11 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (InvalidOperationException ex) when (IsDisposed || !IsHandleCreated)
             {
-                Logger.Debug(ex, "Callback ignorado devido ao controle estar indisponível.");
+                _logger.Debug(ex, "Callback ignorado devido ao controle estar indisponível.");
             }
             catch (Exception ex)
             {
-                Logger.Warning(ex, "Falha ao processar callback de UI agendado.");
+                _logger.Warning(ex, "Falha ao processar callback de UI agendado.");
             }
         }
 
@@ -2399,7 +2398,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         var nowUtc = DateTime.UtcNow;
         if (!bounds.Equals(_lastWindowRectLog) || (nowUtc - _lastWindowRectLogUtc).TotalMilliseconds >= 500)
         {
-            Logger.Debug(
+            _logger.Debug(
                 "RectValueChanged: x={X}, y={Y}, w={W}, h={H}",
                 bounds.X,
                 bounds.Y,
@@ -2693,7 +2692,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             CacheOverlaySnapshot(snapshot);
             RebuildSimulationOverlays();
-            Logger.Debug(
+            _logger.Debug(
                 "ApplySelectionOverlay: bounds={Bounds} monitor={MonitorId} fullScreen={FullScreen} autoStart={AutoStart}",
                 snapshot.Bounds,
                 snapshot.MonitorId ?? string.Empty,
@@ -3305,7 +3304,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (Exception ex)
         {
-            Logger.Error("Falha ao testar a posição em modo simulado.", ex);
+            _logger.Error("Falha ao testar a posição em modo simulado.", ex);
             WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível testar a posição: {ex.Message}",
@@ -3348,7 +3347,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (Exception ex)
             {
-                Logger.Warning(ex, "Falha ao suspender pré-visualização antes de testar app real.");
+                _logger.Warning(ex, "Falha ao suspender pré-visualização antes de testar app real.");
             }
             OnBeforeMoveWindowUI();
 
@@ -3357,7 +3356,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (Exception ex)
         {
-            Logger.Error("Falha ao executar o aplicativo real durante o teste.", ex);
+            _logger.Error("Falha ao executar o aplicativo real durante o teste.", ex);
             WinForms.MessageBox.Show(
                 this,
                 $"Não foi possível executar o aplicativo real: {ex.Message}",
@@ -3517,7 +3516,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (Exception ex)
             {
-                Logger.Warning(ex, "Falha ao suspender pré-visualização antes do movimento da janela de teste.");
+                _logger.Warning(ex, "Falha ao suspender pré-visualização antes do movimento da janela de teste.");
             }
             try
             {
@@ -4281,7 +4280,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (Exception ex)
             {
-                Logger.Warning(ex, "Falha ao encerrar pré-visualização ao fechar o editor.");
+                _logger.Warning(ex, "Falha ao encerrar pré-visualização ao fechar o editor.");
             }
         }
     }

@@ -163,33 +163,47 @@ internal sealed class TrayMenuManager : IDisposable
 
     private async void OnToggleClick(object? sender, EventArgs e)
     {
-        if (_operationInProgress)
+        try
         {
-            return;
-        }
+            if (_operationInProgress)
+            {
+                return;
+            }
 
-        if (_orchestrator.State is OrchestratorState.Running or OrchestratorState.Recovering)
-        {
-            await ExecuteWithLockAsync(() => _orchestrator.StopAsync());
+            if (_orchestrator.State is OrchestratorState.Running or OrchestratorState.Recovering)
+            {
+                await ExecuteWithLockAsync(() => _orchestrator.StopAsync());
+            }
+            else
+            {
+                await ExecuteWithLockAsync(() => _orchestrator.StartAsync());
+            }
         }
-        else
+        catch (Exception ex)
         {
-            await ExecuteWithLockAsync(() => _orchestrator.StartAsync());
+            Debug.WriteLine($"[ERROR] OnToggleClick: {ex.Message}");
         }
     }
 
     private async void OnReloadClick(object? sender, EventArgs e)
     {
-        if (_operationInProgress)
+        try
         {
-            return;
-        }
+            if (_operationInProgress)
+            {
+                return;
+            }
 
-        await ExecuteWithLockAsync(async () =>
+            await ExecuteWithLockAsync(async () =>
+            {
+                var config = await _loadConfigurationAsync();
+                _applyConfiguration(config);
+            });
+        }
+        catch (Exception ex)
         {
-            var config = await _loadConfigurationAsync();
-            _applyConfiguration(config);
-        });
+            Debug.WriteLine($"[ERROR] OnReloadClick: {ex.Message}");
+        }
     }
 
     private void OnOpenLogsClick(object? sender, EventArgs e)

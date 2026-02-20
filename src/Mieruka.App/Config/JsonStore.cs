@@ -101,6 +101,7 @@ public sealed class JsonStore<T>
 
     private async Task<FileStream> AcquireLockAsync(CancellationToken cancellationToken)
     {
+        const int maxRetries = 120;
         var lockPath = _filePath + ".lock";
         var directory = Path.GetDirectoryName(lockPath);
         if (!string.IsNullOrEmpty(directory))
@@ -108,7 +109,7 @@ public sealed class JsonStore<T>
             Directory.CreateDirectory(directory);
         }
 
-        while (true)
+        for (var attempt = 0; attempt < maxRetries; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -124,8 +125,32 @@ public sealed class JsonStore<T>
             }
             catch (IOException) when (!cancellationToken.IsCancellationRequested)
             {
+                // On the last attempt, try to remove a potentially orphaned lock file.
+                if (attempt == maxRetries - 1)
+                {
+                    TryRemoveOrphanedLock(lockPath);
+                }
+
                 await Task.Delay(_lockRetryDelay, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        throw new TimeoutException($"Failed to acquire file lock for '{_filePath}' after {maxRetries} attempts.");
+    }
+
+    private static void TryRemoveOrphanedLock(string lockPath)
+    {
+        try
+        {
+            var info = new FileInfo(lockPath);
+            if (info.Exists && (DateTime.UtcNow - info.LastWriteTimeUtc).TotalSeconds > 30)
+            {
+                info.Delete();
+            }
+        }
+        catch (IOException)
+        {
+            // Another process may still hold the lock — ignore.
         }
     }
 }

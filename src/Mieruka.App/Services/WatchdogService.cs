@@ -19,7 +19,7 @@ namespace Mieruka.App.Services;
 /// Supervises native applications and browser instances, restarting them when necessary and ensuring
 /// their windows remain in the expected position.
 /// </summary>
-internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
+internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IAsyncDisposable
 {
     private static readonly TimeSpan MonitorInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan BindingRefreshInterval = TimeSpan.FromSeconds(30);
@@ -148,6 +148,38 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// Asynchronously releases the resources associated with the service.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await StopAsync().ConfigureAwait(false);
+
+        lock (_gate)
+        {
+            foreach (var context in _applications.Values)
+            {
+                context.Dispose();
+            }
+
+            foreach (var context in _sites.Values)
+            {
+                context.Dispose();
+            }
+
+            _applications.Clear();
+            _sites.Clear();
+        }
+
+        _httpClient.Dispose();
+        _disposed = true;
     }
 
     /// <summary>

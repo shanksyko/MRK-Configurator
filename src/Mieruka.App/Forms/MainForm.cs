@@ -2774,19 +2774,21 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private sealed class UiTelemetry : ITelemetry
     {
+        private static readonly Serilog.ILogger Logger = Serilog.Log.ForContext<MainForm>();
+
         public void Info(string message, Exception? exception = null)
         {
-            Debug.WriteLine($"[INFO] {message} {exception?.Message}");
+            Logger.Information(exception, message);
         }
 
         public void Warn(string message, Exception? exception = null)
         {
-            Debug.WriteLine($"[WARN] {message} {exception?.Message}");
+            Logger.Warning(exception, message);
         }
 
         public void Error(string message, Exception? exception = null)
         {
-            Debug.WriteLine($"[ERROR] {message} {exception?.Message}");
+            Logger.Error(exception, message);
         }
     }
 }

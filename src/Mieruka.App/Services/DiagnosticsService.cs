@@ -10,7 +10,7 @@ namespace Mieruka.App.Services;
 /// <summary>
 /// Exposes a lightweight HTTP endpoint that reports runtime diagnostics for the application.
 /// </summary>
-public sealed class DiagnosticsService : IDisposable
+public sealed class DiagnosticsService : IDisposable, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -301,6 +301,30 @@ public sealed class DiagnosticsService : IDisposable
         {
             throw new ObjectDisposedException(nameof(DiagnosticsService));
         }
+    }
+
+    /// <summary>
+    /// Asynchronously releases resources used by the service.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
+        try
+        {
+            await StopAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during shutdown.
+        }
+
+        _listener.Close();
     }
 
     /// <summary>

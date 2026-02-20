@@ -17,6 +17,7 @@ namespace Mieruka.App.Config;
 internal sealed class ConfiguratorWorkspace
 {
     private GeneralConfig _baseConfig;
+    private readonly object _monitorLock = new();
     private readonly List<MonitorInfo> _monitors = new();
 
     /// <summary>
@@ -57,7 +58,16 @@ internal sealed class ConfiguratorWorkspace
     /// <summary>
     /// Gets the monitors available in the workspace.
     /// </summary>
-    public IReadOnlyList<MonitorInfo> Monitors => new ReadOnlyCollection<MonitorInfo>(_monitors);
+    public IReadOnlyList<MonitorInfo> Monitors
+    {
+        get
+        {
+            lock (_monitorLock)
+            {
+                return _monitors.ToList().AsReadOnly();
+            }
+        }
+    }
 
     /// <summary>
     /// Attempts to update the monitor topology represented by the workspace.
@@ -67,8 +77,11 @@ internal sealed class ConfiguratorWorkspace
     {
         ArgumentNullException.ThrowIfNull(monitors);
 
-        _monitors.Clear();
-        _monitors.AddRange(monitors);
+        lock (_monitorLock)
+        {
+            _monitors.Clear();
+            _monitors.AddRange(monitors);
+        }
     }
 
     /// <summary>
@@ -88,8 +101,11 @@ internal sealed class ConfiguratorWorkspace
             monitorSnapshot.AddRange(config.Monitors);
         }
 
-        _monitors.Clear();
-        _monitors.AddRange(monitorSnapshot);
+        lock (_monitorLock)
+        {
+            _monitors.Clear();
+            _monitors.AddRange(monitorSnapshot);
+        }
 
         UpdateBindingList(Applications, config.Applications.Select(CloneApp));
         UpdateBindingList(Sites, config.Sites.Select(CloneSite));
@@ -102,7 +118,10 @@ internal sealed class ConfiguratorWorkspace
     /// <returns>Monitor information, when available.</returns>
     public MonitorInfo? FindMonitor(MonitorKey key)
     {
-        return _monitors.FirstOrDefault(m => MonitorKeysEqual(m.Key, key));
+        lock (_monitorLock)
+        {
+            return _monitors.FirstOrDefault(m => MonitorKeysEqual(m.Key, key));
+        }
     }
 
     /// <summary>
@@ -186,7 +205,7 @@ internal sealed class ConfiguratorWorkspace
         {
             SchemaVersion = ConfigSchemaVersion.Latest,
             LegacyVersion = null,
-            Monitors = _monitors.ToList(),
+            Monitors = GetMonitorSnapshot(),
             Applications = Applications.ToList(),
             Sites = Sites.ToList(),
             ZonePresets = ZonePresets.ToList(),
@@ -198,6 +217,14 @@ internal sealed class ConfiguratorWorkspace
 
     private static SiteConfig CloneSite(SiteConfig site)
         => site with { Window = site.Window with { } };
+
+    private List<MonitorInfo> GetMonitorSnapshot()
+    {
+        lock (_monitorLock)
+        {
+            return _monitors.ToList();
+        }
+    }
 
     private static void UpdateBindingList<T>(BindingList<T> target, IEnumerable<T> items)
     {

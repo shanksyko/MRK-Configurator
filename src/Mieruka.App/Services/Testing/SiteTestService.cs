@@ -27,6 +27,8 @@ internal sealed class SiteTestService
     private readonly IDisplayService? _displayService;
     private readonly ITelemetry _telemetry;
     private readonly ILogger _logger = Log.ForContext<SiteTestService>();
+    private CancellationTokenSource? _whitelistCts;
+    private Task? _whitelistTask;
 
     public SiteTestService(ConfiguratorWorkspace workspace, IDisplayService? displayService, ITelemetry telemetry)
     {
@@ -185,8 +187,15 @@ internal sealed class SiteTestService
             return;
         }
 
+        // Cancel any previous whitelist monitoring task.
+        _whitelistCts?.Cancel();
+        try { _whitelistTask?.Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        _whitelistCts?.Dispose();
+
         var tabManager = new TabManager(_telemetry);
         var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        _whitelistCts = cancellation;
+
         var task = Task.Run(async () =>
         {
             try
@@ -203,6 +212,8 @@ internal sealed class SiteTestService
         task.ContinueWith(
             t => _logger.Warning(t.Exception, "Whitelist monitoring faulted."),
             TaskContinuationOptions.OnlyOnFaulted);
+
+        _whitelistTask = task;
     }
 
     private async Task ExecuteLoginAsync(IWebDriver driver, LoginProfile? login, CancellationToken ct)
