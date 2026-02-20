@@ -195,6 +195,11 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
         var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
 
+        // Health Check combo setup
+        cmbHealthCheckType.SelectedIndex = 0;
+        cmbHealthCheckType.SelectedIndexChanged += (_, _) => UpdateHealthCheckFieldsVisibility();
+        UpdateHealthCheckFieldsVisibility();
+
         _tabAplicativosIndex = editorTabs.TabPages.IndexOf(appsTabPage);
         if (_tabAplicativosIndex < 0)
         {
@@ -462,9 +467,20 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 
         // Avançado
         txtNomeAmigavel.Text = programa.Name ?? string.Empty;
+        txtWindowTitle.Text = janela.Title ?? string.Empty;
+        chkAlwaysOnTop.Checked = janela.AlwaysOnTop;
         var wd = programa.Watchdog ?? new WatchdogSettings();
         chkWatchdogEnabled.Checked = wd.Enabled;
         nudWatchdogGrace.Value = AjustarRange(nudWatchdogGrace, wd.RestartGracePeriodSeconds);
+
+        var hc = wd.HealthCheck;
+        cmbHealthCheckType.SelectedIndex = hc is null ? 0 : (int)hc.Type;
+        txtHealthCheckUrl.Text = hc?.Url ?? string.Empty;
+        txtHealthCheckDomSelector.Text = hc?.DomSelector ?? string.Empty;
+        txtHealthCheckContainsText.Text = hc?.ContainsText ?? string.Empty;
+        nudHealthCheckInterval.Value = AjustarRange(nudHealthCheckInterval, hc?.IntervalSeconds ?? 60);
+        nudHealthCheckTimeout.Value = AjustarRange(nudHealthCheckTimeout, hc?.TimeoutSeconds ?? 10);
+        UpdateHealthCheckFieldsVisibility();
 
         var envLines = new System.Text.StringBuilder();
         if (programa.EnvironmentVariables is { Count: > 0 } envDict)
@@ -3636,7 +3652,12 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         var argumentos = string.IsNullOrWhiteSpace(txtArgumentos.Text) ? null : txtArgumentos.Text.Trim();
 
         var janela = chkJanelaTelaCheia.Checked
-            ? new WindowConfig { FullScreen = true }
+            ? new WindowConfig
+            {
+                FullScreen = true,
+                Title = txtWindowTitle.Text.Trim(),
+                AlwaysOnTop = chkAlwaysOnTop.Checked,
+            }
             : new WindowConfig
             {
                 FullScreen = false,
@@ -3644,6 +3665,8 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 Y = (int)nudJanelaY.Value,
                 Width = (int)nudJanelaLargura.Value,
                 Height = (int)nudJanelaAltura.Value,
+                Title = txtWindowTitle.Text.Trim(),
+                AlwaysOnTop = chkAlwaysOnTop.Checked,
             };
 
         var monitorInfo = GetSelectedMonitor();
@@ -3681,6 +3704,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             {
                 Enabled = chkWatchdogEnabled.Checked,
                 RestartGracePeriodSeconds = (int)nudWatchdogGrace.Value,
+                HealthCheck = BuildHealthCheckConfig(),
             },
             EnvironmentVariables = ParseEnvironmentVariables(),
         };
@@ -3704,6 +3728,50 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
 
         return dict;
+    }
+
+    private HealthCheckConfig? BuildHealthCheckConfig()
+    {
+        var type = (HealthCheckKind)cmbHealthCheckType.SelectedIndex;
+        if (type == HealthCheckKind.None)
+            return null;
+
+        return new HealthCheckConfig
+        {
+            Type = type,
+            Url = string.IsNullOrWhiteSpace(txtHealthCheckUrl.Text) ? null : txtHealthCheckUrl.Text.Trim(),
+            DomSelector = string.IsNullOrWhiteSpace(txtHealthCheckDomSelector.Text) ? null : txtHealthCheckDomSelector.Text.Trim(),
+            ContainsText = string.IsNullOrWhiteSpace(txtHealthCheckContainsText.Text) ? null : txtHealthCheckContainsText.Text.Trim(),
+            IntervalSeconds = (int)nudHealthCheckInterval.Value,
+            TimeoutSeconds = (int)nudHealthCheckTimeout.Value,
+        };
+    }
+
+    private void UpdateHealthCheckFieldsVisibility()
+    {
+        var type = (HealthCheckKind)cmbHealthCheckType.SelectedIndex;
+        var showPing = type == HealthCheckKind.Ping || type == HealthCheckKind.Dom;
+        var showDom = type == HealthCheckKind.Dom;
+
+        txtHealthCheckUrl.Visible = showPing;
+        txtHealthCheckUrl.Parent!.GetContainerControl()?.ToString(); // force layout
+        nudHealthCheckInterval.Visible = showPing;
+        nudHealthCheckTimeout.Visible = showPing;
+
+        txtHealthCheckDomSelector.Visible = showDom;
+        txtHealthCheckContainsText.Visible = showDom;
+
+        // Also toggle labels
+        foreach (Control ctrl in txtHealthCheckUrl.Parent!.Controls)
+        {
+            if (ctrl is Label lbl)
+            {
+                if (lbl.Name == "lblHealthCheckUrl" || lbl.Name == "lblHealthCheckInterval" || lbl.Name == "lblHealthCheckTimeout")
+                    lbl.Visible = showPing;
+                if (lbl.Name == "lblHealthCheckDomSelector" || lbl.Name == "lblHealthCheckContainsText")
+                    lbl.Visible = showDom;
+            }
+        }
     }
 
     private void InitializeCycleMetadata(IList<ProgramaConfig>? profileApps, ProgramaConfig? programa)

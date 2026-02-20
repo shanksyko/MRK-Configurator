@@ -65,6 +65,14 @@ partial class AppEditorForm
     internal CheckBox chkWatchdogEnabled = null!;
     internal NumericUpDown nudWatchdogGrace = null!;
     internal ToolTip editorToolTip = null!;
+    internal TextBox txtWindowTitle = null!;
+    internal CheckBox chkAlwaysOnTop = null!;
+    internal ComboBox cmbHealthCheckType = null!;
+    internal TextBox txtHealthCheckUrl = null!;
+    internal TextBox txtHealthCheckDomSelector = null!;
+    internal TextBox txtHealthCheckContainsText = null!;
+    internal NumericUpDown nudHealthCheckInterval = null!;
+    internal NumericUpDown nudHealthCheckTimeout = null!;
 
     protected override void Dispose(bool disposing)
     {
@@ -154,11 +162,28 @@ partial class AppEditorForm
         txtEnvVars = new TextBox();
         chkWatchdogEnabled = new CheckBox();
         nudWatchdogGrace = new NumericUpDown();
+        txtWindowTitle = new TextBox();
+        chkAlwaysOnTop = new CheckBox();
+        cmbHealthCheckType = new ComboBox();
+        txtHealthCheckUrl = new TextBox();
+        txtHealthCheckDomSelector = new TextBox();
+        txtHealthCheckContainsText = new TextBox();
+        nudHealthCheckInterval = new NumericUpDown();
+        nudHealthCheckTimeout = new NumericUpDown();
         var tlpAvancado = new TableLayoutPanel();
         var lblNomeAmigavel = new Label();
+        var lblWindowTitle = new Label();
         var lblEnvVars = new Label();
         var lblWatchdogGrace = new Label();
+        var lblHealthCheckType = new Label();
+        var lblHealthCheckUrl = new Label();
+        var lblHealthCheckDomSelector = new Label();
+        var lblHealthCheckContainsText = new Label();
+        var lblHealthCheckInterval = new Label();
+        var lblHealthCheckTimeout = new Label();
         ((ISupportInitialize)nudWatchdogGrace).BeginInit();
+        ((ISupportInitialize)nudHealthCheckInterval).BeginInit();
+        ((ISupportInitialize)nudHealthCheckTimeout).BeginInit();
         tlpExecutavel.SuspendLayout();
         flowAppType.SuspendLayout();
         ((ISupportInitialize)bsCycle).BeginInit();
@@ -1006,25 +1031,49 @@ partial class AppEditorForm
         tlpAvancado.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tlpAvancado.Controls.Add(lblNomeAmigavel, 0, 0);
         tlpAvancado.Controls.Add(txtNomeAmigavel, 1, 0);
-        tlpAvancado.Controls.Add(chkWatchdogEnabled, 0, 1);
+        tlpAvancado.Controls.Add(lblWindowTitle, 0, 1);
+        tlpAvancado.Controls.Add(txtWindowTitle, 1, 1);
+        tlpAvancado.Controls.Add(chkAlwaysOnTop, 0, 2);
+        tlpAvancado.SetColumnSpan(chkAlwaysOnTop, 2);
+        tlpAvancado.Controls.Add(chkWatchdogEnabled, 0, 3);
         tlpAvancado.SetColumnSpan(chkWatchdogEnabled, 2);
-        tlpAvancado.Controls.Add(lblWatchdogGrace, 0, 2);
-        tlpAvancado.Controls.Add(nudWatchdogGrace, 1, 2);
-        tlpAvancado.Controls.Add(lblEnvVars, 0, 3);
+        tlpAvancado.Controls.Add(lblWatchdogGrace, 0, 4);
+        tlpAvancado.Controls.Add(nudWatchdogGrace, 1, 4);
+        tlpAvancado.Controls.Add(lblHealthCheckType, 0, 5);
+        tlpAvancado.Controls.Add(cmbHealthCheckType, 1, 5);
+        tlpAvancado.Controls.Add(lblHealthCheckUrl, 0, 6);
+        tlpAvancado.Controls.Add(txtHealthCheckUrl, 1, 6);
+        tlpAvancado.Controls.Add(lblHealthCheckDomSelector, 0, 7);
+        tlpAvancado.Controls.Add(txtHealthCheckDomSelector, 1, 7);
+        tlpAvancado.Controls.Add(lblHealthCheckContainsText, 0, 8);
+        tlpAvancado.Controls.Add(txtHealthCheckContainsText, 1, 8);
+        tlpAvancado.Controls.Add(lblHealthCheckInterval, 0, 9);
+        tlpAvancado.Controls.Add(nudHealthCheckInterval, 1, 9);
+        tlpAvancado.Controls.Add(lblHealthCheckTimeout, 0, 10);
+        tlpAvancado.Controls.Add(nudHealthCheckTimeout, 1, 10);
+        tlpAvancado.Controls.Add(lblEnvVars, 0, 11);
         tlpAvancado.SetColumnSpan(lblEnvVars, 2);
-        tlpAvancado.Controls.Add(txtEnvVars, 0, 4);
+        tlpAvancado.Controls.Add(txtEnvVars, 0, 12);
         tlpAvancado.SetColumnSpan(txtEnvVars, 2);
         tlpAvancado.Dock = DockStyle.Fill;
         tlpAvancado.Location = new System.Drawing.Point(8, 8);
         tlpAvancado.Margin = new Padding(0);
         tlpAvancado.Name = "tlpAvancado";
         tlpAvancado.Padding = new Padding(0, 0, 0, 8);
-        tlpAvancado.RowCount = 5;
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tlpAvancado.RowCount = 13;
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 0 Nome
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 1 Window Title
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 2 AlwaysOnTop
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 3 Watchdog
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 4 Grace
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 5 HC Type
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 6 HC URL
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 7 HC DOM
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 8 HC Text
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 9 HC Interval
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 10 HC Timeout
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 11 EnvVars label
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // 12 EnvVars text
         tlpAvancado.Size = new System.Drawing.Size(1016, 604);
         tlpAvancado.TabIndex = 0;
         //
@@ -1046,13 +1095,41 @@ partial class AppEditorForm
         txtNomeAmigavel.TabIndex = 1;
         txtNomeAmigavel.PlaceholderText = "Nome opcional para exibição";
         //
+        // lblWindowTitle
+        //
+        lblWindowTitle.AutoSize = true;
+        lblWindowTitle.Margin = new Padding(0, 0, 8, 8);
+        lblWindowTitle.Name = "lblWindowTitle";
+        lblWindowTitle.Size = new System.Drawing.Size(100, 15);
+        lblWindowTitle.TabIndex = 2;
+        lblWindowTitle.Text = "Título da janela";
+        //
+        // txtWindowTitle
+        //
+        txtWindowTitle.Dock = DockStyle.Fill;
+        txtWindowTitle.Margin = new Padding(0, 0, 0, 8);
+        txtWindowTitle.Name = "txtWindowTitle";
+        txtWindowTitle.Size = new System.Drawing.Size(900, 23);
+        txtWindowTitle.TabIndex = 3;
+        txtWindowTitle.PlaceholderText = "Nome lógico da janela (opcional)";
+        //
+        // chkAlwaysOnTop
+        //
+        chkAlwaysOnTop.AutoSize = true;
+        chkAlwaysOnTop.Margin = new Padding(0, 4, 0, 8);
+        chkAlwaysOnTop.Name = "chkAlwaysOnTop";
+        chkAlwaysOnTop.Size = new System.Drawing.Size(200, 19);
+        chkAlwaysOnTop.TabIndex = 4;
+        chkAlwaysOnTop.Text = "Manter janela sempre no topo";
+        chkAlwaysOnTop.UseVisualStyleBackColor = true;
+        //
         // chkWatchdogEnabled
         //
         chkWatchdogEnabled.AutoSize = true;
-        chkWatchdogEnabled.Margin = new Padding(0, 0, 0, 8);
+        chkWatchdogEnabled.Margin = new Padding(0, 8, 0, 8);
         chkWatchdogEnabled.Name = "chkWatchdogEnabled";
         chkWatchdogEnabled.Size = new System.Drawing.Size(200, 19);
-        chkWatchdogEnabled.TabIndex = 2;
+        chkWatchdogEnabled.TabIndex = 5;
         chkWatchdogEnabled.Text = "Supervisão (Watchdog) ativada";
         chkWatchdogEnabled.Checked = true;
         chkWatchdogEnabled.UseVisualStyleBackColor = true;
@@ -1063,7 +1140,7 @@ partial class AppEditorForm
         lblWatchdogGrace.Margin = new Padding(0, 0, 8, 8);
         lblWatchdogGrace.Name = "lblWatchdogGrace";
         lblWatchdogGrace.Size = new System.Drawing.Size(160, 15);
-        lblWatchdogGrace.TabIndex = 3;
+        lblWatchdogGrace.TabIndex = 6;
         lblWatchdogGrace.Text = "Carência pós-reinício (seg)";
         //
         // nudWatchdogGrace
@@ -1073,8 +1150,119 @@ partial class AppEditorForm
         nudWatchdogGrace.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
         nudWatchdogGrace.Name = "nudWatchdogGrace";
         nudWatchdogGrace.Size = new System.Drawing.Size(160, 23);
-        nudWatchdogGrace.TabIndex = 4;
+        nudWatchdogGrace.TabIndex = 7;
         nudWatchdogGrace.Value = new decimal(new int[] { 15, 0, 0, 0 });
+        //
+        // lblHealthCheckType
+        //
+        lblHealthCheckType.AutoSize = true;
+        lblHealthCheckType.Margin = new Padding(0, 0, 8, 8);
+        lblHealthCheckType.Name = "lblHealthCheckType";
+        lblHealthCheckType.Size = new System.Drawing.Size(100, 15);
+        lblHealthCheckType.TabIndex = 8;
+        lblHealthCheckType.Text = "Health Check";
+        //
+        // cmbHealthCheckType
+        //
+        cmbHealthCheckType.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbHealthCheckType.FormattingEnabled = true;
+        cmbHealthCheckType.Items.AddRange(new object[] { "Nenhum", "Ping (HTTP)", "DOM (conteúdo)" });
+        cmbHealthCheckType.Margin = new Padding(0, 0, 0, 8);
+        cmbHealthCheckType.Name = "cmbHealthCheckType";
+        cmbHealthCheckType.Size = new System.Drawing.Size(200, 23);
+        cmbHealthCheckType.TabIndex = 9;
+        //
+        // lblHealthCheckUrl
+        //
+        lblHealthCheckUrl.AutoSize = true;
+        lblHealthCheckUrl.Margin = new Padding(0, 0, 8, 8);
+        lblHealthCheckUrl.Name = "lblHealthCheckUrl";
+        lblHealthCheckUrl.Size = new System.Drawing.Size(80, 15);
+        lblHealthCheckUrl.TabIndex = 10;
+        lblHealthCheckUrl.Text = "URL de verificação";
+        //
+        // txtHealthCheckUrl
+        //
+        txtHealthCheckUrl.Dock = DockStyle.Fill;
+        txtHealthCheckUrl.Margin = new Padding(0, 0, 0, 8);
+        txtHealthCheckUrl.Name = "txtHealthCheckUrl";
+        txtHealthCheckUrl.Size = new System.Drawing.Size(900, 23);
+        txtHealthCheckUrl.TabIndex = 11;
+        txtHealthCheckUrl.PlaceholderText = "https://exemplo.com/health";
+        //
+        // lblHealthCheckDomSelector
+        //
+        lblHealthCheckDomSelector.AutoSize = true;
+        lblHealthCheckDomSelector.Margin = new Padding(0, 0, 8, 8);
+        lblHealthCheckDomSelector.Name = "lblHealthCheckDomSelector";
+        lblHealthCheckDomSelector.Size = new System.Drawing.Size(80, 15);
+        lblHealthCheckDomSelector.TabIndex = 12;
+        lblHealthCheckDomSelector.Text = "Seletor DOM";
+        //
+        // txtHealthCheckDomSelector
+        //
+        txtHealthCheckDomSelector.Dock = DockStyle.Fill;
+        txtHealthCheckDomSelector.Margin = new Padding(0, 0, 0, 8);
+        txtHealthCheckDomSelector.Name = "txtHealthCheckDomSelector";
+        txtHealthCheckDomSelector.Size = new System.Drawing.Size(900, 23);
+        txtHealthCheckDomSelector.TabIndex = 13;
+        txtHealthCheckDomSelector.PlaceholderText = "#status, .content, div.main";
+        //
+        // lblHealthCheckContainsText
+        //
+        lblHealthCheckContainsText.AutoSize = true;
+        lblHealthCheckContainsText.Margin = new Padding(0, 0, 8, 8);
+        lblHealthCheckContainsText.Name = "lblHealthCheckContainsText";
+        lblHealthCheckContainsText.Size = new System.Drawing.Size(80, 15);
+        lblHealthCheckContainsText.TabIndex = 14;
+        lblHealthCheckContainsText.Text = "Texto esperado";
+        //
+        // txtHealthCheckContainsText
+        //
+        txtHealthCheckContainsText.Dock = DockStyle.Fill;
+        txtHealthCheckContainsText.Margin = new Padding(0, 0, 0, 8);
+        txtHealthCheckContainsText.Name = "txtHealthCheckContainsText";
+        txtHealthCheckContainsText.Size = new System.Drawing.Size(900, 23);
+        txtHealthCheckContainsText.TabIndex = 15;
+        txtHealthCheckContainsText.PlaceholderText = "Texto que deve estar presente na página";
+        //
+        // lblHealthCheckInterval
+        //
+        lblHealthCheckInterval.AutoSize = true;
+        lblHealthCheckInterval.Margin = new Padding(0, 0, 8, 8);
+        lblHealthCheckInterval.Name = "lblHealthCheckInterval";
+        lblHealthCheckInterval.Size = new System.Drawing.Size(100, 15);
+        lblHealthCheckInterval.TabIndex = 16;
+        lblHealthCheckInterval.Text = "Intervalo (seg)";
+        //
+        // nudHealthCheckInterval
+        //
+        nudHealthCheckInterval.Margin = new Padding(0, 0, 8, 8);
+        nudHealthCheckInterval.Maximum = new decimal(new int[] { 3600, 0, 0, 0 });
+        nudHealthCheckInterval.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
+        nudHealthCheckInterval.Name = "nudHealthCheckInterval";
+        nudHealthCheckInterval.Size = new System.Drawing.Size(160, 23);
+        nudHealthCheckInterval.TabIndex = 17;
+        nudHealthCheckInterval.Value = new decimal(new int[] { 60, 0, 0, 0 });
+        //
+        // lblHealthCheckTimeout
+        //
+        lblHealthCheckTimeout.AutoSize = true;
+        lblHealthCheckTimeout.Margin = new Padding(0, 0, 8, 8);
+        lblHealthCheckTimeout.Name = "lblHealthCheckTimeout";
+        lblHealthCheckTimeout.Size = new System.Drawing.Size(100, 15);
+        lblHealthCheckTimeout.TabIndex = 18;
+        lblHealthCheckTimeout.Text = "Timeout (seg)";
+        //
+        // nudHealthCheckTimeout
+        //
+        nudHealthCheckTimeout.Margin = new Padding(0, 0, 8, 8);
+        nudHealthCheckTimeout.Maximum = new decimal(new int[] { 120, 0, 0, 0 });
+        nudHealthCheckTimeout.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+        nudHealthCheckTimeout.Name = "nudHealthCheckTimeout";
+        nudHealthCheckTimeout.Size = new System.Drawing.Size(160, 23);
+        nudHealthCheckTimeout.TabIndex = 19;
+        nudHealthCheckTimeout.Value = new decimal(new int[] { 10, 0, 0, 0 });
         //
         // lblEnvVars
         //
@@ -1082,7 +1270,7 @@ partial class AppEditorForm
         lblEnvVars.Margin = new Padding(0, 8, 0, 4);
         lblEnvVars.Name = "lblEnvVars";
         lblEnvVars.Size = new System.Drawing.Size(260, 15);
-        lblEnvVars.TabIndex = 5;
+        lblEnvVars.TabIndex = 20;
         lblEnvVars.Text = "Variáveis de ambiente (CHAVE=VALOR por linha)";
         //
         // txtEnvVars
@@ -1094,7 +1282,7 @@ partial class AppEditorForm
         txtEnvVars.ScrollBars = ScrollBars.Vertical;
         txtEnvVars.Font = new System.Drawing.Font(System.Drawing.FontFamily.GenericMonospace, 9F);
         txtEnvVars.Size = new System.Drawing.Size(1016, 400);
-        txtEnvVars.TabIndex = 6;
+        txtEnvVars.TabIndex = 21;
         txtEnvVars.PlaceholderText = "DISPLAY=:0\nLANG=pt_BR.UTF-8";
         //
         // painelRodape
@@ -1178,6 +1366,8 @@ partial class AppEditorForm
         tpAvancado.ResumeLayout(false);
         tpAvancado.PerformLayout();
         ((ISupportInitialize)nudWatchdogGrace).EndInit();
+        ((ISupportInitialize)nudHealthCheckInterval).EndInit();
+        ((ISupportInitialize)nudHealthCheckTimeout).EndInit();
         painelRodape.ResumeLayout(false);
         painelRodape.PerformLayout();
         tlpGeral.ResumeLayout(false);
