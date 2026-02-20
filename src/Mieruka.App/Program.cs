@@ -7,10 +7,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.App.Config;
 using Mieruka.App.Forms;
+using Mieruka.App.Forms.Inventory;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Config;
+using Mieruka.Core.Data;
+using Mieruka.Core.Data.Services;
 using Mieruka.Core.Diagnostics;
+using Mieruka.Core.Models;
 using Mieruka.Preview;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -41,16 +46,25 @@ internal static class Program
         {
             Log.Information("Iniciando Mieruka Configurator.");
 
-            var graphicsOptions = LoadPreviewGraphicsOptions();
-            PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
+            while (true)
+            {
+                using var launcher = new LauncherForm();
+                var result = launcher.ShowDialog();
+                if (result != WinForms.DialogResult.OK)
+                    break;
 
-            // Defer GPU environment checks to a background thread so the main
-            // window appears immediately while the heavier COM/DX11 probes run.
-            _ = Task.Run(() => InitializeGpuCapture(graphicsOptions));
-
-            var mainForm = new MainForm(graphicsOptions);
-            TabLayoutGuard.Attach(mainForm);
-            WinForms.Application.Run(mainForm);
+                switch (launcher.SelectedChoice)
+                {
+                    case LauncherChoice.Configurator:
+                        RunConfigurator();
+                        break;
+                    case LauncherChoice.Inventory:
+                        RunInventory();
+                        break;
+                    default:
+                        return;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -61,6 +75,35 @@ internal static class Program
         {
             Log.CloseAndFlush();
         }
+    }
+
+    private static void RunConfigurator()
+    {
+        var graphicsOptions = LoadPreviewGraphicsOptions();
+        PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
+
+        _ = Task.Run(() => InitializeGpuCapture(graphicsOptions));
+
+        var mainForm = new MainForm(graphicsOptions);
+        TabLayoutGuard.Attach(mainForm);
+        WinForms.Application.Run(mainForm);
+    }
+
+    private static void RunInventory()
+    {
+        var dbPath = Path.Combine(AppContext.BaseDirectory, "mieruka.db");
+        var optionsBuilder = new DbContextOptionsBuilder<MierukaDbContext>();
+        optionsBuilder.UseSqlite($"Data Source={dbPath}");
+        using var db = new MierukaDbContext(optionsBuilder.Options);
+        db.Database.EnsureCreated();
+
+        var inventoryService = new InventoryService(db);
+        var categoryService = new InventoryCategoryService(db);
+        var movementService = new InventoryMovementService(db);
+        var maintenanceService = new MaintenanceRecordService(db);
+
+        var form = new InventoryForm(db, inventoryService, categoryService, movementService, maintenanceService);
+        WinForms.Application.Run(form);
     }
 
     private static void OnThreadException(object? sender, ThreadExceptionEventArgs e)
