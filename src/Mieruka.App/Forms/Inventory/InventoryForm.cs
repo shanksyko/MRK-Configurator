@@ -76,7 +76,6 @@ public sealed class InventoryForm : Form
 
         // ── ToolStrip ──────────────────────────────────────────────────────────
         BuildToolStrip();
-        Controls.Add(_toolStrip);
 
         // ── Main SplitContainer ───────────────────────────────────────────────
         var split = new SplitContainer
@@ -92,25 +91,22 @@ public sealed class InventoryForm : Form
         _treeCategories.AfterSelect += (_, _) => ApplyFilter();
         split.Panel1.Controls.Add(_treeCategories);
 
-        // Right panel — search bar + grid + status bar
-        var rightPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            RowCount = 3,
-            ColumnCount = 1,
-            Padding = new Padding(4, 0, 4, 4),
-        };
-        rightPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-        rightPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        rightPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        // Right panel — grid + search bar + status bar (search below the grid)
+        var rightPanel = new Panel { Dock = DockStyle.Fill };
 
-        // Search bar
+        // Status bar (Dock.Bottom — added first so it docks last)
+        _lblCount.AutoSize = true;
+        _lblCount.Text = "0 itens";
+        _lblCount.Dock = DockStyle.Bottom;
+        _lblCount.Padding = new Padding(4, 4, 0, 4);
+
+        // Search bar (Dock.Bottom — sits above status bar)
         var searchPanel = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Bottom,
+            Height = 36,
             AutoSize = false,
-            Height = 32,
-            Padding = new Padding(0, 4, 0, 4),
+            Padding = new Padding(4, 4, 4, 4),
             WrapContents = false,
         };
 
@@ -132,20 +128,23 @@ public sealed class InventoryForm : Form
         searchPanel.Controls.Add(_txtSearch);
         searchPanel.Controls.Add(lblStatus);
         searchPanel.Controls.Add(_cmbStatus);
-        rightPanel.Controls.Add(searchPanel, 0, 0);
 
-        // Grid
+        // Grid (Dock.Fill — fills remaining space above search bar)
         BuildGrid();
-        rightPanel.Controls.Add(_grid, 0, 1);
+        _grid.Dock = DockStyle.Fill;
 
-        // Status bar
-        _lblCount.AutoSize = true;
-        _lblCount.Text = "0 itens";
-        _lblCount.Margin = new Padding(2, 2, 0, 0);
-        rightPanel.Controls.Add(_lblCount, 0, 2);
+        // WinForms docking z-order: last-added control docks first.
+        // Add Fill first, then Bottom controls, so Bottom reserves space before Fill expands.
+        rightPanel.Controls.Add(_grid);
+        rightPanel.Controls.Add(searchPanel);
+        rightPanel.Controls.Add(_lblCount);
 
         split.Panel2.Controls.Add(rightPanel);
+
+        // WinForms z-order: last-added control is docked first.
+        // Add Fill first, then Top last, so ToolStrip reserves space before split expands.
         Controls.Add(split);
+        Controls.Add(_toolStrip);
     }
 
     private void BuildToolStrip()

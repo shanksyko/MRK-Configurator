@@ -460,8 +460,10 @@ partial class AppEditorForm
         //
         // tpJanela
         //
-        tpJanela.Controls.Add(tlpMonitorPreview);
+        // tpJanela — WinForms z-order: last-added is docked first.
+        // Add Fill first, then Right last, so preview reserves space before tlpJanela expands.
         tpJanela.Controls.Add(tlpJanela);
+        tpJanela.Controls.Add(tlpMonitorPreview);
         tpJanela.Location = new System.Drawing.Point(4, 24);
         tpJanela.Margin = new Padding(8);
         tpJanela.Name = "tpJanela";

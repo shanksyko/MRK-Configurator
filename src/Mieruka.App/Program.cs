@@ -7,14 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.App.Config;
 using Mieruka.App.Forms;
-using Mieruka.App.Forms.Inventory;
 using Mieruka.App.Services.Ui;
 using Mieruka.Core.Config;
-using Mieruka.Core.Data;
-using Mieruka.Core.Data.Services;
 using Mieruka.Core.Diagnostics;
-using Mieruka.Core.Models;
-using Mieruka.Core.Security.Data;
 using Mieruka.Preview;
 using Serilog;
 using Serilog.Events;
@@ -46,32 +41,16 @@ internal static class Program
         {
             Log.Information("Iniciando Mieruka Configurator.");
 
-            InitializeDatabases();
+            var graphicsOptions = LoadPreviewGraphicsOptions();
+            PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
 
-            while (true)
-            {
-                using var launcher = new LauncherForm();
-                WinForms.Application.Run(launcher);
+            // Defer GPU environment checks to a background thread so the main
+            // window appears immediately while the heavier COM/DX11 probes run.
+            _ = Task.Run(() => InitializeGpuCapture(graphicsOptions));
 
-                if (launcher.DialogResult != WinForms.DialogResult.OK)
-                {
-                    break;
-                }
-
-                switch (launcher.SelectedChoice)
-                {
-                    case LauncherChoice.Configurator:
-                        RunConfigurator();
-                        break;
-
-                    case LauncherChoice.Inventory:
-                        RunInventory();
-                        break;
-
-                    default:
-                        break;
-                }
-            }
+            var mainForm = new MainForm(graphicsOptions);
+            TabLayoutGuard.Attach(mainForm);
+            WinForms.Application.Run(mainForm);
         }
         catch (Exception ex)
         {
@@ -81,47 +60,6 @@ internal static class Program
         finally
         {
             Log.CloseAndFlush();
-        }
-    }
-
-    private static void RunConfigurator()
-    {
-        var graphicsOptions = LoadPreviewGraphicsOptions();
-        PreviewDiagnostics.Configure(graphicsOptions.Diagnostics);
-
-        _ = Task.Run(() => InitializeGpuCapture(graphicsOptions))
-            .ContinueWith(
-                t => Log.Warning(t.Exception, "GPU capture initialization failed."),
-                TaskContinuationOptions.OnlyOnFaulted);
-
-        var mainForm = new MainForm(graphicsOptions);
-        TabLayoutGuard.Attach(mainForm);
-        WinForms.Application.Run(mainForm);
-    }
-
-    private static void RunInventory()
-    {
-        try
-        {
-            using var db = new MierukaDbContext();
-            var inventoryService = new InventoryService(db);
-            var categoryService = new InventoryCategoryService(db);
-            var movementService = new InventoryMovementService(db);
-            var maintenanceService = new MaintenanceRecordService(db);
-
-            using var form = new InventoryForm(
-                db, inventoryService, categoryService,
-                movementService, maintenanceService);
-            WinForms.Application.Run(form);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Falha ao executar módulo de inventário.");
-            WinForms.MessageBox.Show(
-                $"Erro ao abrir inventário: {ex.Message}",
-                "Inventário",
-                WinForms.MessageBoxButtons.OK,
-                WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -135,31 +73,6 @@ internal static class Program
             }
 
             Log.Error(e.Exception, "ThreadException");
-        }
-    }
-
-    private static void InitializeDatabases()
-    {
-        try
-        {
-            using var mierukaDb = new MierukaDbContext();
-            mierukaDb.EnsureDatabaseConfigured();
-            Log.Information("MierukaDbContext: banco configurado.");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Falha ao inicializar MierukaDbContext.");
-        }
-
-        try
-        {
-            using var securityDb = new SecurityDbContext();
-            securityDb.EnsureDatabaseConfigured();
-            Log.Information("SecurityDbContext: banco configurado.");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Falha ao inicializar SecurityDbContext.");
         }
     }
 

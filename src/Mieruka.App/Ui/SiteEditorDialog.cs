@@ -73,7 +73,6 @@ internal sealed class SiteEditorDialog : WinForms.Form
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
-        DoubleBuffered = true;
         Text = template is null ? "Adicionar Site" : "Editar Site";
 
         var baseFont = SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont;
@@ -83,7 +82,8 @@ internal sealed class SiteEditorDialog : WinForms.Form
             Dock = WinForms.DockStyle.Fill,
             ColumnCount = 2,
             Padding = new WinForms.Padding(16),
-            AutoScroll = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
         layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 28f));
         layout.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, 72f));
