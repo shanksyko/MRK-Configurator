@@ -1,4 +1,6 @@
+using System;
 using System.Windows.Forms;
+using Serilog;
 
 namespace Mieruka.App.Forms;
 
@@ -28,9 +30,9 @@ public partial class MainForm : Form
             {
                 window.Close();
             }
-            catch
+            catch (Exception ex)
             {
-                // Swallow legacy close failures.
+                Log.ForContext<MainForm>().Debug(ex, "Falha ao fechar janela de teste no caminho back-compat.");
             }
 
             _ = ResumeHostFromTestWindowAsync();

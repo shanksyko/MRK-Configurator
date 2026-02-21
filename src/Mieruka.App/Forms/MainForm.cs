@@ -526,12 +526,21 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             {
                 _profileExecutor?.Stop();
                 _profileExecutionCts?.Cancel();
-                // Use non-blocking wait with a timeout to avoid freezing the UI thread.
-                _profileExecutionTask?.ContinueWith(_ => { }, TaskScheduler.Default).Wait(TimeSpan.FromSeconds(3));
+
+                // Never block form shutdown on background profile completion.
+                var executionTask = _profileExecutionTask;
+                if (executionTask is not null && !executionTask.IsCompleted)
+                {
+                    _ = executionTask.ContinueWith(
+                        t => _telemetry.Warn("Falha ao finalizar tarefa de execução de perfil durante encerramento.", t.Exception?.GetBaseException()),
+                        CancellationToken.None,
+                        TaskContinuationOptions.OnlyOnFaulted,
+                        TaskScheduler.Default);
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore failures while stopping background execution during shutdown.
+                _telemetry.Warn("Falha ao interromper execução de perfil durante encerramento.", ex);
             }
         }
 
@@ -1276,24 +1285,11 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     {
         foreach (var context in _monitorCardOrder)
         {
-            try
-            {
-                // Use a bounded wait during form closing to ensure cleanup
-                // completes without risking a deadlock on the UI thread.
-                context.CloseTestWindowAsync().Wait(TimeSpan.FromSeconds(3));
-            }
-            catch (AggregateException)
-            {
-                // Best-effort cleanup during shutdown.
-            }
-            catch (ObjectDisposedException)
-            {
-                // Safe to ignore during shutdown.
-            }
-            catch (InvalidOperationException)
-            {
-                // Safe to ignore during shutdown.
-            }
+            _ = context.CloseTestWindowAsync().ContinueWith(
+                t => _telemetry.Warn("Falha ao fechar janela de teste durante limpeza dos cards.", t.Exception?.GetBaseException()),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
         }
 
         foreach (var host in _monitorHosts)

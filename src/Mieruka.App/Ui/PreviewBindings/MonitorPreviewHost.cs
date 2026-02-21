@@ -22,6 +22,7 @@ namespace Mieruka.App.Ui.PreviewBindings;
 /// </summary>
 public sealed partial class MonitorPreviewHost : IDisposable
 {
+    private static readonly ILogger StaticLogger = Log.ForContext<MonitorPreviewHost>();
     private static readonly TimeSpan DefaultFrameThrottle = PreviewSettings.CalculateFrameInterval(PreviewSettings.Default.TargetFpsGdi);
     private static readonly TimeSpan GdiFrameThrottle = PreviewSettings.Default.GetGdiFrameInterval();
     private static readonly TimeSpan GpuFrameThrottle = PreviewSettings.Default.GetGpuFrameInterval();
@@ -2715,9 +2716,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
             {
                 frame.Dispose();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore failures while disposing pending frames.
+                _logger.Debug(ex, "Falha ao descartar frame pendente durante limpeza.");
             }
         }
     }
@@ -2740,9 +2741,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore stop failures.
+            StaticLogger.Debug(ex, "Falha ao parar captura durante descarte seguro.");
         }
 
         try
@@ -2761,9 +2762,9 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore dispose failures.
+            StaticLogger.Debug(ex, "Falha ao descartar captura durante descarte seguro.");
         }
     }
 

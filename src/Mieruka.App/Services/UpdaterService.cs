@@ -19,6 +19,7 @@ namespace Mieruka.App.Services;
 public sealed class UpdaterService : IDisposable
 {
     private const int MinimumIntervalMinutes = 5;
+    private static readonly HttpClient SharedHttpClient = new();
 
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new(JsonSerializerDefaults.General)
     {
@@ -47,8 +48,8 @@ public sealed class UpdaterService : IDisposable
     public UpdaterService(ITelemetry? telemetry = null, HttpClient? httpClient = null, string? applicationDirectory = null)
     {
         _telemetry = telemetry ?? NullTelemetry.Instance;
-        _httpClient = httpClient ?? new HttpClient();
-        _ownsHttpClient = httpClient is null;
+        _httpClient = httpClient ?? SharedHttpClient;
+        _ownsHttpClient = false;
         _applicationDirectory = ResolveApplicationDirectory(applicationDirectory);
         _currentVersion = ResolveCurrentVersion();
     }

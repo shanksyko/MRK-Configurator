@@ -163,36 +163,35 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         };
         _windowBoundsDebounce.Tick += WindowBoundsDebounceOnTick;
 
-        var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor nÃ£o foi carregado.");
-        var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos nÃ£o foi configurada.");
-        var sitesTabPage = tabSites ?? throw new InvalidOperationException("A aba de sites nÃ£o foi configurada.");
-        _ = pnlBrowserPanel ?? throw new InvalidOperationException("O painel de opÃ§Ãµes de navegador nÃ£o foi configurado.");
-        var salvar = btnSalvar ?? throw new InvalidOperationException("O botÃ£o Salvar nÃ£o foi carregado.");
-        _ = btnCancelar ?? throw new InvalidOperationException("O botÃ£o Cancelar nÃ£o foi carregado.");
-        var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites nÃ£o foi carregado.");
-        var appsTab = appsTabControl ?? throw new InvalidOperationException("A aba de aplicativos nÃ£o foi carregada.");
-        _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider nÃ£o foi configurado.");
-        var cycleSource = bsCycle ?? throw new InvalidOperationException("A fonte de dados do ciclo nÃ£o foi configurada.");
-        var cycleGrid = dgvCycle ?? throw new InvalidOperationException("O grid de ciclo nÃ£o foi carregado.");
-        _ = tlpCycle ?? throw new InvalidOperationException("O layout do ciclo nÃ£o foi carregado.");
-        _ = btnCycleUp ?? throw new InvalidOperationException("O botÃ£o de mover para cima do ciclo nÃ£o foi carregado.");
-        _ = btnCycleDown ?? throw new InvalidOperationException("O botÃ£o de mover para baixo do ciclo nÃ£o foi carregado.");
+        var editorTabs = tabEditor ?? throw new InvalidOperationException("O TabControl do editor não foi carregado.");
+        var appsTabPage = tabAplicativos ?? throw new InvalidOperationException("A aba de aplicativos não foi configurada.");
+        var sitesTabPage = tabSites ?? throw new InvalidOperationException("A aba de sites não foi configurada.");
+        _ = pnlBrowserPanel ?? throw new InvalidOperationException("O painel de opções de navegador não foi configurado.");
+        var salvar = btnSalvar ?? throw new InvalidOperationException("O botão Salvar não foi carregado.");
+        _ = btnCancelar ?? throw new InvalidOperationException("O botão Cancelar não foi carregado.");
+        var sitesControl = sitesEditorControl ?? throw new InvalidOperationException("O controle de sites não foi carregado.");
+        var appsTab = appsTabControl ?? throw new InvalidOperationException("A aba de aplicativos não foi carregada.");
+        _ = errorProvider ?? throw new InvalidOperationException("O ErrorProvider não foi configurado.");
+        var cycleSource = bsCycle ?? throw new InvalidOperationException("A fonte de dados do ciclo não foi configurada.");
+        var cycleGrid = dgvCycle ?? throw new InvalidOperationException("O grid de ciclo não foi carregado.");
+        _ = tlpCycle ?? throw new InvalidOperationException("O layout do ciclo não foi carregado.");
+        _ = btnCycleUp ?? throw new InvalidOperationException("O botão de mover para cima do ciclo não foi carregado.");
+        _ = btnCycleDown ?? throw new InvalidOperationException("O botão de mover para baixo do ciclo não foi carregado.");
 
-        _ = rbExe ?? throw new InvalidOperationException("O seletor de executÃ¡vel nÃ£o foi carregado.");
-        _ = rbBrowser ?? throw new InvalidOperationException("O seletor de navegador nÃ£o foi carregado.");
-        _ = btnBrowseExe ?? throw new InvalidOperationException("O botÃ£o de procurar executÃ¡veis nÃ£o foi carregado.");
-        _ = cmbBrowserEngine ?? throw new InvalidOperationException("O seletor de motor de navegador nÃ£o foi carregado.");
-        _ = lblBrowserDetected ?? throw new InvalidOperationException("O rÃ³tulo de navegadores detectados nÃ£o foi carregado.");
-        _ = pnlBrowserPanel ?? throw new InvalidOperationException("O painel de opÃ§Ãµes de navegador nÃ£o foi carregado.");
+        _ = rbExe ?? throw new InvalidOperationException("O seletor de executável não foi carregado.");
+        _ = rbBrowser ?? throw new InvalidOperationException("O seletor de navegador não foi carregado.");
+        _ = btnBrowseExe ?? throw new InvalidOperationException("O botão de procurar executáveis não foi carregado.");
+        _ = cmbBrowserEngine ?? throw new InvalidOperationException("O seletor de motor de navegador não foi carregado.");
+        _ = lblBrowserDetected ?? throw new InvalidOperationException("O rótulo de navegadores detectados não foi carregado.");
 
-        _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de prÃ©-visualizaÃ§Ã£o nÃ£o foi configurado.");
-        var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de prÃ©-visualizaÃ§Ã£o do monitor nÃ£o foi configurado.");
+        _ = tlpMonitorPreview ?? throw new InvalidOperationException("O painel de pré-visualização não foi configurado.");
+        var previewControl = monitorPreviewDisplay ?? throw new InvalidOperationException("O controle de pré-visualização do monitor não foi configurado.");
         previewControl.IsCoordinateAnalysisMode = true;
         previewControl.EditSessionId = _editSessionId;
         previewControl.PreviewStarted += MonitorPreviewDisplayOnPreviewStarted;
         previewControl.PreviewStopped += MonitorPreviewDisplayOnPreviewStopped;
-        _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rÃ³tulo de coordenadas do monitor nÃ£o foi configurado.");
-        var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela nÃ£o foi configurada.");
+        _ = lblMonitorCoordinates ?? throw new InvalidOperationException("O rótulo de coordenadas do monitor não foi configurado.");
+        var janelaTab = tpJanela ?? throw new InvalidOperationException("A aba de janela não foi configurada.");
 
         // Health Check combo setup
         cmbHealthCheckType.SelectedIndex = 0;
@@ -202,13 +201,13 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         _tabAplicativosIndex = editorTabs.TabPages.IndexOf(appsTabPage);
         if (_tabAplicativosIndex < 0)
         {
-            throw new InvalidOperationException("A aba de aplicativos nÃ£o foi adicionada ao controle de abas.");
+            throw new InvalidOperationException("A aba de aplicativos não foi adicionada ao controle de abas.");
         }
 
         _tabSitesIndex = editorTabs.TabPages.IndexOf(sitesTabPage);
         if (_tabSitesIndex < 0)
         {
-            throw new InvalidOperationException("A aba de sites nÃ£o foi adicionada ao controle de abas.");
+            throw new InvalidOperationException("A aba de sites não foi adicionada ao controle de abas.");
         }
 
         AcceptButton = salvar;
