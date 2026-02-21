@@ -45,13 +45,13 @@ internal static class BrowserRegistry
         new(
             Id: "firefox",
             DisplayName: "Mozilla Firefox",
-            Engine: null,
+            Engine: BrowserType.Firefox,
             Executables: new[] { "firefox.exe", "firefox" },
             WindowsRelativeDirectories: new[] { @"Mozilla Firefox" }),
         new(
             Id: "brave",
             DisplayName: "Brave",
-            Engine: null,
+            Engine: BrowserType.Brave,
             Executables: new[] { "brave.exe", "brave-browser", "brave" },
             WindowsRelativeDirectories: new[] { @"BraveSoftware\\Brave-Browser\\Application" }),
         new(

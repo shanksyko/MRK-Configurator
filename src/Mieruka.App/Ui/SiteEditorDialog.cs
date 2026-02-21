@@ -32,7 +32,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
     private readonly WinForms.Label _browserStatusLabel;
     private readonly WinForms.TextBox _userDataBox;
     private readonly WinForms.TextBox _profileBox;
-    private readonly WinForms.TextBox _argsBox;
+    private readonly BrowserArgumentsPanel _argsPanel;
     private readonly WinForms.TextBox _allowedHostsBox;
     private readonly WinForms.TextBox _commandPreviewBox;
     private readonly WinForms.CheckBox _appModeCheck;
@@ -110,6 +110,11 @@ internal sealed class SiteEditorDialog : WinForms.Form
         }
         _browserBox.SelectedIndexChanged += (_, _) =>
         {
+            if (_browserBox.SelectedItem is BrowserType selectedBrowser)
+            {
+                _argsPanel?.SetBrowser(selectedBrowser);
+            }
+
             UpdateBrowserDetectionStatus();
             UpdateBrowserPreview();
         };
@@ -122,15 +127,12 @@ internal sealed class SiteEditorDialog : WinForms.Form
             ForeColor = Drawing.Color.Gray,
         };
 
-        _argsBox = new WinForms.TextBox
+        _argsPanel = new BrowserArgumentsPanel
         {
             Dock = WinForms.DockStyle.Fill,
-            Font = baseFont,
-            Multiline = true,
-            ScrollBars = ScrollBars.Vertical,
-            Height = 80,
+            Height = 280,
         };
-        _argsBox.TextChanged += (_, _) => UpdateBrowserPreview();
+        _argsPanel.ArgumentsChanged += (_, _) => UpdateBrowserPreview();
 
         _allowedHostsBox = new WinForms.TextBox
         {
@@ -216,7 +218,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         AddRow(layout, "", _browserStatusLabel);
         AddRow(layout, "User data dir", _userDataBox);
         AddRow(layout, "Profile dir", _profileBox);
-        AddRow(layout, "Argumentos (um por linha)", _argsBox);
+        AddRow(layout, "Argumentos do navegador", _argsPanel);
         AddRow(layout, "Linha de comando", _commandPreviewBox);
         AddRow(layout, "Hosts permitidos (um por linha)", _allowedHostsBox);
         AddRow(layout, string.Empty, _appModeCheck);
@@ -490,7 +492,8 @@ internal sealed class SiteEditorDialog : WinForms.Form
         _browserBox.SelectedItem = template.Browser;
         _userDataBox.Text = template.UserDataDirectory ?? string.Empty;
         _profileBox.Text = template.ProfileDirectory ?? string.Empty;
-        _argsBox.Text = string.Join(Environment.NewLine, template.BrowserArguments ?? Array.Empty<string>());
+        _argsPanel.SetBrowser(template.Browser);
+        _argsPanel.LoadArguments(template.BrowserArguments);
         _allowedHostsBox.Text = string.Join(Environment.NewLine, template.AllowedTabHosts ?? Array.Empty<string>());
         _appModeCheck.Checked = template.AppMode;
         _kioskCheck.Checked = template.KioskMode;
@@ -591,12 +594,11 @@ internal sealed class SiteEditorDialog : WinForms.Form
             AddArgument(FormatArgument("--app", url));
         }
 
-        foreach (var line in _argsBox.Lines ?? Array.Empty<string>())
+        foreach (var selectedArg in _argsPanel.GetSelectedArguments())
         {
-            var trimmed = line.Trim();
-            if (!string.IsNullOrEmpty(trimmed))
+            if (!string.IsNullOrEmpty(selectedArg))
             {
-                AddArgument(trimmed);
+                AddArgument(selectedArg);
             }
         }
 
@@ -740,7 +742,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
             Browser = _browserBox.SelectedItem is BrowserType browser ? browser : BrowserType.Chrome,
             UserDataDirectory = string.IsNullOrWhiteSpace(_userDataBox.Text) ? null : _userDataBox.Text.Trim(),
             ProfileDirectory = string.IsNullOrWhiteSpace(_profileBox.Text) ? null : _profileBox.Text.Trim(),
-            BrowserArguments = ParseLines(_argsBox.Text),
+            BrowserArguments = _argsPanel.GetSelectedArguments(),
             AllowedTabHosts = ParseLines(_allowedHostsBox.Text),
             AppMode = _appModeCheck.Checked,
             KioskMode = _kioskCheck.Checked,

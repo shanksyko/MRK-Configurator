@@ -325,12 +325,7 @@ internal sealed class SiteTestService
 
     private IEnumerable<string> GetGlobalBrowserArguments(BrowserType browser)
     {
-        return browser switch
-        {
-            BrowserType.Chrome => _workspace.BrowserArguments.Chrome ?? Array.Empty<string>(),
-            BrowserType.Edge => _workspace.BrowserArguments.Edge ?? Array.Empty<string>(),
-            _ => Array.Empty<string>(),
-        };
+        return _workspace.BrowserArguments.ForBrowser(browser);
     }
 
     private static bool ContainsArgument(IEnumerable<string> arguments, string name, bool matchByPrefix = false)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Mieruka.Core.Models;
@@ -16,4 +17,29 @@ public sealed record class BrowserArgumentsSettings
     /// Global arguments applied to Microsoft Edge instances.
     /// </summary>
     public IReadOnlyList<string> Edge { get; init; } = [];
+
+    /// <summary>
+    /// Global arguments applied to Mozilla Firefox instances.
+    /// </summary>
+    public IReadOnlyList<string> Firefox { get; init; } = [];
+
+    /// <summary>
+    /// Global arguments applied to Brave Browser instances.
+    /// </summary>
+    public IReadOnlyList<string> Brave { get; init; } = [];
+
+    /// <summary>
+    /// Returns the global arguments for the specified browser type.
+    /// </summary>
+    public IReadOnlyList<string> ForBrowser(BrowserType browser)
+    {
+        return browser switch
+        {
+            BrowserType.Chrome => Chrome,
+            BrowserType.Edge => Edge,
+            BrowserType.Firefox => Firefox,
+            BrowserType.Brave => Brave,
+            _ => Array.Empty<string>(),
+        };
+    }
 }
