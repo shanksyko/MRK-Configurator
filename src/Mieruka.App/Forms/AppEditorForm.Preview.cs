@@ -6,6 +6,7 @@ using Drawing = System.Drawing;
 using WinForms = System.Windows.Forms;
 using Mieruka.App.Forms.Controls;
 using Mieruka.App.Interop;
+using Mieruka.App.Services;
 using Mieruka.App.Services.Ui;
 using Mieruka.App.Ui.PreviewBindings;
 using Mieruka.Core.Models;
@@ -14,9 +15,21 @@ namespace Mieruka.App.Forms;
 
 public partial class AppEditorForm
 {
-  private void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
+  private async void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
   {
-    UpdatePreviewVisibility();
+    try
+    {
+      UpdatePreviewVisibility();
+
+      if (tabEditor?.SelectedTab is { } tab && ReferenceEquals(tab, tabAplicativos))
+      {
+        await EnsureAppsListAsync().ConfigureAwait(true);
+      }
+    }
+    catch (Exception ex)
+    {
+      _logger.Warning(ex, "Falha não tratada em TabEditor_SelectedIndexChanged.");
+    }
   }
 
   private async void cboMonitores_SelectedIndexChanged(object? sender, EventArgs e)
@@ -80,7 +93,7 @@ public partial class AppEditorForm
       if (monitorChanged && monitorPreviewDisplay is not null)
       {
         ResetSnapshotPipelineState();
-        await monitorPreviewDisplay.BindAsync(option.Monitor, autoStart: false).ConfigureAwait(true);
+        await monitorPreviewDisplay.BindAsync(option.Monitor, autoStart: true).ConfigureAwait(true);
         _monitorPreviewMonitorId = option.MonitorId;
       }
 
@@ -181,6 +194,59 @@ public partial class AppEditorForm
 
     UpdateMonitorCoordinateLabel(e.MonitorPoint);
     _lastClickMonitorPoint = e.MonitorPoint;
+
+    if (e.MonitorPoint is { } clickPt && !chkJanelaTelaCheia.Checked)
+    {
+      ShowCoordinateInputDialog(clickPt);
+    }
+  }
+
+  private void ShowCoordinateInputDialog(Drawing.PointF clickPt)
+  {
+    if (!TryGetWindowInputs(out var xInput, out var yInput, out var widthInput, out var heightInput))
+    {
+      return;
+    }
+
+    var monitor = GetSelectedMonitor();
+    if (monitor is null)
+    {
+      return;
+    }
+
+    var monitorBounds = WindowPlacementHelper.GetMonitorBounds(monitor);
+    var monitorWidth = Math.Max(1, monitorBounds.Width > 0 ? monitorBounds.Width : monitor.Width);
+    var monitorHeight = Math.Max(1, monitorBounds.Height > 0 ? monitorBounds.Height : monitor.Height);
+
+    var clickX = (int)Math.Round(clickPt.X);
+    var clickY = (int)Math.Round(clickPt.Y);
+    var currentWidth = (int)widthInput.Value;
+    var currentHeight = (int)heightInput.Value;
+
+    using var dialog = new CoordinateInputDialog(
+        clickX, clickY,
+        currentWidth, currentHeight,
+        monitorWidth, monitorHeight);
+
+    if (dialog.ShowDialog(this) != WinForms.DialogResult.OK)
+    {
+      return;
+    }
+
+    _suppressWindowInputHandlers = true;
+    try
+    {
+      widthInput.Value = dialog.SelectedWidth;
+      heightInput.Value = dialog.SelectedHeight;
+      xInput.Value = dialog.SelectedX;
+      yInput.Value = dialog.SelectedY;
+    }
+    finally
+    {
+      _suppressWindowInputHandlers = false;
+    }
+
+    InvalidateWindowPreviewOverlay();
   }
 
   private void MonitorPreviewDisplay_MonitorMouseLeft(object? sender, EventArgs e)

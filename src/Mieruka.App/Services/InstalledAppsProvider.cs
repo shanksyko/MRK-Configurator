@@ -219,7 +219,7 @@ public sealed class InstalledAppsProvider
 
     private static string? ResolveFromAppPaths(string displayName)
     {
-        var best = ((string? Path, int Score)) (null, -1);
+        var best = ((string? Path, int Score))(null, -1);
         var roots = new[]
         {
             Registry.CurrentUser,
@@ -381,8 +381,9 @@ public sealed class InstalledAppsProvider
                 TryReleaseComObject(shell);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to resolve shortcut target for {ShortcutPath}.", shortcutPath);
             return null;
         }
     }
@@ -401,9 +402,9 @@ public sealed class InstalledAppsProvider
                 Marshal.FinalReleaseComObject(value);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore cleanup failures.
+            Logger.Debug(ex, "Failed to release COM object.");
         }
     }
 
@@ -578,12 +579,24 @@ public sealed class InstalledAppsProvider
         var trimmed = value.Trim();
         trimmed = Environment.ExpandEnvironmentVariables(trimmed);
 
-        if (trimmed.StartsWith('"') && trimmed.Count(c => c == '"') >= 2)
+        if (trimmed.StartsWith('"'))
         {
-            var secondQuote = trimmed.IndexOf('"', 1);
-            if (secondQuote > 1)
+            var quoteCount = 0;
+            foreach (var c in trimmed)
             {
-                trimmed = trimmed.Substring(1, secondQuote - 1);
+                if (c == '"' && ++quoteCount >= 2)
+                {
+                    break;
+                }
+            }
+
+            if (quoteCount >= 2)
+            {
+                var secondQuote = trimmed.IndexOf('"', 1);
+                if (secondQuote > 1)
+                {
+                    trimmed = trimmed[1..secondQuote];
+                }
             }
         }
         else
@@ -594,7 +607,7 @@ public sealed class InstalledAppsProvider
                 var index = trimmed.IndexOf(separator);
                 if (index > 0)
                 {
-                    trimmed = trimmed.Substring(0, index);
+                    trimmed = trimmed[..index];
                     break;
                 }
             }

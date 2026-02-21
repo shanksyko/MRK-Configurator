@@ -186,7 +186,7 @@ public partial class AppEditorForm
             _suppressMonitorComboEvents = false;
         }
 
-        _ = UpdateMonitorPreviewAsync();
+        _ = UpdateMonitorPreviewSafelyAsync();
     }
 
     private bool SelectMonitorById(string? identifier)

@@ -367,6 +367,17 @@ partial class MainForm
         dgvProgramas.AutoGenerateColumns = false;
         dgvProgramas.BackgroundColor = System.Drawing.SystemColors.Window;
         dgvProgramas.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        dgvProgramas.ColumnHeadersDefaultCellStyle.Font = new System.Drawing.Font("Segoe UI Semibold", 9F);
+        dgvProgramas.ColumnHeadersDefaultCellStyle.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+        dgvProgramas.EnableHeadersVisualStyles = false;
+        dgvProgramas.AlternatingRowsDefaultCellStyle.BackColor = System.Drawing.Color.FromArgb(245, 248, 255);
+        dgvProgramas.DefaultCellStyle.SelectionBackColor = System.Drawing.Color.FromArgb(0, 120, 215);
+        dgvProgramas.DefaultCellStyle.SelectionForeColor = System.Drawing.Color.White;
+        dgvProgramas.DefaultCellStyle.Padding = new Padding(4, 2, 4, 2);
+        dgvProgramas.RowTemplate.Height = 28;
+        dgvProgramas.BorderStyle = BorderStyle.None;
+        dgvProgramas.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        dgvProgramas.GridColor = System.Drawing.Color.FromArgb(230, 230, 230);
         dgvProgramas.Columns.AddRange(new DataGridViewColumn[] { colId, colExecutavel, colAutoStart });
         dgvProgramas.DataSource = bsProgramas;
         dgvProgramas.Dock = DockStyle.Fill;
@@ -414,144 +425,182 @@ partial class MainForm
         //
         painelBotoes.AutoSize = true;
         painelBotoes.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        var sep1 = new Label { AutoSize = false, Height = 1, Dock = DockStyle.Top, BorderStyle = BorderStyle.Fixed3D, Margin = new Padding(0, 4, 0, 4) };
+        var sep2 = new Label { AutoSize = false, Height = 1, Dock = DockStyle.Top, BorderStyle = BorderStyle.Fixed3D, Margin = new Padding(0, 4, 0, 4) };
         painelBotoes.Controls.Add(btnAdicionar);
         painelBotoes.Controls.Add(btnEditar);
         painelBotoes.Controls.Add(btnDuplicar);
         painelBotoes.Controls.Add(btnExcluir);
+        painelBotoes.Controls.Add(sep1);
         painelBotoes.Controls.Add(btnExecutar);
         painelBotoes.Controls.Add(btnParar);
+        painelBotoes.Controls.Add(btnTestarItem);
+        painelBotoes.Controls.Add(sep2);
         painelBotoes.Controls.Add(btnSalvarPerfil);
         painelBotoes.Controls.Add(btnExecutarPerfil);
         painelBotoes.Controls.Add(btnPararPerfil);
-        painelBotoes.Controls.Add(btnTestarItem);
         painelBotoes.Dock = DockStyle.Fill;
         painelBotoes.FlowDirection = FlowDirection.TopDown;
         painelBotoes.Location = new System.Drawing.Point(1032, 11);
         painelBotoes.Margin = new Padding(0);
         painelBotoes.Name = "painelBotoes";
-        painelBotoes.Padding = new Padding(0, 0, 0, 8);
-        painelBotoes.Size = new System.Drawing.Size(140, 648);
+        painelBotoes.Padding = new Padding(4, 0, 0, 8);
+        painelBotoes.Size = new System.Drawing.Size(150, 648);
         painelBotoes.TabIndex = 1;
         painelBotoes.WrapContents = false;
         //
         // btnAdicionar
         //
-        btnAdicionar.AutoSize = true;
-        btnAdicionar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnAdicionar.Margin = new Padding(0, 0, 0, 8);
+        btnAdicionar.FlatStyle = FlatStyle.Flat;
+        btnAdicionar.BackColor = System.Drawing.Color.FromArgb(0, 120, 215);
+        btnAdicionar.ForeColor = System.Drawing.Color.White;
+        btnAdicionar.Margin = new Padding(0, 0, 0, 6);
         btnAdicionar.Name = "btnAdicionar";
-        btnAdicionar.Size = new System.Drawing.Size(84, 25);
+        btnAdicionar.Size = new System.Drawing.Size(130, 30);
         btnAdicionar.TabIndex = 0;
-        btnAdicionar.Text = "Adicionar";
-        btnAdicionar.UseVisualStyleBackColor = true;
+        btnAdicionar.Text = "\u2795  Adicionar";
+        btnAdicionar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnAdicionar.Padding = new Padding(8, 0, 0, 0);
+        btnAdicionar.UseVisualStyleBackColor = false;
+        btnAdicionar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnAdicionar.Click += btnAdicionar_Click;
         //
         // btnEditar
         //
-        btnEditar.AutoSize = true;
-        btnEditar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnEditar.Margin = new Padding(0, 0, 0, 8);
+        btnEditar.FlatStyle = FlatStyle.Flat;
+        btnEditar.Margin = new Padding(0, 0, 0, 6);
         btnEditar.Name = "btnEditar";
-        btnEditar.Size = new System.Drawing.Size(61, 25);
+        btnEditar.Size = new System.Drawing.Size(130, 30);
         btnEditar.TabIndex = 1;
-        btnEditar.Text = "Editar";
+        btnEditar.Text = "\u270F\uFE0F  Editar";
+        btnEditar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnEditar.Padding = new Padding(8, 0, 0, 0);
         btnEditar.UseVisualStyleBackColor = true;
+        btnEditar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnEditar.Click += btnEditar_Click;
         //
         // btnDuplicar
         //
-        btnDuplicar.AutoSize = true;
-        btnDuplicar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnDuplicar.Margin = new Padding(0, 0, 0, 8);
+        btnDuplicar.FlatStyle = FlatStyle.Flat;
+        btnDuplicar.Margin = new Padding(0, 0, 0, 6);
         btnDuplicar.Name = "btnDuplicar";
-        btnDuplicar.Size = new System.Drawing.Size(75, 25);
+        btnDuplicar.Size = new System.Drawing.Size(130, 30);
         btnDuplicar.TabIndex = 2;
-        btnDuplicar.Text = "Duplicar";
+        btnDuplicar.Text = "\uD83D\uDCCB  Duplicar";
+        btnDuplicar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnDuplicar.Padding = new Padding(8, 0, 0, 0);
         btnDuplicar.UseVisualStyleBackColor = true;
+        btnDuplicar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnDuplicar.Click += btnDuplicar_Click;
         //
         // btnExcluir
         //
-        btnExcluir.AutoSize = true;
-        btnExcluir.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnExcluir.Margin = new Padding(0, 0, 0, 8);
+        btnExcluir.FlatStyle = FlatStyle.Flat;
+        btnExcluir.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
+        btnExcluir.ForeColor = System.Drawing.Color.White;
+        btnExcluir.Margin = new Padding(0, 0, 0, 6);
         btnExcluir.Name = "btnExcluir";
-        btnExcluir.Size = new System.Drawing.Size(63, 25);
+        btnExcluir.Size = new System.Drawing.Size(130, 30);
         btnExcluir.TabIndex = 3;
-        btnExcluir.Text = "Excluir";
-        btnExcluir.UseVisualStyleBackColor = true;
+        btnExcluir.Text = "\u2716  Excluir";
+        btnExcluir.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnExcluir.Padding = new Padding(8, 0, 0, 0);
+        btnExcluir.UseVisualStyleBackColor = false;
+        btnExcluir.Cursor = System.Windows.Forms.Cursors.Hand;
         btnExcluir.Click += btnExcluir_Click;
         //
         // btnExecutar
         //
-        btnExecutar.AutoSize = true;
-        btnExecutar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnExecutar.Margin = new Padding(0, 0, 0, 8);
+        btnExecutar.FlatStyle = FlatStyle.Flat;
+        btnExecutar.BackColor = System.Drawing.Color.FromArgb(40, 167, 69);
+        btnExecutar.ForeColor = System.Drawing.Color.White;
+        btnExecutar.Margin = new Padding(0, 0, 0, 6);
         btnExecutar.Name = "btnExecutar";
-        btnExecutar.Size = new System.Drawing.Size(70, 25);
+        btnExecutar.Size = new System.Drawing.Size(130, 30);
         btnExecutar.TabIndex = 4;
-        btnExecutar.Text = "Executar";
-        btnExecutar.UseVisualStyleBackColor = true;
+        btnExecutar.Text = "\u25B6  Executar";
+        btnExecutar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnExecutar.Padding = new Padding(8, 0, 0, 0);
+        btnExecutar.UseVisualStyleBackColor = false;
+        btnExecutar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnExecutar.Click += btnExecutar_Click;
         //
         // btnParar
         //
-        btnParar.AutoSize = true;
-        btnParar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnParar.Margin = new Padding(0, 0, 0, 8);
+        btnParar.FlatStyle = FlatStyle.Flat;
+        btnParar.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
+        btnParar.ForeColor = System.Drawing.Color.White;
+        btnParar.Margin = new Padding(0, 0, 0, 6);
         btnParar.Name = "btnParar";
-        btnParar.Size = new System.Drawing.Size(51, 25);
+        btnParar.Size = new System.Drawing.Size(130, 30);
         btnParar.TabIndex = 5;
-        btnParar.Text = "Parar";
-        btnParar.UseVisualStyleBackColor = true;
+        btnParar.Text = "\u23F9  Parar";
+        btnParar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnParar.Padding = new Padding(8, 0, 0, 0);
+        btnParar.UseVisualStyleBackColor = false;
+        btnParar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnParar.Click += btnParar_Click;
         //
         // btnSalvarPerfil
         //
-        btnSalvarPerfil.AutoSize = true;
-        btnSalvarPerfil.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnSalvarPerfil.Margin = new Padding(0, 0, 0, 8);
+        btnSalvarPerfil.FlatStyle = FlatStyle.Flat;
+        btnSalvarPerfil.Margin = new Padding(0, 0, 0, 6);
         btnSalvarPerfil.Name = "btnSalvarPerfil";
-        btnSalvarPerfil.Size = new System.Drawing.Size(94, 25);
+        btnSalvarPerfil.Size = new System.Drawing.Size(130, 30);
         btnSalvarPerfil.TabIndex = 6;
-        btnSalvarPerfil.Text = "Salvar perfil";
+        btnSalvarPerfil.Text = "\uD83D\uDCBE  Salvar perfil";
+        btnSalvarPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnSalvarPerfil.Padding = new Padding(8, 0, 0, 0);
         btnSalvarPerfil.UseVisualStyleBackColor = true;
+        btnSalvarPerfil.Cursor = System.Windows.Forms.Cursors.Hand;
         btnSalvarPerfil.Click += btnSalvarPerfil_Click;
         //
         // btnExecutarPerfil
         //
-        btnExecutarPerfil.AutoSize = true;
-        btnExecutarPerfil.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnExecutarPerfil.Margin = new Padding(0, 0, 0, 8);
+        btnExecutarPerfil.FlatStyle = FlatStyle.Flat;
+        btnExecutarPerfil.BackColor = System.Drawing.Color.FromArgb(40, 167, 69);
+        btnExecutarPerfil.ForeColor = System.Drawing.Color.White;
+        btnExecutarPerfil.Margin = new Padding(0, 0, 0, 6);
         btnExecutarPerfil.Name = "btnExecutarPerfil";
-        btnExecutarPerfil.Size = new System.Drawing.Size(108, 25);
+        btnExecutarPerfil.Size = new System.Drawing.Size(130, 30);
         btnExecutarPerfil.TabIndex = 7;
-        btnExecutarPerfil.Text = "Executar perfil";
-        btnExecutarPerfil.UseVisualStyleBackColor = true;
+        btnExecutarPerfil.Text = "\u25B6  Exec. perfil";
+        btnExecutarPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnExecutarPerfil.Padding = new Padding(8, 0, 0, 0);
+        btnExecutarPerfil.UseVisualStyleBackColor = false;
+        btnExecutarPerfil.Cursor = System.Windows.Forms.Cursors.Hand;
         btnExecutarPerfil.Click += btnExecutarPerfil_Click;
         //
         // btnPararPerfil
         //
-        btnPararPerfil.AutoSize = true;
-        btnPararPerfil.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnPararPerfil.Margin = new Padding(0, 0, 0, 8);
+        btnPararPerfil.FlatStyle = FlatStyle.Flat;
+        btnPararPerfil.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
+        btnPararPerfil.ForeColor = System.Drawing.Color.White;
+        btnPararPerfil.Margin = new Padding(0, 0, 0, 6);
         btnPararPerfil.Name = "btnPararPerfil";
-        btnPararPerfil.Size = new System.Drawing.Size(85, 25);
+        btnPararPerfil.Size = new System.Drawing.Size(130, 30);
         btnPararPerfil.TabIndex = 8;
-        btnPararPerfil.Text = "Parar perfil";
-        btnPararPerfil.UseVisualStyleBackColor = true;
+        btnPararPerfil.Text = "\u23F9  Parar perfil";
+        btnPararPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnPararPerfil.Padding = new Padding(8, 0, 0, 0);
+        btnPararPerfil.UseVisualStyleBackColor = false;
+        btnPararPerfil.Cursor = System.Windows.Forms.Cursors.Hand;
         btnPararPerfil.Click += btnPararPerfil_Click;
         //
         // btnTestarItem
         //
-        btnTestarItem.AutoSize = true;
-        btnTestarItem.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        btnTestarItem.Margin = new Padding(0);
+        btnTestarItem.FlatStyle = FlatStyle.Flat;
+        btnTestarItem.BackColor = System.Drawing.Color.FromArgb(255, 152, 0);
+        btnTestarItem.ForeColor = System.Drawing.Color.White;
+        btnTestarItem.Margin = new Padding(0, 0, 0, 6);
         btnTestarItem.Name = "btnTestarItem";
-        btnTestarItem.Size = new System.Drawing.Size(85, 25);
+        btnTestarItem.Size = new System.Drawing.Size(130, 30);
         btnTestarItem.TabIndex = 9;
-        btnTestarItem.Text = "Testar item";
-        btnTestarItem.UseVisualStyleBackColor = true;
+        btnTestarItem.Text = "\uD83E\uDDEA  Testar item";
+        btnTestarItem.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        btnTestarItem.Padding = new Padding(8, 0, 0, 0);
+        btnTestarItem.UseVisualStyleBackColor = false;
+        btnTestarItem.Cursor = System.Windows.Forms.Cursors.Hand;
         btnTestarItem.Click += btnTestarItem_Click;
         //
         // errorProvider
@@ -590,6 +639,7 @@ partial class MainForm
         Padding = new Padding(0);
         StartPosition = FormStartPosition.CenterScreen;
         Text = "Mieruka Configurator";
+        Icon = new System.Drawing.Icon(System.IO.Path.Combine(System.AppContext.BaseDirectory, "Properties", "app.ico"));
         menuPrincipal.ResumeLayout(false);
         menuPrincipal.PerformLayout();
         layoutPrincipal.ResumeLayout(false);

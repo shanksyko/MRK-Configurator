@@ -90,13 +90,31 @@ internal sealed class TrayMenuManager : IDisposable
 
         _notifyIcon = new WinForms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = LoadAppIcon(),
             Visible = true,
             ContextMenuStrip = _contextMenu,
         };
 
         _orchestrator.StateChanged += OnOrchestratorStateChanged;
         UpdateMenuState();
+    }
+
+    private static Drawing.Icon LoadAppIcon()
+    {
+        try
+        {
+            var icoPath = Path.Combine(AppContext.BaseDirectory, "Properties", "app.ico");
+            if (File.Exists(icoPath))
+            {
+                return new Drawing.Icon(icoPath);
+            }
+        }
+        catch
+        {
+            // Fall through to default icon.
+        }
+
+        return SystemIcons.Application;
     }
 
     /// <summary>

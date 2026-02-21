@@ -14,6 +14,9 @@ using Mieruka.Core.Data;
 using Mieruka.Core.Data.Services;
 using Mieruka.Core.Diagnostics;
 using Mieruka.Core.Models;
+using Mieruka.App.Forms.Security;
+using Mieruka.Core.Security.Data;
+using Mieruka.Core.Security.Services;
 using Mieruka.Preview;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -44,7 +47,26 @@ internal static class Program
 
         try
         {
-            Log.Information("Iniciando Mieruka Configurator.");
+            Log.Information("Iniciando Mieruka Configurator v1.5.0.");
+
+            // Initialize security database
+            using var securityDb = new SecurityDbContext();
+            securityDb.EnsureDatabaseConfigured();
+
+            var auditLogService = new AuditLogService(securityDb);
+            var authService = new AuthenticationService(securityDb, auditLogService);
+
+            // Show login form
+            using var loginForm = new LoginForm(authService);
+            if (loginForm.ShowDialog() != WinForms.DialogResult.OK || !loginForm.LoginSuccessful)
+            {
+                Log.Information("Login cancelado pelo usuário. Encerrando aplicação.");
+                return;
+            }
+
+            Log.Information("Usuário autenticado: {Username}, Role: {Role}",
+                loginForm.AuthenticatedUser?.Username,
+                loginForm.AuthenticatedUser?.Role);
 
             while (true)
             {

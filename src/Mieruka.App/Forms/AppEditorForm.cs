@@ -304,12 +304,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         UpdateMonitorCoordinateLabel(null);
 
         Disposed += AppEditorForm_Disposed;
-        Shown += async (_, __) =>
+        Shown += (_, __) =>
         {
-            if (rbExe?.Checked == true)
-            {
-                await EnsureAppsListAsync().ConfigureAwait(true);
-            }
+            // Apps list is loaded lazily when the user switches to the "Aplicativos" tab.
         };
 
         editorTabs.SelectedIndexChanged += TabEditor_SelectedIndexChanged;
@@ -325,7 +322,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             chkAutoStart.Checked = true;
             chkJanelaTelaCheia.Checked = true;
-            _ = UpdateMonitorPreviewAsync();
+            _ = UpdateMonitorPreviewSafelyAsync();
         }
 
         appsTab.ExecutablePath = txtExecutavel.Text;

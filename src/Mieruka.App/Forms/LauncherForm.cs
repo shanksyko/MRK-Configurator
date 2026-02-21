@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Drawing;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace Mieruka.App.Forms;
@@ -18,36 +19,43 @@ public sealed class LauncherForm : Form
 
     public LauncherForm()
     {
-        Text = "MRK Configurator";
-        ClientSize = new Size(520, 320);
+        Text = "Apps";
+        ClientSize = new Size(520, 360);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         DoubleBuffered = true;
 
+        // Load app icon
+        var icoPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Properties", "app.ico");
+        if (System.IO.File.Exists(icoPath))
+            Icon = new Icon(icoPath);
+
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            RowCount = 3,
+            RowCount = 4,
             ColumnCount = 2,
             Padding = new Padding(24),
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // row 0: title
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // row 1: subtitle
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // row 2: buttons
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // row 3: version
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
 
         // Title
         var lblTitle = new Label
         {
-            Text = "MRK Configurator",
+            Text = "Apps",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI", 18f, FontStyle.Bold),
             ForeColor = Color.FromArgb(50, 50, 50),
-            Margin = new Padding(0, 0, 0, 8),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
         };
         layout.Controls.Add(lblTitle, 0, 0);
         layout.SetColumnSpan(lblTitle, 2);
@@ -56,20 +64,19 @@ public sealed class LauncherForm : Form
         var lblSubtitle = new Label
         {
             Text = "Selecione o módulo para iniciar:",
-            Dock = DockStyle.Top,
-            TextAlign = ContentAlignment.TopCenter,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI", 10f, FontStyle.Regular),
             ForeColor = Color.Gray,
             AutoSize = true,
-            Margin = new Padding(0, 0, 0, 16),
+            Margin = new Padding(0, 0, 0, 12),
         };
-
-        var subtitlePanel = new Panel { Dock = DockStyle.Fill };
-        subtitlePanel.Controls.Add(lblSubtitle);
+        layout.Controls.Add(lblSubtitle, 0, 1);
+        layout.SetColumnSpan(lblSubtitle, 2);
 
         // Buttons panel
         var btnInventory = CreateModuleButton(
-            "Inventário",
+            "📦 Inventário",
             "Gerenciamento de ativos,\ncategorias e movimentações",
             Color.FromArgb(0, 120, 215));
         btnInventory.Click += (_, _) =>
@@ -80,7 +87,7 @@ public sealed class LauncherForm : Form
         };
 
         var btnConfigurator = CreateModuleButton(
-            "MRK Configurator",
+            "⚙ Configurator",
             "Configuração de monitores,\nsites e aplicativos",
             Color.FromArgb(16, 124, 16));
         btnConfigurator.Click += (_, _) =>
@@ -90,20 +97,22 @@ public sealed class LauncherForm : Form
             Close();
         };
 
-        layout.Controls.Add(btnInventory, 0, 1);
-        layout.Controls.Add(btnConfigurator, 1, 1);
+        layout.Controls.Add(btnInventory, 0, 2);
+        layout.Controls.Add(btnConfigurator, 1, 2);
 
-        // Version label
+        // Version label — read from assembly
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        var versionText = version is not null ? $"v{version.Major}.{version.Minor}.{version.Build}" : "v?";
         var lblVersion = new Label
         {
-            Text = "v1.4.0",
+            Text = versionText,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 8f),
             Margin = new Padding(0, 8, 0, 0),
         };
-        layout.Controls.Add(lblVersion, 0, 2);
+        layout.Controls.Add(lblVersion, 0, 3);
         layout.SetColumnSpan(lblVersion, 2);
 
         Controls.Add(layout);

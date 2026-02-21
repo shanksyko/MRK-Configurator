@@ -6,8 +6,15 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
+    <Version>1.5.3</Version>
+    <AssemblyVersion>1.5.2.0</AssemblyVersion>
+    <FileVersion>1.5.2.0</FileVersion>
+    <ApplicationIcon>Properties\app.ico</ApplicationIcon>
+  </PropertyGroup>  <ItemGroup>
+    <Content Include="Properties\\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>  <ItemGroup>
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Enrichers.Thread" />
   </ItemGroup>

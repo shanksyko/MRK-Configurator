@@ -189,7 +189,7 @@ public sealed class AppRunner : IAppRunner
         }
     }
 
-    private static Process? FindRunningProcess(string executablePath)
+    internal static Process? FindRunningProcess(string executablePath)
     {
         if (string.IsNullOrWhiteSpace(executablePath))
         {

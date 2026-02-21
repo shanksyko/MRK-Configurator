@@ -15,43 +15,38 @@ public sealed class AuditLogService : IAuditLogService
 
     public async Task LogAsync(int? userId, string action, string? entityType = null, string? entityId = null, string? details = null)
     {
-        // Run database write in background to avoid blocking UI thread
-        await Task.Run(async () =>
+        var username = userId.HasValue
+            ? (await _context.Users.FindAsync(userId.Value).ConfigureAwait(false))?.Username ?? "Unknown"
+            : "System";
+
+        var entry = new AuditLogEntry
         {
-            var username = userId.HasValue
-                ? (await _context.Users.FindAsync(userId.Value).ConfigureAwait(false))?.Username ?? "Unknown"
-                : "System";
+            UserId = userId,
+            Username = username,
+            Action = action,
+            EntityType = entityType,
+            EntityId = entityId,
+            Details = details,
+            Timestamp = DateTime.UtcNow
+        };
 
-            var entry = new AuditLogEntry
-            {
-                UserId = userId,
-                Username = username,
-                Action = action,
-                EntityType = entityType,
-                EntityId = entityId,
-                Details = details,
-                Timestamp = DateTime.UtcNow
-            };
+        _context.AuditLog.Add(entry);
 
-            _context.AuditLog.Add(entry);
-            
-            // Retry logic for database writes
-            // SQLite busy_timeout will handle most retries, but we add an outer retry
-            const int maxRetries = 3;
-            for (int i = 0; i < maxRetries; i++)
+        // Retry logic for database writes.
+        // SQLite busy_timeout will handle most retries, but we add an outer retry.
+        const int maxRetries = 3;
+        for (int i = 0; i < maxRetries; i++)
+        {
+            try
             {
-                try
-                {
-                    await _context.SaveChangesAsync().ConfigureAwait(false);
-                    break;
-                }
-                catch (DbUpdateException) when (i < maxRetries - 1)
-                {
-                    // Wait before retry with exponential backoff
-                    await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i))).ConfigureAwait(false);
-                }
+                await _context.SaveChangesAsync().ConfigureAwait(false);
+                break;
             }
-        }).ConfigureAwait(false);
+            catch (DbUpdateException) when (i < maxRetries - 1)
+            {
+                await Task.Delay(100 * (1 << i)).ConfigureAwait(false);
+            }
+        }
     }
 
     public async Task<List<AuditLogEntry>> GetLogsAsync(DateTime? from = null, DateTime? to = null, int? userId = null, int limit = 1000)

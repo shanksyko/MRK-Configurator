@@ -369,7 +369,7 @@ partial class AppEditorForm
         rbExe.Size = new System.Drawing.Size(83, 19);
         rbExe.TabIndex = 0;
         rbExe.TabStop = true;
-        rbExe.Text = "Executável";
+        rbExe.Text = "Aplicativo";
         rbExe.UseVisualStyleBackColor = true;
         rbExe.CheckedChanged += rbExe_CheckedChanged;
         //
@@ -391,7 +391,7 @@ partial class AppEditorForm
         lblExecutavel.Name = "lblExecutavel";
         lblExecutavel.Size = new System.Drawing.Size(66, 15);
         lblExecutavel.TabIndex = 6;
-        lblExecutavel.Text = "Executável";
+        lblExecutavel.Text = "Aplicativo";
         //
         // tlpExecutavel
         //

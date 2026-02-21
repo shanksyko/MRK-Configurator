@@ -1685,7 +1685,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
             var migrator = new Config.ConfigMigrator();
             migrator.ExportToFile(dialog.FileName, config);
-            UpdateStatusText("Configuração exportada com sucesso.");
+            UpdateStatusText("Configuração exportada com sucesso.", StatusKind.Success);
         }
         catch (Exception ex)
         {
@@ -1719,7 +1719,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             }
 
             bsProgramas?.ResetBindings(false);
-            UpdateStatusText("Configuração importada com sucesso.");
+            UpdateStatusText("Configuração importada com sucesso.", StatusKind.Success);
         }
         catch (Exception ex)
         {
@@ -1747,7 +1747,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
             var service = new Mieruka.Core.Data.Services.DatabaseBackupService();
             await service.BackupAsync(dialog.FileName).ConfigureAwait(true);
-            UpdateStatusText("Backup realizado com sucesso.");
+            UpdateStatusText("Backup realizado com sucesso.", StatusKind.Success);
             WinForms.MessageBox.Show(this, "Backup realizado com sucesso.", "Backup", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -1786,7 +1786,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
             var service = new Mieruka.Core.Data.Services.DatabaseBackupService();
             await service.RestoreAsync(dialog.FileName).ConfigureAwait(true);
-            UpdateStatusText("Banco restaurado. Reinicie a aplicação.");
+            UpdateStatusText("Banco restaurado. Reinicie a aplicação.", StatusKind.Warning);
             WinForms.MessageBox.Show(this, "Banco restaurado com sucesso. Reinicie a aplicação para aplicar as alterações.", "Restauração", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -1824,7 +1824,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
                 }
 
                 bsProgramas?.ResetBindings(false);
-                UpdateStatusText("Configuração restaurada do histórico.");
+                UpdateStatusText("Configuração restaurada do histórico.", StatusKind.Success);
             };
             form.ShowDialog(this);
         }
@@ -1870,7 +1870,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             if (form.ShowDialog(this) == WinForms.DialogResult.OK && scheduler is not null)
             {
                 await scheduler.ApplyConfigAsync(form.Result).ConfigureAwait(true);
-                UpdateStatusText("Agendamento salvo.");
+                UpdateStatusText("Agendamento salvo.", StatusKind.Success);
             }
 
             scheduler?.Dispose();
@@ -2034,10 +2034,33 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private void UpdateStatusText(string message)
     {
+        UpdateStatusText(message, StatusKind.Info);
+    }
+
+    private void UpdateStatusText(string message, StatusKind kind)
+    {
         if (InvokeRequired)
         {
-            BeginInvoke(new Action<string>(UpdateStatusText), message);
+            BeginInvoke(new Action<string, StatusKind>(UpdateStatusText), message, kind);
             return;
+        }
+
+        if (statusBar is not null)
+        {
+            statusBar.BackColor = kind switch
+            {
+                StatusKind.Success => System.Drawing.Color.FromArgb(40, 167, 69),
+                StatusKind.Warning => System.Drawing.Color.FromArgb(255, 152, 0),
+                StatusKind.Error => System.Drawing.Color.FromArgb(200, 50, 50),
+                StatusKind.Running => System.Drawing.Color.FromArgb(0, 120, 215),
+                _ => System.Drawing.SystemColors.Control,
+            };
+
+            var useLightText = kind is not StatusKind.Info;
+            foreach (WinForms.ToolStripItem item in statusBar.Items)
+            {
+                item.ForeColor = useLightText ? System.Drawing.Color.White : System.Drawing.SystemColors.ControlText;
+            }
         }
 
         if (lblStatus is not null)
@@ -2045,6 +2068,8 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             lblStatus.Text = message;
         }
     }
+
+    private enum StatusKind { Info, Success, Warning, Error, Running }
 
     private ProfileConfig BuildProfileFromUI()
     {
@@ -2310,7 +2335,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         _profileRunning = true;
         UpdateProfileUiState();
-        UpdateStatusText($"Executando perfil '{profile.Name}'...");
+        UpdateStatusText($"Executando perfil '{profile.Name}'...", StatusKind.Running);
 
         try
         {
@@ -2341,7 +2366,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         _profileExecutor?.Stop();
         _profileExecutionCts?.Cancel();
-        UpdateStatusText("Cancelando execução do perfil...");
+        UpdateStatusText("Cancelando execução do perfil...", StatusKind.Warning);
 
         if (_profileExecutionTask is Task task)
         {
