@@ -205,9 +205,10 @@ public sealed class CredentialVault
         var sync = _locks.GetOrAdd(path, _ => new object());
         lock (sync)
         {
+            byte[] raw = Array.Empty<byte>();
             try
             {
-                var raw = File.ReadAllBytes(path);
+                raw = File.ReadAllBytes(path);
                 if (raw.Length == 0)
                 {
                     throw new CredentialVaultCorruptedException(key);
@@ -265,15 +266,57 @@ public sealed class CredentialVault
                     CryptographicOperations.ZeroMemory(entropyBytes);
                 }
             }
-            catch (EndOfStreamException ex)
+            catch (EndOfStreamException)
             {
-                DeleteSecret(key);
-                throw new CredentialVaultCorruptedException(key, ex);
+                // The version header matched but the rest of the file does not
+                // conform to the new format.  This can happen when a legacy
+                // DPAPI blob coincidentally starts with bytes that equal
+                // FileFormatVersion.  Try interpreting the full blob as a
+                // legacy secret before giving up.
+                try
+                {
+                    return ReadLegacySecret(key, raw);
+                }
+                catch
+                {
+                    DeleteSecret(key);
+                    throw new CredentialVaultCorruptedException(key);
+                }
             }
-            catch (CryptographicException ex)
+            catch (CryptographicException)
             {
+                // Same fallback for decryption errors — the file may be a
+                // legacy blob whose header bytes happened to match the
+                // current format version.
+                try
+                {
+                    return ReadLegacySecret(key, raw);
+                }
+                catch
+                {
+                    DeleteSecret(key);
+                    throw new CredentialVaultCorruptedException(key);
+                }
+            }
+            catch (CredentialVaultCorruptedException)
+            {
+                // Hash mismatch or structural error — may still be a legacy
+                // blob whose first bytes accidentally matched the format
+                // version.  Attempt the legacy path before declaring corruption.
+                if (raw.Length > 0)
+                {
+                    try
+                    {
+                        return ReadLegacySecret(key, raw);
+                    }
+                    catch
+                    {
+                        // Legacy path also failed — genuinely corrupted.
+                    }
+                }
+
                 DeleteSecret(key);
-                throw new CredentialVaultCorruptedException(key, ex);
+                throw;
             }
         }
     }

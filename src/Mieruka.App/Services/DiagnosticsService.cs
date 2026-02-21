@@ -12,6 +12,16 @@ namespace Mieruka.App.Services;
 /// </summary>
 public sealed class DiagnosticsService : IDisposable, IAsyncDisposable
 {
+    /// <summary>
+    /// Default HTTP listener prefix for the diagnostics endpoint.
+    /// </summary>
+    private const string DefaultListenerPrefix = "http://localhost:5005/";
+
+    /// <summary>
+    /// Default path that exposes the health/diagnostics payload.
+    /// </summary>
+    private const string DefaultHealthPath = "/health";
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -33,7 +43,7 @@ public sealed class DiagnosticsService : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="reportProvider">Factory that supplies the diagnostics payload.</param>
     public DiagnosticsService(Func<DiagnosticsReport> reportProvider)
-        : this(reportProvider, "http://localhost:5005/", "/health")
+        : this(reportProvider, DefaultListenerPrefix, DefaultHealthPath)
     {
     }
 

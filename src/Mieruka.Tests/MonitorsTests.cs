@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using Mieruka.Core.Monitors;
 using Xunit;
 
@@ -12,7 +13,13 @@ public sealed class MonitorsTests
     {
         var fallback = new List<MonitorDescriptor>
         {
-            new MonitorDescriptor { DeviceName = "\\\\.\\DISPLAY1" }
+            new MonitorDescriptor
+            {
+                DeviceName = "\\\\.\\DISPLAY1",
+                Width = 1920,
+                Height = 1080,
+                Bounds = new Rectangle(0, 0, 1920, 1080),
+            }
         };
 
         var service = new MonitorService(
@@ -22,6 +29,9 @@ public sealed class MonitorsTests
 
         var result = service.GetAll();
 
-        Assert.Same(fallback, result);
+        var monitor = Assert.Single(result);
+        Assert.Equal("\\\\.\\DISPLAY1", monitor.DeviceName);
+        Assert.Equal(1920, monitor.Width);
+        Assert.Equal(1080, monitor.Height);
     }
 }

@@ -2704,63 +2704,71 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void ScheduleWindowPreviewRebuild(TimeSpan delay)
     {
-        var preview = TryGetPreviewControl();
-        if (preview == null)
-        {
-            _logger.Debug("Preview control null; skipping window/overlay update.");
-            _windowPreviewRebuildScheduled = false;
-            return;
-        }
-
-        if (preview.IsDisposed)
-        {
-            _windowPreviewRebuildScheduled = false;
-            return;
-        }
-
-        if (preview.IsPreviewRunning)
-        {
-            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
-
-            _windowBoundsDebounce?.Stop();
-            _windowBoundsDebouncePending = false;
-            _windowPreviewRebuildScheduled = false;
-            return;
-        }
-
         try
         {
-            if (delay < TimeSpan.Zero)
+            var preview = TryGetPreviewControl();
+            if (preview == null)
             {
-                delay = TimeSpan.Zero;
+                _logger.Debug("Preview control null; skipping window/overlay update.");
+                _windowPreviewRebuildScheduled = false;
+                return;
             }
 
-            await Task.Delay(delay).ConfigureAwait(true);
+            if (preview.IsDisposed)
+            {
+                _windowPreviewRebuildScheduled = false;
+                return;
+            }
+
+            if (preview.IsPreviewRunning)
+            {
+                _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+                _windowBoundsDebounce?.Stop();
+                _windowBoundsDebouncePending = false;
+                _windowPreviewRebuildScheduled = false;
+                return;
+            }
+
+            try
+            {
+                if (delay < TimeSpan.Zero)
+                {
+                    delay = TimeSpan.Zero;
+                }
+
+                await Task.Delay(delay).ConfigureAwait(true);
+            }
+            catch
+            {
+                _windowPreviewRebuildScheduled = false;
+                return;
+            }
+
+            if (IsDisposed)
+            {
+                _windowPreviewRebuildScheduled = false;
+                return;
+            }
+
+            if (preview.IsPreviewRunning)
+            {
+                _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
+
+                _windowBoundsDebounce?.Stop();
+                _windowBoundsDebouncePending = false;
+                _windowPreviewRebuildScheduled = false;
+                return;
+            }
+
+            _windowPreviewRebuildScheduled = false;
+            InvalidateWindowPreviewOverlay();
         }
-        catch
+        catch (Exception ex)
         {
             _windowPreviewRebuildScheduled = false;
-            return;
+            _logger.Warning(ex, "Falha não tratada em ScheduleWindowPreviewRebuild.");
         }
-
-        if (IsDisposed)
-        {
-            _windowPreviewRebuildScheduled = false;
-            return;
-        }
-
-        if (preview.IsPreviewRunning)
-        {
-            _logger.Debug("WindowOverlayUpdate skipped_due_to_live_preview");
-
-            _windowBoundsDebounce?.Stop();
-            _windowBoundsDebouncePending = false;
-            _windowPreviewRebuildScheduled = false;
-            return;
-        }
-
-        _windowPreviewRebuildScheduled = false;
-        InvalidateWindowPreviewOverlay();
     }
 
     private void RebuildSimulationOverlays()
@@ -3552,7 +3560,14 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void AppRunnerOnBeforeMoveWindow(object? sender, EventArgs e)
     {
-        await SuspendPreviewCaptureAsync().ConfigureAwait(true);
+        try
+        {
+            await SuspendPreviewCaptureAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "Falha ao suspender captura de preview antes de mover janela.");
+        }
     }
 
     private void AppRunnerOnAfterMoveWindow(object? sender, EventArgs e)
@@ -3595,19 +3610,26 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
     {
         try
         {
-            await Task.Delay(PreviewResumeDelay).ConfigureAwait(true);
-        }
-        catch
-        {
-            // Ignorar interrupções inesperadas.
-        }
+            try
+            {
+                await Task.Delay(PreviewResumeDelay).ConfigureAwait(true);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
 
-        if (IsDisposed)
-        {
-            return;
-        }
+            if (IsDisposed)
+            {
+                return;
+            }
 
-        await ResumePreviewCaptureAsync().ConfigureAwait(true);
+            await ResumePreviewCaptureAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "Falha ao retomar captura de preview com atraso.");
+        }
     }
 
     private async Task ResumePreviewCaptureAsync()

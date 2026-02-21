@@ -154,8 +154,9 @@ public sealed class DataRetentionService
         {
             return JsonSerializer.Deserialize<RetentionSettings>(setting.ValueJson) ?? new RetentionSettings();
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Warning(ex, "Falha ao desserializar configuração de retenção. Usando valores padrão.");
             return new RetentionSettings();
         }
     }

@@ -536,9 +536,18 @@ public sealed class InventoryForm : Form
 
     private async void OnCategoriesClicked()
     {
-        using var form = new CategoryEditorForm(_categoryService);
-        form.ShowDialog(this);
-        await LoadAllAsync().ConfigureAwait(true);
+        try
+        {
+            using var form = new CategoryEditorForm(_categoryService);
+            form.ShowDialog(this);
+            await LoadAllAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this,
+                $"Erro ao recarregar dados após edição de categorias: {ex.Message}",
+                "Categorias", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void OnDashboardClicked()

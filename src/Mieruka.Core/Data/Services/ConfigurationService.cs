@@ -3,6 +3,7 @@ using Mieruka.Core.Data.Entities;
 using Mieruka.Core.Data.Mapping;
 using Mieruka.Core.Data.Repositories;
 using Mieruka.Core.Models;
+using Serilog;
 using System.Text.Json;
 
 namespace Mieruka.Core.Data.Services;
@@ -13,6 +14,8 @@ namespace Mieruka.Core.Data.Services;
 /// </summary>
 public sealed class ConfigurationService
 {
+    private static readonly ILogger Logger = Log.ForContext<ConfigurationService>();
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -379,8 +382,9 @@ public sealed class ConfigurationService
         {
             return JsonSerializer.Deserialize<T>(entity.ValueJson, JsonOptions);
         }
-        catch
+        catch (JsonException ex)
         {
+            Logger.Warning(ex, "Falha ao desserializar configuração para chave '{Key}'.", key);
             return default;
         }
     }

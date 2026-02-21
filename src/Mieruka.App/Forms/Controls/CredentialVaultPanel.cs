@@ -4,12 +4,14 @@ using System.ComponentModel;
 using System.Windows.Forms;
 using Mieruka.App.Services;
 using Mieruka.Core.Security;
+using Serilog;
 using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls;
 
 public sealed partial class CredentialVaultPanel : WinForms.UserControl
 {
+    private static readonly ILogger Logger = Log.ForContext<CredentialVaultPanel>();
     private readonly SecretsProvider? _secretsProvider;
     private readonly UiSecretsBridge? _secretsBridge;
     private string? _scopeSiteId;
@@ -38,8 +40,9 @@ public sealed partial class CredentialVaultPanel : WinForms.UserControl
             _secretsBridge = new UiSecretsBridge(_secretsProvider);
             _secretsProvider.CredentialsChanged += OnCredentialsChanged;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.Warning(ex, "Falha ao inicializar o cofre de credenciais. O painel será desativado.");
             _secretsProvider = null;
             _secretsBridge = null;
         }

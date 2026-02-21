@@ -18,7 +18,7 @@ public static class Redaction
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex TokenRegex = new(
-        @"(?:(?:bearer|token|api[_-]?key|password)\s*[=:]\s*)([A-Za-z0-9._-]{6,})",
+        @"(?:(?:bearer|token|api[_-]?key|password)\s*[=:\s]\s*)([A-Za-z0-9._-]{6,})",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex GuidRegex = new(

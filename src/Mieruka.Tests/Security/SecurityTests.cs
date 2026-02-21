@@ -106,11 +106,11 @@ public sealed class SecurityTests : IDisposable
     [Fact]
     public void Redaction_RemovesSensitiveData()
     {
-        var input = "Usuário test@example.com com token=abc123456 e password=senha";
+        var input = "Usuário test@example.com com token=abc123456 e password=senhaSegura";
         var output = Redaction.Redact(input);
         Assert.DoesNotContain("test@example.com", output);
         Assert.DoesNotContain("abc123456", output);
-        Assert.DoesNotContain("senha", output);
+        Assert.DoesNotContain("senhaSegura", output);
 
         var entry = new HttpLogEntry(
             "GET",

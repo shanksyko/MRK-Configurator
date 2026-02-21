@@ -2480,79 +2480,86 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private async void AbrirEditorAsync(ProgramaConfig? selected, ProgramaConfig? template = null)
     {
-        var monitors = _monitorSnapshot.Count > 0
-            ? _monitorSnapshot.ToList()
-            : CaptureMonitorSnapshot().ToList();
-
-        var programaParaEdicao = template ?? selected;
-
-        // Stop main form previews before opening the editor to avoid
-        // GPU capture contention (WGC only allows one session per monitor).
-        // Without this, two capture clients fight for the same device causing
-        // heavy flickering and forced closure of GPU-backed applications.
-        // PausePreviewsAsync calls StopSafeAsync which fully releases the
-        // WGC session — SuspendCaptureAsync is not enough as it keeps the
-        // session handle open.
-        var hadPreviews = _previewsRequested;
-
         try
         {
-            await PausePreviewsAsync().ConfigureAwait(true);
+            var monitors = _monitorSnapshot.Count > 0
+                ? _monitorSnapshot.ToList()
+                : CaptureMonitorSnapshot().ToList();
+
+            var programaParaEdicao = template ?? selected;
+
+            // Stop main form previews before opening the editor to avoid
+            // GPU capture contention (WGC only allows one session per monitor).
+            // Without this, two capture clients fight for the same device causing
+            // heavy flickering and forced closure of GPU-backed applications.
+            // PausePreviewsAsync calls StopSafeAsync which fully releases the
+            // WGC session — SuspendCaptureAsync is not enough as it keeps the
+            // session handle open.
+            var hadPreviews = _previewsRequested;
+
+            try
+            {
+                await PausePreviewsAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _telemetry.Warn("Falha ao pausar previews antes de abrir editor.", ex);
+            }
+
+            WinForms.DialogResult resultado;
+            string? editorSelectedMonitor;
+            ProgramaConfig? programa;
+
+            try
+            {
+                using var editor = new AppEditorForm(programaParaEdicao, monitors, SelectedMonitorId, _appRunner, _programas);
+                resultado = editor.ShowDialog(this);
+                editorSelectedMonitor = editor.SelectedMonitorId;
+                programa = editor.Resultado;
+            }
+            finally
+            {
+                // Restart main form previews after the editor closes.
+                if (hadPreviews && !IsDisposed)
+                {
+                    _previewsRequested = true;
+                    await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+                }
+            }
+
+            if (resultado != WinForms.DialogResult.OK)
+            {
+                return;
+            }
+
+            if (programa is null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(editorSelectedMonitor))
+            {
+                UpdateSelectedMonitor(editorSelectedMonitor, notify: false);
+            }
+
+            if (selected is null)
+            {
+                _programas.Add(programa);
+                SelecionarPrograma(programa);
+                return;
+            }
+
+            var indice = _programas.IndexOf(selected);
+            if (indice >= 0)
+            {
+                _programas[indice] = programa;
+                bsProgramas.ResetBindings(false);
+                SelecionarPrograma(programa);
+            }
         }
         catch (Exception ex)
         {
-            _telemetry.Warn("Falha ao pausar previews antes de abrir editor.", ex);
-        }
-
-        WinForms.DialogResult resultado;
-        string? editorSelectedMonitor;
-        ProgramaConfig? programa;
-
-        try
-        {
-            using var editor = new AppEditorForm(programaParaEdicao, monitors, SelectedMonitorId, _appRunner, _programas);
-            resultado = editor.ShowDialog(this);
-            editorSelectedMonitor = editor.SelectedMonitorId;
-            programa = editor.Resultado;
-        }
-        finally
-        {
-            // Restart main form previews after the editor closes.
-            if (hadPreviews && !IsDisposed)
-            {
-                _previewsRequested = true;
-                await StartAutomaticPreviewsAsync().ConfigureAwait(true);
-            }
-        }
-
-        if (resultado != WinForms.DialogResult.OK)
-        {
-            return;
-        }
-
-        if (programa is null)
-        {
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(editorSelectedMonitor))
-        {
-            UpdateSelectedMonitor(editorSelectedMonitor, notify: false);
-        }
-
-        if (selected is null)
-        {
-            _programas.Add(programa);
-            SelecionarPrograma(programa);
-            return;
-        }
-
-        var indice = _programas.IndexOf(selected);
-        if (indice >= 0)
-        {
-            _programas[indice] = programa;
-            bsProgramas.ResetBindings(false);
-            SelecionarPrograma(programa);
+            _telemetry.Warn("Falha não tratada ao abrir editor de aplicativo.", ex);
         }
     }
 
@@ -2613,19 +2620,26 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     {
         try
         {
-            await Task.Delay(MonitorPreviewResumeDelay).ConfigureAwait(true);
-        }
-        catch
-        {
-            // Ignorar interrupções não previstas ao aguardar o reagendamento.
-        }
+            try
+            {
+                await Task.Delay(MonitorPreviewResumeDelay).ConfigureAwait(true);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
 
-        if (IsDisposed)
-        {
-            return;
-        }
+            if (IsDisposed)
+            {
+                return;
+            }
 
-        await ResumeMonitorPreviewsAsync().ConfigureAwait(true);
+            await ResumeMonitorPreviewsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Warn("Falha ao retomar previews de monitor com atraso.", ex);
+        }
     }
 
     private async Task ResumeMonitorPreviewsAsync()

@@ -10,6 +10,7 @@ using Mieruka.App.Services;
 using Mieruka.Core.Layouts;
 using Mieruka.Core.Models;
 using System.Text;
+using Serilog;
 using WinForms = System.Windows.Forms;
 using Drawing = System.Drawing;
 
@@ -17,6 +18,7 @@ namespace Mieruka.App.Ui;
 
 internal sealed class SiteEditorDialog : WinForms.Form
 {
+    private static readonly ILogger Logger = Log.ForContext<SiteEditorDialog>();
     private readonly IReadOnlyList<MonitorInfo> _monitors;
     private readonly IReadOnlyList<ZonePreset> _zonePresets;
     private readonly HashSet<string> _existingIds;
@@ -666,8 +668,9 @@ internal sealed class SiteEditorDialog : WinForms.Form
                 _browserStatusLabel.ForeColor = Drawing.Color.OrangeRed;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Não foi possível verificar o navegador selecionado.");
             _browserStatusLabel.Text = "Não foi possível verificar o navegador";
             _browserStatusLabel.ForeColor = Drawing.Color.Gray;
         }

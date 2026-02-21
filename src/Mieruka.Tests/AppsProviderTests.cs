@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.Win32;
 using Mieruka.App.Services;
 using Serilog;
@@ -28,7 +30,7 @@ public sealed class AppsProviderTests : IDisposable
     [Fact]
     public void ResolveFromStartMenuShortcuts_IgnoresInaccessibleEntries()
     {
-        var events = new List<LogEvent>();
+        var events = new ConcurrentBag<LogEvent>();
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Verbose()
             .WriteTo.Sink(new DelegatingSink(events.Add))
@@ -41,8 +43,10 @@ public sealed class AppsProviderTests : IDisposable
         var shortcut = InstalledAppsProvider.ResolveFromStartMenuShortcutsForTesting("Sample App");
 
         Assert.Null(shortcut);
+
+        var snapshot = events.ToArray();
         Assert.Contains(
-            events,
+            snapshot,
             log => log.Level == LogEventLevel.Warning
                 && log.MessageTemplate.Text.Contains("Failed to enumerate shortcuts", StringComparison.Ordinal));
     }

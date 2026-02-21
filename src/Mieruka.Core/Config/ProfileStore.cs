@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.Core.Config;
 
@@ -14,6 +15,7 @@ namespace Mieruka.Core.Config;
 /// </summary>
 public sealed class ProfileStore
 {
+    private static readonly ILogger Logger = Log.ForContext<ProfileStore>();
     /// <summary>
     /// Current schema version supported by the store.
     /// </summary>
@@ -146,9 +148,9 @@ public sealed class ProfileStore
 
                 profiles.Add(SanitizeProfile(document.Profile));
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore malformed files.
+                Logger.Warning(ex, "Arquivo de perfil ignorado (corrompido ou incompatível): {File}", file);
             }
         }
 
