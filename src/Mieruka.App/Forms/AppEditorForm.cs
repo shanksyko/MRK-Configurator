@@ -4169,7 +4169,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 
         if (string.IsNullOrWhiteSpace(txtId.Text))
         {
-            errorProvider.SetError(txtId, "Informe um identificador." );
+            errorProvider.SetError(txtId, "Informe um identificador.");
             valido = false;
         }
         else
@@ -4182,7 +4182,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
             {
-                errorProvider.SetError(txtExecutavel, "Informe o executÃ¡vel." );
+                errorProvider.SetError(txtExecutavel, "Informe o executÃ¡vel.");
                 valido = false;
             }
             else if (!File.Exists(txtExecutavel.Text))

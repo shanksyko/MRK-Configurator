@@ -105,8 +105,9 @@ public sealed class CookieSafeStore
             });
         }
 
-        var json = JsonSerializer.Serialize(payload, SerializerOptions);
-        var plainBytes = Encoding.UTF8.GetBytes(json);
+        // Serialize directly to UTF-8 bytes, avoiding an intermediate
+        // immutable string that would linger in the managed heap.
+        var plainBytes = JsonSerializer.SerializeToUtf8Bytes(payload, SerializerOptions);
         byte[] cipher = Array.Empty<byte>();
         try
         {

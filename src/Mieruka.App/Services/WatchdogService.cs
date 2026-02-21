@@ -12,6 +12,7 @@ using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
 using Mieruka.App.Forms;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
@@ -661,7 +662,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
             {
                 FileName = executable,
                 Arguments = arguments,
-                UseShellExecute = true,
+                UseShellExecute = false,
             };
 
             var process = Process.Start(startInfo);
@@ -922,22 +923,14 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
 
         cancellation!.Cancel();
 
-        try
-        {
-            // Fallback sync path for Dispose only — uses a bounded wait
-            // to avoid deadlocking when called from the UI thread.
-            monitor!.Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
-        {
-        }
-        finally
-        {
-            cancellation.Dispose();
-        }
+        // Non-blocking: the cancelled task will complete on its own.
+        // Log any unexpected faults without blocking the calling thread.
+        monitor!.ContinueWith(
+            static t => Log.ForContext<WatchdogService>()
+                .Warning(t.Exception, "Watchdog monitor task faulted during dispose."),
+            TaskContinuationOptions.OnlyOnFaulted);
+
+        cancellation.Dispose();
     }
 
     private void UpdateApplicationsLocked(IEnumerable<AppConfig> applications)

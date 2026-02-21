@@ -237,12 +237,20 @@ public sealed class CredentialVault
 
                 var entropyBytes = (byte[])_entropy.Clone();
                 byte[] plain = Array.Empty<byte>();
+                GCHandle pinned = default;
                 try
                 {
                     plain = System.Security.Cryptography.ProtectedData.Unprotect(
                         cipher,
                         entropyBytes,
                         System.Security.Cryptography.DataProtectionScope.CurrentUser);
+
+                    // Pin the decrypted buffer so the GC cannot relocate it
+                    // before we have a chance to zero the contents.
+                    if (plain.Length > 0)
+                    {
+                        pinned = GCHandle.Alloc(plain, GCHandleType.Pinned);
+                    }
 
                     var secure = BuildSecureString(plain);
                     if (logicalVersion < CurrentSecretVersion)
@@ -260,6 +268,11 @@ public sealed class CredentialVault
                     {
                         Array.Clear(plain, 0, plain.Length);
                         CryptographicOperations.ZeroMemory(plain);
+                    }
+
+                    if (pinned.IsAllocated)
+                    {
+                        pinned.Free();
                     }
 
                     Array.Clear(entropyBytes, 0, entropyBytes.Length);
@@ -415,12 +428,18 @@ public sealed class CredentialVault
         var cipher = raw;
         var entropyBytes = (byte[])_entropy.Clone();
         byte[] plain = Array.Empty<byte>();
+        GCHandle pinned = default;
         try
         {
             plain = System.Security.Cryptography.ProtectedData.Unprotect(
                 cipher,
                 entropyBytes,
                 System.Security.Cryptography.DataProtectionScope.CurrentUser);
+
+            if (plain.Length > 0)
+            {
+                pinned = GCHandle.Alloc(plain, GCHandleType.Pinned);
+            }
 
             var secure = BuildSecureString(plain);
             var copy = secure.Copy();
@@ -434,6 +453,11 @@ public sealed class CredentialVault
             {
                 Array.Clear(plain, 0, plain.Length);
                 CryptographicOperations.ZeroMemory(plain);
+            }
+
+            if (pinned.IsAllocated)
+            {
+                pinned.Free();
             }
 
             Array.Clear(entropyBytes, 0, entropyBytes.Length);

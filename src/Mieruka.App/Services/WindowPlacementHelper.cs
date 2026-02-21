@@ -617,6 +617,56 @@ internal static class WindowPlacementHelper
         return false;
     }
 
+    /// <summary>
+    /// Asynchronous version of <see cref="PlaceWindow"/> that avoids blocking the calling thread.
+    /// </summary>
+    public static async Task<bool> PlaceWindowAsync(nint hWnd, MonitorInfo monitor, ZoneRect zone, bool topMost, TimeSpan? timeout = null, CancellationToken ct = default)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        if (hWnd == 0)
+        {
+            return false;
+        }
+
+        var bounds = CalculateZoneBounds(monitor, zone);
+        var (normalizedX, normalizedY, normalizedWidth, normalizedHeight) = NormalizeBounds(bounds);
+        var normalizedBounds = new Drawing.Rectangle(normalizedX, normalizedY, normalizedWidth, normalizedHeight);
+        var effectiveTimeout = timeout ?? DefaultPlacementTimeout;
+        var stopwatch = Stopwatch.StartNew();
+        var handle = (IntPtr)hWnd;
+
+        while (stopwatch.Elapsed < effectiveTimeout)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (!IsWindow(handle))
+            {
+                await Task.Delay(50, ct).ConfigureAwait(false);
+                continue;
+            }
+
+            try
+            {
+                WindowMover.MoveTo(handle, normalizedBounds, topMost, restoreIfMinimized: true);
+                return true;
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
+            {
+                await Task.Delay(50, ct).ConfigureAwait(false);
+            }
+            catch (ArgumentException)
+            {
+                await Task.Delay(50, ct).ConfigureAwait(false);
+            }
+        }
+
+        return false;
+    }
+
     private static Drawing.Rectangle CalculateBounds(WindowConfig window, MonitorInfo monitor, Drawing.Rectangle monitorBounds)
     {
         if (window.FullScreen)

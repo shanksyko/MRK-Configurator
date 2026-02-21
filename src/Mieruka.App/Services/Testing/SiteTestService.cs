@@ -91,7 +91,7 @@ internal sealed class SiteTestService
         {
             FileName = executable,
             Arguments = arguments,
-            UseShellExecute = true,
+            UseShellExecute = false,
         };
 
         using var process = Process.Start(startInfo);
@@ -130,7 +130,7 @@ internal sealed class SiteTestService
                 if (long.TryParse(handleString, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var handleValue))
                 {
                     var handle = new IntPtr(handleValue);
-                    WindowPlacementHelper.PlaceWindow(handle, monitor, zone, site.Window.AlwaysOnTop);
+                    await WindowPlacementHelper.PlaceWindowAsync(handle, monitor, zone, site.Window.AlwaysOnTop, ct: ct).ConfigureAwait(false);
                 }
                 else
                 {

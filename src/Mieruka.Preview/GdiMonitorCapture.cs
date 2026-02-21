@@ -46,31 +46,9 @@ namespace Mieruka.Preview
         /// <remarks>Prefer CreateAsync when possible to avoid blocking the calling thread.</remarks>
         public static IMonitorCapture Create(string monitorId)
         {
-            if (!OperatingSystem.IsWindows())
-            {
-                throw new PlatformNotSupportedException("Monitor preview is only supported on Windows.");
-            }
-
-            var monitor = MonitorLocator.Find(monitorId)
-                ?? throw new InvalidOperationException($"Monitor '{monitorId}' não foi encontrado.");
-
-            var capture = new GdiMonitorCaptureProvider();
-            try
-            {
-                if (!capture.IsSupported)
-                {
-                    throw new PlatformNotSupportedException("Captura GDI não suportada neste sistema.");
-                }
-
-                Task.Run(() => capture.StartAsync(monitor)).GetAwaiter().GetResult();
-                return capture;
-            }
-            catch
-            {
-                try { capture.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-                catch { /* cleanup failure is secondary */ }
-                throw;
-            }
+            // Delegate to CreateAsync on a thread-pool thread to avoid
+            // deadlocks when called from a synchronization context.
+            return Task.Run(() => CreateAsync(monitorId)).GetAwaiter().GetResult();
         }
 
         private static async Task SafeDisposeAsync(IMonitorCapture capture)

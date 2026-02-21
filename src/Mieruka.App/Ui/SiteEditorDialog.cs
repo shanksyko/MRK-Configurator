@@ -519,11 +519,11 @@ internal sealed class SiteEditorDialog : WinForms.Form
         {
             var match = _zoneOptions.FirstOrDefault(option =>
                 string.Equals(option.Identifier, template.TargetZonePresetId, StringComparison.OrdinalIgnoreCase));
-        if (match is not null)
-        {
-            _zoneBox.SelectedItem = match;
-            return;
-        }
+            if (match is not null)
+            {
+                _zoneBox.SelectedItem = match;
+                return;
+            }
         }
 
         var monitor = ResolveSelectedMonitor();

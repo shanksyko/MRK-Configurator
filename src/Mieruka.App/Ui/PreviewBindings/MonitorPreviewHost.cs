@@ -622,6 +622,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
                 await StartCoreAsync(useGpu, cancellationToken: CancellationToken.None).ConfigureAwait(true);
             }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "ResumeCapture failed during async void execution.");
+            }
             finally
             {
                 resumeScope.Dispose();

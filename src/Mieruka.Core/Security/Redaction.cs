@@ -84,7 +84,10 @@ public sealed class RedactionEnricher : ILogEventEnricher
     /// <inheritdoc />
     public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
     {
-        foreach (var property in logEvent.Properties.ToList())
+        // Avoid allocating a new list on every log event
+        var propertiesToUpdate = new List<LogEventProperty>();
+
+        foreach (var property in logEvent.Properties)
         {
             if (property.Value is ScalarValue scalar && scalar.Value is string text)
             {
@@ -92,9 +95,14 @@ public sealed class RedactionEnricher : ILogEventEnricher
                 if (!ReferenceEquals(text, sanitized))
                 {
                     var replacement = propertyFactory.CreateProperty(property.Key, sanitized);
-                    logEvent.AddOrUpdateProperty(replacement);
+                    propertiesToUpdate.Add(replacement);
                 }
             }
+        }
+
+        foreach (var property in propertiesToUpdate)
+        {
+            logEvent.AddOrUpdateProperty(property);
         }
 
         if (logEvent.Exception is not null)
