@@ -463,7 +463,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         appsTabControl!.ExecutablePath = programa.ExecutablePath;
         appsTabControl.Arguments = programa.Arguments ?? string.Empty;
 
-        // AvanÃ§ado
+        // Avançado
         txtNomeAmigavel.Text = programa.Name ?? string.Empty;
         txtWindowTitle.Text = janela.Title ?? string.Empty;
         chkAlwaysOnTop.Checked = janela.AlwaysOnTop;
@@ -579,17 +579,17 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             if (btnCyclePlay is not null)
             {
-                cycleToolTip.SetToolTip(btnCyclePlay, "Executa a simulaÃ§Ã£o do ciclo.");
+                cycleToolTip.SetToolTip(btnCyclePlay, "Executa a simulação do ciclo.");
             }
 
             if (btnCycleStep is not null)
             {
-                cycleToolTip.SetToolTip(btnCycleStep, "AvanÃ§a manualmente para o prÃ³ximo item do ciclo.");
+                cycleToolTip.SetToolTip(btnCycleStep, "Avança manualmente para o próximo item do ciclo.");
             }
 
             if (btnCycleStop is not null)
             {
-                cycleToolTip.SetToolTip(btnCycleStop, "Interrompe a simulaÃ§Ã£o atual.");
+                cycleToolTip.SetToolTip(btnCycleStop, "Interrompe a simulação atual.");
             }
 
             if (chkCycleRedeDisponivel is not null)
@@ -934,7 +934,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 builder.Append(' ');
             }
 
-            builder.Append("NÃ£o encontrados: ");
+            builder.Append("Não encontrados: ");
             builder.Append(string.Join(", ", supportedMissing));
             builder.Append('.');
         }
@@ -946,7 +946,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 builder.Append(' ');
             }
 
-            builder.Append("Detectados (nÃ£o suportados): ");
+            builder.Append("Detectados (não suportados): ");
             builder.Append(string.Join(", ", unsupportedDetected));
             builder.Append('.');
         }
@@ -969,7 +969,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             return Installation.IsDetected
                 ? Installation.DisplayName
-                : $"{Installation.DisplayName} (nÃ£o encontrado)";
+                : $"{Installation.DisplayName} (não encontrado)";
         }
     }
 
@@ -1064,7 +1064,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 {
                     AutoSize = true,
                     Margin = new WinForms.Padding(12),
-                    Text = "Nenhum item disponÃ­vel para simulaÃ§Ã£o.",
+                    Text = "Nenhum item disponível para simulação.",
                 };
 
                 flowCycleItems.Controls.Add(placeholder);
@@ -1179,10 +1179,10 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         var builder = new StringBuilder();
         builder.Append(display.Rect.DisplayName);
         builder.AppendLine();
-        builder.Append("Rede necessÃ¡ria: ");
-        builder.Append(display.Rect.RequiresNetwork ? "Sim" : "NÃ£o");
+        builder.Append("Rede necessária: ");
+        builder.Append(display.Rect.RequiresNetwork ? "Sim" : "Não");
         builder.AppendLine();
-        builder.Append("DuraÃ§Ã£o simulada: ");
+        builder.Append("Duração simulada: ");
         var delay = display.Rect.DelayMs ?? AppCycleSimulator.DefaultDelayMs;
         builder.Append(delay.ToString(CultureInfo.InvariantCulture));
         builder.Append(" ms");
@@ -1196,7 +1196,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         if (display.LastResult == SimRectStatus.Completed && display.LastActivation is DateTime completed)
         {
             builder.AppendLine();
-            builder.Append("Ãšltima execuÃ§Ã£o: ");
+            builder.Append("Última execução: ");
             builder.Append(completed.ToString("T", CultureInfo.CurrentCulture));
         }
         else if (display.LastResult == SimRectStatus.Skipped && display.LastSkipped is DateTime skipped)
@@ -1204,7 +1204,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             builder.AppendLine();
             builder.Append("Ignorado Ã s ");
             builder.Append(skipped.ToString("T", CultureInfo.CurrentCulture));
-            builder.Append(" (rede indisponÃ­vel)");
+            builder.Append(" (rede indisponível)");
         }
 
         var tooltip = builder.ToString();
@@ -1275,7 +1275,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (OperationCanceledException)
         {
-            // Ignorar cancelamentos solicitados pelo usuÃ¡rio.
+            // Ignorar cancelamentos solicitados pelo usuário.
         }
         finally
         {
@@ -1467,9 +1467,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                     display.Panel.Dispose();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignorar falhas durante o descarte dos painÃ©is.
+                _logger.Debug(ex, "Falha ao descartar painel do ciclo.");
             }
 
             display.Dispose();
@@ -1520,8 +1520,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 ? MergeMonitors(installed, _providedMonitors, _monitors)
                 : MergeMonitors(_providedMonitors, _monitors);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.Debug(ex, "Falha ao detectar monitores instalados; usando fallback.");
             merged = MergeMonitors(_providedMonitors, _monitors);
         }
 
@@ -1809,7 +1810,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
 
         var text = coordinates is null
-            ? "X=â€“, Y=â€“"
+            ? "X=-, Y=-"
             : $"X={coordinates.Value.X}, Y={coordinates.Value.Y}";
 
         if (!string.Equals(label.Text, text, StringComparison.Ordinal))
@@ -1925,8 +1926,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             return;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.Debug(ex, "Falha inesperada durante atraso de preview.");
             return;
         }
 
@@ -2018,7 +2020,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (InvalidOperationException ex) when (IsDisposed || !IsHandleCreated)
             {
-                _logger.Debug(ex, "Callback ignorado devido ao controle estar indisponÃ­vel.");
+                _logger.Debug(ex, "Callback ignorado devido ao controle estar indisponível.");
             }
             catch (Exception ex)
             {
@@ -2095,7 +2097,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (ObjectDisposedException)
         {
-            // Ignorar cancelamentos apÃ³s descarte.
+            // Ignorar cancelamentos após descarte.
         }
         catch (AggregateException)
         {
@@ -2504,7 +2506,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         if (monitorId is not null && (monitorBounds.Width < MinimumOverlayDimension || monitorBounds.Height < MinimumOverlayDimension))
         {
             _logger.Warning(
-                "CaptureWindowPreviewSnapshot: monitor sem superfÃ­cie vÃ¡lida width={Width} height={Height} monitorId={MonitorId}",
+                "CaptureWindowPreviewSnapshot: monitor sem superfície válida width={Width} height={Height} monitorId={MonitorId}",
                 monitorBounds.Width,
                 monitorBounds.Height,
                 monitorId);
@@ -2619,9 +2621,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort only; diagnostics will handle invalid bounds.
+            _logger.Debug(ex, "Falha ao consultar Screen.AllScreens para bounds.");
         }
 
         _logger.Debug(
@@ -2738,8 +2740,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 
                 await Task.Delay(delay).ConfigureAwait(true);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.Debug(ex, "Falha no atraso de ScheduleWindowPreviewRebuild.");
                 _windowPreviewRebuildScheduled = false;
                 return;
             }
@@ -2766,7 +2769,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         catch (Exception ex)
         {
             _windowPreviewRebuildScheduled = false;
-            _logger.Warning(ex, "Falha nÃ£o tratada em ScheduleWindowPreviewRebuild.");
+            _logger.Warning(ex, "Falha não tratada em ScheduleWindowPreviewRebuild.");
         }
     }
 
@@ -3261,7 +3264,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "O teste de posicionamento estÃ¡ disponÃ­vel apenas no Windows.",
+                "O teste de posicionamento está disponível apenas no Windows.",
                 "Teste de janela",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Information);
@@ -3272,7 +3275,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "Informe o caminho do executÃ¡vel antes de iniciar o teste.",
+                "Informe o caminho do executável antes de iniciar o teste.",
                 "Teste de janela",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Warning);
@@ -3284,7 +3287,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "Selecione um monitor para testar a posiÃ§Ã£o.",
+                "Selecione um monitor para testar a posição.",
                 "Teste de janela",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Information);
@@ -3311,10 +3314,10 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (Exception ex)
         {
-            _logger.Error("Falha ao testar a posiÃ§Ã£o em modo simulado.", ex);
+            _logger.Error("Falha ao testar a posição em modo simulado.", ex);
             WinForms.MessageBox.Show(
                 this,
-                $"NÃ£o foi possÃ­vel testar a posiÃ§Ã£o: {ex.Message}",
+                $"Não foi possível testar a posição: {ex.Message}",
                 "Teste de janela",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Error);
@@ -3354,7 +3357,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Falha ao suspender prÃ©-visualizaÃ§Ã£o antes de testar app real.");
+                _logger.Warning(ex, "Falha ao suspender pré-visualização antes de testar app real.");
             }
             OnBeforeMoveWindowUI();
 
@@ -3366,7 +3369,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             _logger.Error("Falha ao executar o aplicativo real durante o teste.", ex);
             WinForms.MessageBox.Show(
                 this,
-                $"NÃ£o foi possÃ­vel executar o aplicativo real: {ex.Message}",
+                $"Não foi possível executar o aplicativo real: {ex.Message}",
                 "Teste de aplicativo",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Error);
@@ -3402,7 +3405,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "Selecione um monitor para testar a posiÃ§Ã£o.",
+                "Selecione um monitor para testar a posição.",
                 messageTitle,
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Information);
@@ -3430,7 +3433,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "Informe um executÃ¡vel vÃ¡lido antes de executar o teste.",
+                "Informe um executável válido antes de executar o teste.",
                 messageTitle,
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Information);
@@ -3441,7 +3444,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "ExecutÃ¡vel nÃ£o encontrado. Ajuste o caminho antes de executar o teste.",
+                "Executável não encontrado. Ajuste o caminho antes de executar o teste.",
                 messageTitle,
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Information);
@@ -3495,7 +3498,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         using var process = Process.Start(startInfo);
         if (process is null)
         {
-            throw new InvalidOperationException("NÃ£o foi possÃ­vel iniciar o aplicativo selecionado.");
+            throw new InvalidOperationException("Não foi possível iniciar o aplicativo selecionado.");
         }
     }
 
@@ -3510,7 +3513,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         var process = Process.Start(startInfo);
         if (process is null)
         {
-            throw new InvalidOperationException("NÃ£o foi possÃ­vel iniciar a janela de teste.");
+            throw new InvalidOperationException("Não foi possível iniciar a janela de teste.");
         }
 
         try
@@ -3523,7 +3526,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Falha ao suspender prÃ©-visualizaÃ§Ã£o antes do movimento da janela de teste.");
+                _logger.Warning(ex, "Falha ao suspender pré-visualização antes do movimento da janela de teste.");
             }
             try
             {
@@ -3548,9 +3551,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore failures while closing the dummy window.
+                _logger.Debug(ex, "Falha ao fechar janela de teste.");
             }
 
             process.Dispose();
@@ -3597,11 +3600,11 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         }
         catch (ObjectDisposedException)
         {
-            // Ignorar quando o formulÃ¡rio estiver sendo finalizado.
+            // Ignorar quando o formulário estiver sendo finalizado.
         }
         catch (InvalidOperationException)
         {
-            // Ignorar quando o handle nÃ£o estiver disponÃ­vel.
+            // Ignorar quando o handle não estiver disponível.
         }
     }
 
@@ -4182,12 +4185,12 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             if (string.IsNullOrWhiteSpace(txtExecutavel.Text))
             {
-                errorProvider.SetError(txtExecutavel, "Informe o executÃ¡vel.");
+                errorProvider.SetError(txtExecutavel, "Informe o executável.");
                 valido = false;
             }
             else if (!File.Exists(txtExecutavel.Text))
             {
-                errorProvider.SetError(txtExecutavel, "ExecutÃ¡vel nÃ£o encontrado.");
+                errorProvider.SetError(txtExecutavel, "Executável não encontrado.");
                 valido = false;
             }
             else
@@ -4199,7 +4202,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             errorProvider.SetError(txtExecutavel, string.Empty);
 
-            // ValidaÃ§Ã£o modo navegador
+            // Validação modo navegador
             if (_sites.Count == 0)
             {
                 errorProvider.SetError(sitesEditorControl, "Adicione pelo menos um site.");
@@ -4278,8 +4281,8 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             var result = MessageBox.Show(
                 this,
-                "Existem alteraÃ§Ãµes nÃ£o salvas. Deseja descartar?",
-                "ConfirmaÃ§Ã£o",
+                "Existem alterações não salvas. Deseja descartar?",
+                "Confirmação",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
 
@@ -4301,7 +4304,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Falha ao encerrar prÃ©-visualizaÃ§Ã£o ao fechar o editor.");
+                _logger.Warning(ex, "Falha ao encerrar pré-visualização ao fechar o editor.");
             }
         }
     }
@@ -4329,7 +4332,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
                 }
                 catch (TargetInvocationException)
                 {
-                    // Ignored: falha ao limpar a seleÃ§Ã£o nÃ£o deve impedir a seleÃ§Ã£o personalizada.
+                    // Ignored: falha ao limpar a seleção não deve impedir a seleção personalizada.
                 }
                 finally
                 {
@@ -4407,7 +4410,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "Selecione um executÃ¡vel vÃ¡lido para abrir.",
+                "Selecione um executável válido para abrir.",
                 "Abrir aplicativo",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Warning);
@@ -4422,7 +4425,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                $"NÃ£o foi possÃ­vel abrir o aplicativo selecionado: {ex.Message}",
+                $"Não foi possível abrir o aplicativo selecionado: {ex.Message}",
                 "Abrir aplicativo",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Error);
@@ -4435,7 +4438,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                "O teste de posicionamento estÃ¡ disponÃ­vel apenas no Windows.",
+                "O teste de posicionamento está disponível apenas no Windows.",
                 "Teste de aplicativo",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Information);
@@ -4483,7 +4486,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         {
             WinForms.MessageBox.Show(
                 this,
-                $"NÃ£o foi possÃ­vel testar a posiÃ§Ã£o: {ex.Message}",
+                $"Não foi possível testar a posição: {ex.Message}",
                 "Teste de aplicativo",
                 WinForms.MessageBoxButtons.OK,
                 WinForms.MessageBoxIcon.Error);
@@ -4609,7 +4612,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         public string DisplayName { get; }
 
         public static MonitorOption Empty()
-            => new(null, null, "Nenhum monitor disponÃ­vel");
+            => new(null, null, "Nenhum monitor disponível");
 
         public override string ToString() => DisplayName;
     }

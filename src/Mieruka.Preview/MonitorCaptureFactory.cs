@@ -51,7 +51,7 @@ public static class MonitorCaptureFactory
                 else
                 {
                     try { graphics.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-                    catch { /* cleanup best-effort */ }
+                    catch (Exception ex) { Log.ForContext(typeof(MonitorCaptureFactory)).Debug(ex, "Cleanup of unsupported GraphicsCaptureProvider failed."); }
                 }
             }
             catch (Exception ex)

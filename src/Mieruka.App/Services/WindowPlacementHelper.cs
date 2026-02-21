@@ -36,6 +36,7 @@ internal static class WindowPlacementHelper
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint SwpNoActivate = 0x0010;
     private const int MinVisiblePixels = 32;
+    private const int PlacementRetryDelayMs = 50;
     private static readonly Drawing.Size DefaultFallbackSize = new(1280, 720);
     private static readonly TimeSpan ForegroundActivationCooldown = TimeSpan.FromSeconds(2);
     private static readonly object ForegroundActivationLock = new();
@@ -595,7 +596,7 @@ internal static class WindowPlacementHelper
         {
             if (!IsWindow(handle))
             {
-                Thread.Sleep(50);
+                Thread.Sleep(PlacementRetryDelayMs);
                 continue;
             }
 
@@ -606,11 +607,11 @@ internal static class WindowPlacementHelper
             }
             catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
             {
-                Thread.Sleep(50);
+                Thread.Sleep(PlacementRetryDelayMs);
             }
             catch (ArgumentException)
             {
-                Thread.Sleep(50);
+                Thread.Sleep(PlacementRetryDelayMs);
             }
         }
 
@@ -645,7 +646,7 @@ internal static class WindowPlacementHelper
 
             if (!IsWindow(handle))
             {
-                await Task.Delay(50, ct).ConfigureAwait(false);
+                await Task.Delay(PlacementRetryDelayMs, ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -656,11 +657,11 @@ internal static class WindowPlacementHelper
             }
             catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorInvalidWindowHandle)
             {
-                await Task.Delay(50, ct).ConfigureAwait(false);
+                await Task.Delay(PlacementRetryDelayMs, ct).ConfigureAwait(false);
             }
             catch (ArgumentException)
             {
-                await Task.Delay(50, ct).ConfigureAwait(false);
+                await Task.Delay(PlacementRetryDelayMs, ct).ConfigureAwait(false);
             }
         }
 
