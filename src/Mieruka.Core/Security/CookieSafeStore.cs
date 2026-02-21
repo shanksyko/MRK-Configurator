@@ -6,6 +6,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Serilog;
 
 #nullable enable
 
@@ -29,6 +30,7 @@ public sealed class CookieSafeStore
     private readonly Func<bool> _thirdPartyDisabled;
     private readonly ConcurrentDictionary<string, object> _locks = new(StringComparer.OrdinalIgnoreCase);
     private readonly AuditLog? _auditLog;
+    private static readonly ILogger Logger = Log.ForContext<CookieSafeStore>();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CookieSafeStore"/> class.
@@ -255,14 +257,16 @@ public sealed class CookieSafeStore
                     }
                 }
             }
-            catch (CryptographicException)
+            catch (CryptographicException ex)
             {
+                Logger.Warning(ex, "Falha ao decriptar cookies para {Host}; revogando.", normalizedHost);
                 cookies = Array.Empty<Cookie>();
                 Revoke(normalizedHost);
                 return false;
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
+                Logger.Warning(ex, "Falha ao deserializar cookies para {Host}; revogando.", normalizedHost);
                 cookies = Array.Empty<Cookie>();
                 Revoke(normalizedHost);
                 return false;
@@ -352,8 +356,9 @@ public sealed class CookieSafeStore
                         }
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    Logger.Debug(ex, "Cookie file corrupto removido: {File}", file);
                     File.Delete(file);
                 }
             }

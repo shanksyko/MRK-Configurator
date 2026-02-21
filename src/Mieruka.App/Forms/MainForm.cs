@@ -2702,7 +2702,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
                 return;
             }
 
-            CloseTestWindow();
+            await CloseTestWindowAsync().ConfigureAwait(true);
 
             TestWindow = window;
             TestWindow.FormClosed += OnTestWindowClosed;
