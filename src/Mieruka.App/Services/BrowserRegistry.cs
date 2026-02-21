@@ -35,13 +35,13 @@ internal static class BrowserRegistry
             DisplayName: "Google Chrome",
             Engine: BrowserType.Chrome,
             Executables: new[] { "chrome.exe", "chrome" },
-            WindowsRelativeDirectories: new[] { @"Google\\Chrome\\Application" }),
+            WindowsRelativeDirectories: new[] { @"Google\Chrome\Application" }),
         new(
             Id: "edge",
             DisplayName: "Microsoft Edge",
             Engine: BrowserType.Edge,
             Executables: new[] { "msedge.exe", "microsoft-edge" },
-            WindowsRelativeDirectories: new[] { @"Microsoft\\Edge\\Application" }),
+            WindowsRelativeDirectories: new[] { @"Microsoft\Edge\Application" }),
         new(
             Id: "firefox",
             DisplayName: "Mozilla Firefox",
@@ -53,13 +53,13 @@ internal static class BrowserRegistry
             DisplayName: "Brave",
             Engine: BrowserType.Brave,
             Executables: new[] { "brave.exe", "brave-browser", "brave" },
-            WindowsRelativeDirectories: new[] { @"BraveSoftware\\Brave-Browser\\Application" }),
+            WindowsRelativeDirectories: new[] { @"BraveSoftware\Brave-Browser\Application" }),
         new(
             Id: "vivaldi",
             DisplayName: "Vivaldi",
             Engine: null,
             Executables: new[] { "vivaldi.exe", "vivaldi" },
-            WindowsRelativeDirectories: new[] { @"Vivaldi\\Application" }),
+            WindowsRelativeDirectories: new[] { @"Vivaldi\Application" }),
         new(
             Id: "opera",
             DisplayName: "Opera",
@@ -119,7 +119,7 @@ internal static class BrowserRegistry
             return null;
         }
 
-        var subKey = @$"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{executable}";
+        var subKey = $@"Software\Microsoft\Windows\CurrentVersion\App Paths\{executable}";
 
         foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
         {

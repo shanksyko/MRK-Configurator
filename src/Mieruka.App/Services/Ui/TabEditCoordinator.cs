@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Reflection;
 using System.Threading;
@@ -29,7 +29,7 @@ internal sealed class TabEditCoordinator
     private readonly object _uiEventDebounceGate = new();
     private readonly MethodInfo? _applyAppTypeUiMethod;
 
-    private Size _lastRootSize; // MIERUKA_FIX
+    private Size _lastRootSize;
 
     private int _applying;
     private IDisposable? _bindingScope;

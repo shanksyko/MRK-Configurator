@@ -91,7 +91,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         _graphicsOptions = preloadedOptions?.Normalize() ?? LoadGraphicsOptions();
 
         InitializeComponent();
-        // MIERUKA_FIX
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
         UpdateStyles();
         this.DoubleBuffered = true;

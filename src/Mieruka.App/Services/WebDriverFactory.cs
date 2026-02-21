@@ -6,11 +6,14 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Edge;
 using OpenQA.Selenium.Chromium;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
 internal static class WebDriverFactory
 {
+    private static readonly ILogger Logger = Log.ForContext(typeof(WebDriverFactory));
+
     public static IWebDriver Create(SiteConfig site, IEnumerable<string> arguments)
     {
         ArgumentNullException.ThrowIfNull(site);
@@ -26,6 +29,8 @@ internal static class WebDriverFactory
             {
                 BrowserType.Chrome => CreateChromeDriver(site, sanitizedArguments),
                 BrowserType.Edge => CreateEdgeDriver(site, sanitizedArguments),
+                BrowserType.Firefox => throw BuildUnsupportedBrowserException(BrowserType.Firefox, "GeckoDriver (Firefox)"),
+                BrowserType.Brave => throw BuildUnsupportedBrowserException(BrowserType.Brave, "Brave (Chromium)"),
                 _ => throw new NotSupportedException($"Browser '{site.Browser}' is not supported for Selenium tests."),
             };
         }
@@ -96,6 +101,15 @@ internal static class WebDriverFactory
         }
 
         driver.Navigate().GoToUrl(site.Url);
+    }
+
+    private static NotSupportedException BuildUnsupportedBrowserException(BrowserType browser, string driverHint)
+    {
+        var message = $"O navegador '{browser}' não é suportado para testes via Selenium. " +
+                      $"Use o modo Process (sem login automático) ou configure Chrome/Edge. " +
+                      $"Driver necessário: {driverHint}.";
+        Logger.Warning("Selenium test requested for unsupported browser {Browser}. Driver hint: {DriverHint}.", browser, driverHint);
+        return new NotSupportedException(message);
     }
 
     private static NotSupportedException BuildDriverMissingException(BrowserType browser, Exception inner)

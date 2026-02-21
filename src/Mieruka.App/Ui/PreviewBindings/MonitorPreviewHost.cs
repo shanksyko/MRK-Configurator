@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
@@ -253,14 +253,14 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             DisableEditorSnapshot(clearImage: true);
             _logger.Information(
-                "EditorPreviewDisabled: usando imagem placeholder para monitor={MonitorId} // MIERUKA_FIX",
+                "EditorPreviewDisabled: usando imagem placeholder para monitor={MonitorId}",
                 MonitorId);
             ApplyPlaceholderFrame();
         }
         else
         {
             _logger.Information(
-                "EditorPreviewDisabled: saindo do modo placeholder, preview real pode ser retomado // MIERUKA_FIX");
+                "EditorPreviewDisabled: saindo do modo placeholder, preview real pode ser retomado");
         }
     }
 
@@ -686,7 +686,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             if (!snapshotCaptured)
             {
                 _logger.Warning(
-                    "EditorSnapshot: não foi possível capturar snapshot, mantendo preview contínuo. Motivo={Reason} // MIERUKA_FIX",
+                    "EditorSnapshot: nÃ£o foi possÃ­vel capturar snapshot, mantendo preview contÃ­nuo. Motivo={Reason}",
                     "SnapshotFalhou");
                 return;
             }
@@ -705,10 +705,10 @@ public sealed partial class MonitorPreviewHost : IDisposable
             {
                 var backend = _isGpuActive ? "GPU" : "GDI";
                 _logger.Information(
-                    "EditorSnapshot: ativando modo snapshot para monitor={MonitorId}, backend={Backend} // MIERUKA_FIX",
+                    "EditorSnapshot: ativando modo snapshot para monitor={MonitorId}, backend={Backend}",
                     MonitorId,
                     backend);
-                _logger.Information("EditorSnapshot: modo snapshot ativado, preview contínuo pausado // MIERUKA_FIX");
+                _logger.Information("EditorSnapshot: modo snapshot ativado, preview contÃ­nuo pausado");
             }
 
             Volatile.Write(ref _previewRunning, false);
@@ -761,7 +761,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 if (snapshotWasActive)
                 {
                     _logger.Information(
-                        "EditorSnapshot: modo snapshot desativado, preview contínuo retomado // MIERUKA_FIX");
+                        "EditorSnapshot: modo snapshot desativado, preview contÃ­nuo retomado");
                 }
 
                 _logger.Information("PreviewResumed");
@@ -877,7 +877,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             {
                 try
                 {
-                    ForEvent("DisposeRetryFailed").Error(ex, "Falha ao concluir Dispose após reagendamento.");
+                    ForEvent("DisposeRetryFailed").Error(ex, "Falha ao concluir Dispose apÃ³s reagendamento.");
                 }
                 catch
                 {
@@ -1299,7 +1299,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                     catch (Exception ex)
                     {
                         ForEvent("SafeModeStartRetryFailed")
-                            .Error(ex, "Falha ao reiniciar a pré-visualização em modo seguro.");
+                            .Error(ex, "Falha ao reiniciar a prÃ©-visualizaÃ§Ã£o em modo seguro.");
                         throw;
                     }
                 }));
@@ -1373,7 +1373,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         if (_monitorBounds.Width < MinimumCaptureSurface || _monitorBounds.Height < MinimumCaptureSurface)
         {
             _logger.Warning(
-                "MonitorPreviewHost: monitor sem superfície válida para captura width={Width} height={Height} monitorId={MonitorId}",
+                "MonitorPreviewHost: monitor sem superfÃ­cie vÃ¡lida para captura width={Width} height={Height} monitorId={MonitorId}",
                 _monitorBounds.Width,
                 _monitorBounds.Height,
                 MonitorId);
@@ -1424,7 +1424,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                     ForEvent("MonitorFallback")
                         .Warning(
                             ex,
-                            "Fallback para GDI habilitado. Monitor={MonitorId}; Fábrica={Factory}; Motivo={Reason}",
+                            "Fallback para GDI habilitado. Monitor={MonitorId}; FÃ¡brica={Factory}; Motivo={Reason}",
                             MonitorId,
                             mode,
                             reason);
@@ -1525,7 +1525,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             if (IsEditorPreviewDisabled)
             {
                 _logger.Debug(
-                    "[DBG] EditorPreviewDisabled: descartando frame de preview ao vivo monitor={MonitorId} // MIERUKA_FIX",
+                    "[DBG] EditorPreviewDisabled: descartando frame de preview ao vivo monitor={MonitorId}",
                     MonitorId);
                 e.Dispose();
                 return;
@@ -1533,7 +1533,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
             if (IsEditorSnapshotActive)
             {
-                _logger.Debug("EditorSnapshot: quadro ignorado porque snapshot está ativo // MIERUKA_FIX");
+                _logger.Debug("EditorSnapshot: quadro ignorado porque snapshot estÃ¡ ativo");
                 e.Dispose();
                 return;
             }
@@ -1562,7 +1562,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 if (width <= 0 || height <= 0)
                 {
                     ForEvent("FrameDiscarded").Debug(
-                        "Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.",
+                        "Quadro de prÃ©-visualizaÃ§Ã£o descartado por dimensÃµes invÃ¡lidas {Width}x{Height}.",
                         width,
                         height);
                     return;
@@ -1689,8 +1689,8 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
     }
 
-    // Pool de bitmaps reutilizáveis para evitar ~8MB de alocação por frame.
-    // Ring buffer com 4 slots — allows producer to write to one while consumer displays another.
+    // Pool de bitmaps reutilizÃ¡veis para evitar ~8MB de alocaÃ§Ã£o por frame.
+    // Ring buffer com 4 slots â€” allows producer to write to one while consumer displays another.
     private readonly Drawing.Bitmap?[] _bitmapPool = new Drawing.Bitmap?[4];
     private int _bitmapPoolIndex;
 
@@ -1704,7 +1704,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             // Reuse existing bitmap if dimensions match; otherwise allocate a new one.
             if (reusable is null || reusable.Width != width || reusable.Height != height)
             {
-                // Don't dispose the old bitmap here — it may still be referenced
+                // Don't dispose the old bitmap here â€” it may still be referenced
                 // by the PictureBox. The old image is disposed when replaced via
                 // TryApplyFrame -> DisposeFrame chain.
                 reusable = new Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
@@ -1729,7 +1729,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             ForEvent("FrameDiscarded").Debug(
                 ex,
-                "Quadro de pré-visualização descartado por falha ao clonar frame {Width}x{Height}.",
+                "Quadro de prÃ©-visualizaÃ§Ã£o descartado por falha ao clonar frame {Width}x{Height}.",
                 width,
                 height);
             return null;
@@ -1738,7 +1738,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             ForEvent("FrameDiscarded").Warning(
                 ex,
-                "Quadro de pré-visualização descartado por falta de memória ao clonar frame {Width}x{Height}.",
+                "Quadro de prÃ©-visualizaÃ§Ã£o descartado por falta de memÃ³ria ao clonar frame {Width}x{Height}.",
                 width,
                 height);
             return null;
@@ -1756,7 +1756,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         if (width <= 0 || height <= 0)
         {
             ForEvent("FrameDiscarded").Debug(
-                "Quadro de pré-visualização descartado por dimensões inválidas {Width}x{Height}.",
+                "Quadro de prÃ©-visualizaÃ§Ã£o descartado por dimensÃµes invÃ¡lidas {Width}x{Height}.",
                 width,
                 height);
             frame.Dispose();
@@ -1778,7 +1778,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
         catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
         {
-            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            ForEvent("FrameDiscarded").Debug(ex, "Quadro de prÃ©-visualizaÃ§Ã£o descartado por imagem invÃ¡lida.");
             StopAnimationSafe(frame);
             frame.Dispose();
 
@@ -1998,13 +1998,13 @@ public sealed partial class MonitorPreviewHost : IDisposable
         var source = GetLatestFrameForSnapshot();
         if (source is null)
         {
-            _logger.Warning("EditorSnapshot: não foi possível capturar snapshot, mantendo preview contínuo. Motivo={Reason} // MIERUKA_FIX", "SemFrame");
+            _logger.Warning("EditorSnapshot: nÃ£o foi possÃ­vel capturar snapshot, mantendo preview contÃ­nuo. Motivo={Reason}", "SemFrame");
             return false;
         }
 
         if (!TryGetFrameSize(source, out var width, out var height) || width <= 0 || height <= 0)
         {
-            _logger.Warning("EditorSnapshot: não foi possível capturar snapshot, mantendo preview contínuo. Motivo={Reason} // MIERUKA_FIX", "FrameInvalido");
+            _logger.Warning("EditorSnapshot: nÃ£o foi possÃ­vel capturar snapshot, mantendo preview contÃ­nuo. Motivo={Reason}", "FrameInvalido");
             return false;
         }
 
@@ -2016,12 +2016,12 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
         catch (Exception ex) when (ex is ArgumentException or ExternalException or InvalidOperationException)
         {
-            _logger.Warning(ex, "EditorSnapshot: não foi possível clonar frame para snapshot // MIERUKA_FIX");
+            _logger.Warning(ex, "EditorSnapshot: nÃ£o foi possÃ­vel clonar frame para snapshot");
             return false;
         }
         catch (Exception ex) when (ex is OutOfMemoryException)
         {
-            _logger.Warning(ex, "EditorSnapshot: falha de memória ao clonar frame para snapshot // MIERUKA_FIX");
+            _logger.Warning(ex, "EditorSnapshot: falha de memÃ³ria ao clonar frame para snapshot");
             return false;
         }
 
@@ -2031,7 +2031,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         if (applied)
         {
             _logger.Information(
-                "EditorSnapshot: snapshot capturado para monitor {MonitorId}, bounds={Width}x{Height} // MIERUKA_FIX",
+                "EditorSnapshot: snapshot capturado para monitor {MonitorId}, bounds={Width}x{Height}",
                 MonitorId,
                 width,
                 height);
@@ -2075,7 +2075,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
             }
 
             _logger.Debug(
-                "EditorSnapshot: overlays aplicados sobre snapshot estático monitor={MonitorId} // MIERUKA_FIX",
+                "EditorSnapshot: overlays aplicados sobre snapshot estÃ¡tico monitor={MonitorId}",
                 MonitorId);
             completion.TrySetResult(true);
         }
@@ -2167,7 +2167,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         }
         catch (Exception ex) when (ex is ArgumentException or ObjectDisposedException or ExternalException)
         {
-            ForEvent("FrameDiscarded").Debug(ex, "Quadro de pré-visualização descartado por imagem inválida.");
+            ForEvent("FrameDiscarded").Debug(ex, "Quadro de prÃ©-visualizaÃ§Ã£o descartado por imagem invÃ¡lida.");
             width = 0;
             height = 0;
             return false;
@@ -2213,7 +2213,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
 
     private void DisposeFrame(Drawing.Image frame)
     {
-        // Do not dispose bitmaps that belong to the pool ring buffer — they are reused.
+        // Do not dispose bitmaps that belong to the pool ring buffer â€” they are reused.
         for (var i = 0; i < _bitmapPool.Length; i++)
         {
             if (ReferenceEquals(_bitmapPool[i], frame))
@@ -2820,7 +2820,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
         Interlocked.Increment(ref _reentrancyBlockedCount);
         MaybeReportGateBlocks();
 
-        ForEvent("ReentrancyBlocked").Debug("Operação {Operation} bloqueada por reentrância.", operation);
+        ForEvent("ReentrancyBlocked").Debug("OperaÃ§Ã£o {Operation} bloqueada por reentrÃ¢ncia.", operation);
     }
 
     private static string GetMonitorFriendlyName(MonitorInfo monitor)

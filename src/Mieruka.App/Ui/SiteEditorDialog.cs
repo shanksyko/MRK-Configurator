@@ -557,7 +557,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         var browser = _browserBox.SelectedItem is BrowserType selected
             ? selected
             : BrowserType.Chrome;
-        var enginePath = ResolveBrowserExecutable(browser);
+        var enginePath = BrowserArgumentBuilder.ResolveBrowserExecutable(browser);
 
         var arguments = new List<string>();
 
@@ -574,13 +574,13 @@ internal sealed class SiteEditorDialog : WinForms.Form
         var userData = _userDataBox.Text.Trim();
         if (!string.IsNullOrWhiteSpace(userData))
         {
-            AddArgument(FormatArgument("--user-data-dir", userData));
+            AddArgument(BrowserArgumentBuilder.FormatArgument("--user-data-dir", userData));
         }
 
         var profile = _profileBox.Text.Trim();
         if (!string.IsNullOrWhiteSpace(profile))
         {
-            AddArgument(FormatArgument("--profile-directory", profile));
+            AddArgument(BrowserArgumentBuilder.FormatArgument("--profile-directory", profile));
         }
 
         if (_kioskCheck.Checked)
@@ -591,7 +591,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         var url = _urlBox.Text.Trim();
         if (_appModeCheck.Checked && !string.IsNullOrWhiteSpace(url))
         {
-            AddArgument(FormatArgument("--app", url));
+            AddArgument(BrowserArgumentBuilder.FormatArgument("--app", url));
         }
 
         foreach (var selectedArg in _argsPanel.GetSelectedArguments())
@@ -618,35 +618,7 @@ internal sealed class SiteEditorDialog : WinForms.Form
         _commandPreviewBox.Text = preview.ToString().Trim();
     }
 
-    private static string FormatArgument(string name, string value)
-    {
-        var sanitized = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        return $"{name}=\"{sanitized}\"";
-    }
-
-    private static string ResolveBrowserExecutable(BrowserType browser)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return browser switch
-            {
-                BrowserType.Chrome => "chrome.exe",
-                BrowserType.Edge => "msedge.exe",
-                BrowserType.Firefox => "firefox.exe",
-                BrowserType.Brave => "brave.exe",
-                _ => browser.ToString(),
-            };
-        }
-
-        return browser switch
-        {
-            BrowserType.Chrome => "google-chrome",
-            BrowserType.Edge => "microsoft-edge",
-            BrowserType.Firefox => "firefox",
-            BrowserType.Brave => "brave-browser",
-            _ => browser.ToString().ToLowerInvariant(),
-        };
-    }
+    // Browser argument formatting and executable resolution are centralised in BrowserArgumentBuilder.
 
     private void UpdateBrowserDetectionStatus()
     {

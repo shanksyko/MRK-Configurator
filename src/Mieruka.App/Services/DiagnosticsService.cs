@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
@@ -12,6 +13,8 @@ namespace Mieruka.App.Services;
 /// </summary>
 public sealed class DiagnosticsService : IDisposable, IAsyncDisposable
 {
+    private static readonly ILogger Logger = Log.ForContext<DiagnosticsService>();
+
     /// <summary>
     /// Default HTTP listener prefix for the diagnostics endpoint.
     /// </summary>
@@ -199,15 +202,17 @@ public sealed class DiagnosticsService : IDisposable, IAsyncDisposable
             {
                 await ProcessRequestAsync(context).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Error(ex, "Unhandled error processing diagnostics request.");
                 try
                 {
                     context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
                     context.Response.Close();
                 }
-                catch
+                catch (Exception closeEx)
                 {
+                    Logger.Debug(closeEx, "Failed to send 500 response.");
                 }
             }
         }
@@ -238,8 +243,9 @@ public sealed class DiagnosticsService : IDisposable, IAsyncDisposable
         {
             report = _reportProvider();
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Warning(ex, "Report provider failed to generate diagnostics payload.");
             report = null;
         }
 

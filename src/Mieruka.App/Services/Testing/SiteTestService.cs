@@ -84,8 +84,8 @@ internal sealed class SiteTestService
         var monitor = WindowPlacementHelper.ResolveTargetMonitor(site, selectedMonitorStableId, _workspace.Monitors, _displayService);
         var zone = WindowPlacementHelper.ResolveTargetZone(monitor, site.TargetZonePresetId, site.Window, _workspace.ZonePresets);
 
-        var executable = ResolveBrowserExecutable(site.Browser);
-        var arguments = BuildBrowserArgumentString(site);
+        var executable = BrowserArgumentBuilder.ResolveBrowserExecutable(site.Browser);
+        var arguments = BrowserArgumentBuilder.BuildBrowserArgumentString(site, _workspace.BrowserArguments);
 
         var startInfo = new ProcessStartInfo
         {
@@ -118,7 +118,7 @@ internal sealed class SiteTestService
 
         try
         {
-            var arguments = CollectBrowserArguments(site).ToList();
+            var arguments = BrowserArgumentBuilder.CollectBrowserArguments(site, _workspace.BrowserArguments);
             driver = WebDriverFactory.Create(site, arguments);
             ApplyWhitelist(driver, site.AllowedTabHosts ?? Array.Empty<string>());
             await ExecuteLoginAsync(driver, site.Login, ct).ConfigureAwait(false);
@@ -189,7 +189,8 @@ internal sealed class SiteTestService
 
         // Cancel any previous whitelist monitoring task.
         _whitelistCts?.Cancel();
-        try { _whitelistTask?.Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        try { _whitelistTask?.Wait(TimeSpan.FromSeconds(2)); }
+        catch (Exception ex) { _logger.Debug(ex, "Previous whitelist monitoring task did not complete cleanly."); }
         _whitelistCts?.Dispose();
 
         var tabManager = new TabManager(_telemetry);
@@ -234,123 +235,5 @@ internal sealed class SiteTestService
         }
     }
 
-    private string ResolveBrowserExecutable(BrowserType browser)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return browser switch
-            {
-                BrowserType.Chrome => "chrome.exe",
-                BrowserType.Edge => "msedge.exe",
-                BrowserType.Firefox => "firefox.exe",
-                BrowserType.Brave => "brave.exe",
-                _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
-            };
-        }
-
-        return browser switch
-        {
-            BrowserType.Chrome => "google-chrome",
-            BrowserType.Edge => "microsoft-edge",
-            BrowserType.Firefox => "firefox",
-            BrowserType.Brave => "brave-browser",
-            _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
-        };
-    }
-
-    private string BuildBrowserArgumentString(SiteConfig site)
-    {
-        var arguments = CollectBrowserArguments(site).ToList();
-        if (!site.AppMode && !string.IsNullOrWhiteSpace(site.Url))
-        {
-            arguments.Add(site.Url);
-        }
-
-        return string.Join(' ', arguments);
-    }
-
-    private IEnumerable<string> CollectBrowserArguments(SiteConfig site)
-    {
-        var arguments = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void AddArgument(string? argument)
-        {
-            if (string.IsNullOrWhiteSpace(argument))
-            {
-                return;
-            }
-
-            if (seen.Add(argument))
-            {
-                arguments.Add(argument);
-            }
-        }
-
-        foreach (var argument in GetGlobalBrowserArguments(site.Browser))
-        {
-            AddArgument(argument);
-        }
-
-        foreach (var argument in site.BrowserArguments ?? Array.Empty<string>())
-        {
-            AddArgument(argument);
-        }
-
-        if (!string.IsNullOrWhiteSpace(site.UserDataDirectory) && !ContainsArgument(arguments, "--user-data-dir", matchByPrefix: true))
-        {
-            AddArgument(FormatArgument("--user-data-dir", site.UserDataDirectory));
-        }
-
-        if (!string.IsNullOrWhiteSpace(site.ProfileDirectory) && !ContainsArgument(arguments, "--profile-directory", matchByPrefix: true))
-        {
-            AddArgument(FormatArgument("--profile-directory", site.ProfileDirectory));
-        }
-
-        if (site.KioskMode && !ContainsArgument(arguments, "--kiosk"))
-        {
-            AddArgument("--kiosk");
-        }
-
-        if (site.AppMode)
-        {
-            if (!string.IsNullOrWhiteSpace(site.Url) && !ContainsArgument(arguments, "--app", matchByPrefix: true))
-            {
-                AddArgument(FormatArgument("--app", site.Url));
-            }
-        }
-
-        return arguments;
-    }
-
-    private IEnumerable<string> GetGlobalBrowserArguments(BrowserType browser)
-    {
-        return _workspace.BrowserArguments.ForBrowser(browser);
-    }
-
-    private static bool ContainsArgument(IEnumerable<string> arguments, string name, bool matchByPrefix = false)
-    {
-        foreach (var argument in arguments)
-        {
-            if (matchByPrefix)
-            {
-                if (argument.StartsWith(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            else if (string.Equals(argument, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string FormatArgument(string name, string value)
-    {
-        var sanitized = value.Replace("\"", "\\\"");
-        return $"{name}=\"{sanitized}\"";
-    }
+    // Browser argument building and executable resolution are centralised in BrowserArgumentBuilder.
 }

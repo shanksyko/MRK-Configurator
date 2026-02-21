@@ -107,7 +107,6 @@ internal sealed class ConfigForm : WinForms.Form
         _siteTestService = new SiteTestService(_workspace, _displayService, _telemetry);
 
         InitializeComponent();
-        // MIERUKA_FIX
         SetStyle(
             WinForms.ControlStyles.AllPaintingInWmPaint
             | WinForms.ControlStyles.OptimizedDoubleBuffer

@@ -30,6 +30,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
     private readonly BindingTrayService _bindingService;
     private readonly ITelemetry _telemetry;
     private readonly HttpClient _httpClient;
+    private readonly bool _ownsHttpClient;
     private readonly object _gate = new();
     private readonly Dictionary<string, AppWatchContext> _applications = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SiteWatchContext> _sites = new(StringComparer.OrdinalIgnoreCase);
@@ -45,12 +46,17 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
     /// </summary>
     /// <param name="bindingService">Service responsible for applying window placement.</param>
     /// <param name="telemetry">Optional telemetry sink used to record watchdog events.</param>
-    public WatchdogService(BindingTrayService bindingService, ITelemetry? telemetry = null)
+    /// <param name="httpClient">Optional shared <see cref="HttpClient"/> for health checks. When <see langword="null"/> a shared static instance is used.</param>
+    public WatchdogService(BindingTrayService bindingService, ITelemetry? telemetry = null, HttpClient? httpClient = null)
     {
         _bindingService = bindingService ?? throw new ArgumentNullException(nameof(bindingService));
         _telemetry = telemetry ?? NullTelemetry.Instance;
-        _httpClient = new HttpClient();
+        _httpClient = httpClient ?? SharedHttpClient;
+        _ownsHttpClient = httpClient is not null;
     }
+
+    // Shared HttpClient avoids socket exhaustion when no explicit instance is provided.
+    private static readonly HttpClient SharedHttpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     /// <summary>
     /// Applies the provided configuration, updating the supervised entries.
@@ -178,7 +184,11 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
             _sites.Clear();
         }
 
-        _httpClient.Dispose();
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
+
         _disposed = true;
     }
 
@@ -210,7 +220,11 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
             _sites.Clear();
         }
 
-        _httpClient.Dispose();
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
+
         _disposed = true;
     }
 
@@ -640,8 +654,8 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
     {
         try
         {
-            var executable = ResolveBrowserExecutable(context.Config.Browser);
-            var arguments = BuildBrowserArguments(context.Config);
+            var executable = BrowserArgumentBuilder.ResolveBrowserExecutable(context.Config.Browser);
+            var arguments = BrowserArgumentBuilder.BuildBrowserArgumentString(context.Config, _globalBrowserArguments);
 
             var startInfo = new ProcessStartInfo
             {
@@ -1004,124 +1018,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
         }
     }
 
-    private string BuildBrowserArguments(SiteConfig site)
-    {
-        var arguments = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void AddArgument(string? argument)
-        {
-            if (string.IsNullOrWhiteSpace(argument))
-            {
-                return;
-            }
-
-            if (seen.Add(argument))
-            {
-                arguments.Add(argument);
-            }
-        }
-
-        foreach (var argument in GetGlobalBrowserArguments(site.Browser))
-        {
-            AddArgument(argument);
-        }
-
-        foreach (var argument in site.BrowserArguments ?? Array.Empty<string>())
-        {
-            AddArgument(argument);
-        }
-
-        if (!string.IsNullOrWhiteSpace(site.UserDataDirectory) && !ContainsArgument(arguments, "--user-data-dir", matchByPrefix: true))
-        {
-            AddArgument(FormatArgument("--user-data-dir", site.UserDataDirectory));
-        }
-
-        if (!string.IsNullOrWhiteSpace(site.ProfileDirectory) && !ContainsArgument(arguments, "--profile-directory", matchByPrefix: true))
-        {
-            AddArgument(FormatArgument("--profile-directory", site.ProfileDirectory));
-        }
-
-        if (site.KioskMode && !ContainsArgument(arguments, "--kiosk"))
-        {
-            AddArgument("--kiosk");
-        }
-
-        if (site.AppMode)
-        {
-            if (string.IsNullOrWhiteSpace(site.Url))
-            {
-                throw new InvalidOperationException($"Site '{site.Id}' requires a URL to use app mode.");
-            }
-
-            if (!ContainsArgument(arguments, "--app", matchByPrefix: true))
-            {
-                AddArgument(FormatArgument("--app", site.Url));
-            }
-        }
-
-        if (!site.AppMode && !string.IsNullOrWhiteSpace(site.Url))
-        {
-            AddArgument(site.Url);
-        }
-
-        return string.Join(' ', arguments);
-    }
-
-    private IEnumerable<string> GetGlobalBrowserArguments(BrowserType browser)
-    {
-        return _globalBrowserArguments?.ForBrowser(browser) ?? Array.Empty<string>();
-    }
-
-    private static bool ContainsArgument(IEnumerable<string> arguments, string name, bool matchByPrefix = false)
-    {
-        foreach (var argument in arguments)
-        {
-            if (matchByPrefix)
-            {
-                if (argument.StartsWith(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            else if (string.Equals(argument, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string FormatArgument(string name, string value)
-    {
-        var sanitized = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        return $"{name}=\"{sanitized}\"";
-    }
-
-    private static string ResolveBrowserExecutable(BrowserType browser)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return browser switch
-            {
-                BrowserType.Chrome => "chrome.exe",
-                BrowserType.Edge => "msedge.exe",
-                BrowserType.Firefox => "firefox.exe",
-                BrowserType.Brave => "brave.exe",
-                _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
-            };
-        }
-
-        return browser switch
-        {
-            BrowserType.Chrome => "google-chrome",
-            BrowserType.Edge => "microsoft-edge",
-            BrowserType.Firefox => "firefox",
-            BrowserType.Brave => "brave-browser",
-            _ => throw new NotSupportedException($"Browser '{browser}' is not supported."),
-        };
-    }
+    // Browser argument building and executable resolution are centralised in BrowserArgumentBuilder.
 
     private static bool IsProcessAlive(Process? process)
     {
