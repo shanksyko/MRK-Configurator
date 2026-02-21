@@ -336,7 +336,7 @@ namespace Mieruka.Preview
             {
                 await capture.DisposeAsync().ConfigureAwait(false);
             }
-            catch
+            catch (Exception)
             {
                 // Ignore cleanup exceptions when failing to create the capture.
             }

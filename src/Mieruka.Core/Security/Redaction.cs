@@ -11,19 +11,16 @@ namespace Mieruka.Core.Security;
 /// <summary>
 /// Provides helpers that redact sensitive information from logs.
 /// </summary>
-public static class Redaction
+public static partial class Redaction
 {
-    private static readonly Regex EmailRegex = new(
-        @"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    [GeneratedRegex(@"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", RegexOptions.CultureInvariant)]
+    private static partial Regex EmailRegex();
 
-    private static readonly Regex TokenRegex = new(
-        @"(?:(?:bearer|token|api[_-]?key|password)\s*[=:\s]\s*)([A-Za-z0-9._-]{6,})",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    [GeneratedRegex(@"(?:(?:bearer|token|api[_-]?key|password)\s*[=:\s]\s*)([A-Za-z0-9._-]{6,})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TokenRegex();
 
-    private static readonly Regex GuidRegex = new(
-        @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    [GeneratedRegex(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", RegexOptions.CultureInvariant)]
+    private static partial Regex GuidRegex();
 
     /// <summary>
     /// Redacts sensitive information from the input string.
@@ -35,9 +32,9 @@ public static class Redaction
             return value ?? string.Empty;
         }
 
-        var result = EmailRegex.Replace(value, "***@***");
-        result = TokenRegex.Replace(result, match => match.Groups[1].Success ? match.Value.Replace(match.Groups[1].Value, "<redacted>") : match.Value);
-        result = GuidRegex.Replace(result, "<id>");
+        var result = EmailRegex().Replace(value, "***@***");
+        result = TokenRegex().Replace(result, match => match.Groups[1].Success ? match.Value.Replace(match.Groups[1].Value, "<redacted>") : match.Value);
+        result = GuidRegex().Replace(result, "<id>");
         return result;
     }
 

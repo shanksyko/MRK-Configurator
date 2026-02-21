@@ -9,15 +9,13 @@ namespace Mieruka.Core.Security;
 /// <summary>
 /// Provides helper methods that sanitize user controlled input before it is used in security sensitive contexts.
 /// </summary>
-public static class InputSanitizer
+public static partial class InputSanitizer
 {
-    private static readonly Regex SelectorRegex = new(
-        @"^[A-Za-z0-9_#:\[\].>+*\-\s]+$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    [GeneratedRegex(@"^[A-Za-z0-9_#:\[\].>+*\-\s]+$", RegexOptions.CultureInvariant)]
+    private static partial Regex SelectorRegex();
 
-    private static readonly Regex HostRegex = new(
-        @"^[A-Za-z0-9.-]+$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    [GeneratedRegex(@"^[A-Za-z0-9.-]+$", RegexOptions.CultureInvariant)]
+    private static partial Regex HostRegex();
 
     /// <summary>
     /// Normalizes a file system path ensuring that it does not escape the provided base directory.
@@ -70,7 +68,7 @@ public static class InputSanitizer
 
         var idn = new IdnMapping();
         var ascii = idn.GetAscii(host);
-        if (!HostRegex.IsMatch(ascii))
+        if (!HostRegex().IsMatch(ascii))
         {
             Log.Warning("Rejected host due to invalid characters (length={Length}).", host.Length);
             throw new ArgumentException("Host contains invalid characters.", nameof(host));
@@ -99,7 +97,7 @@ public static class InputSanitizer
             throw new ArgumentException("Selector is too long.", nameof(value));
         }
 
-        if (!SelectorRegex.IsMatch(value))
+        if (!SelectorRegex().IsMatch(value))
         {
             Log.Warning("Rejected selector due to invalid characters (length={Length}).", value.Length);
             throw new ArgumentException("Selector contains invalid characters.", nameof(value));

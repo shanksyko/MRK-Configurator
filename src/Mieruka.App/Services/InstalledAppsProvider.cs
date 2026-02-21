@@ -43,10 +43,7 @@ public sealed class InstalledAppsProvider
             }
 
             var key = $"{entry.Name}|{entry.ExecutablePath}";
-            if (!apps.ContainsKey(key))
-            {
-                apps[key] = entry;
-            }
+            apps.TryAdd(key, entry);
         }
 
         return apps.Values

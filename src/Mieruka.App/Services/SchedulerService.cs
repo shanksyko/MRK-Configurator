@@ -91,8 +91,9 @@ public sealed class SchedulerService : IDisposable
 
         try
         {
-            var now = TimeOnly.FromDateTime(DateTime.Now);
-            var today = DateTime.Now.DayOfWeek;
+            var currentTime = DateTime.Now;
+            var now = TimeOnly.FromDateTime(currentTime);
+            var today = currentTime.DayOfWeek;
 
             if (_config.DaysOfWeek.Count > 0 && !_config.DaysOfWeek.Contains(today))
             {

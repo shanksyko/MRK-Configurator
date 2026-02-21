@@ -21,39 +21,39 @@ public sealed class AuthenticationService : IAuthenticationService
     public async Task<(bool Success, User? User, string? Error)> AuthenticateAsync(string username, string password)
     {
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Username == username);
+            .FirstOrDefaultAsync(u => u.Username == username).ConfigureAwait(false);
 
         if (user == null)
         {
-            await _auditLog.LogAsync(null, "Login Failed", details: $"User not found: {username}");
+            await _auditLog.LogAsync(null, "Login Failed", details: $"User not found: {username}").ConfigureAwait(false);
             return (false, null, "Invalid username or password");
         }
 
         if (!user.IsActive)
         {
-            await _auditLog.LogAsync(null, "Login Failed", details: $"Inactive user: {username}");
+            await _auditLog.LogAsync(null, "Login Failed", details: $"Inactive user: {username}").ConfigureAwait(false);
             return (false, null, "Account is disabled");
         }
 
         var hash = HashPassword(password, user.PasswordSalt);
         if (hash != user.PasswordHash)
         {
-            await _auditLog.LogAsync(null, "Login Failed", details: $"Wrong password: {username}");
+            await _auditLog.LogAsync(null, "Login Failed", details: $"Wrong password: {username}").ConfigureAwait(false);
             return (false, null, "Invalid username or password");
         }
 
         user.LastLoginAt = DateTime.UtcNow;
-        await SaveChangesWithRetryAsync();
+        await SaveChangesWithRetryAsync().ConfigureAwait(false);
 
         CurrentUser = user;
-        await _auditLog.LogAsync(user.Id, "Login Success", details: $"User {username} logged in");
+        await _auditLog.LogAsync(user.Id, "Login Success", details: $"User {username} logged in").ConfigureAwait(false);
 
         return (true, user, user.MustChangePassword ? "You must change your password" : null);
     }
 
     public async Task<bool> ChangePasswordAsync(int userId, string oldPassword, string newPassword)
     {
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId).ConfigureAwait(false);
         if (user == null) return false;
 
         var hash = HashPassword(oldPassword, user.PasswordSalt);
@@ -64,15 +64,15 @@ public sealed class AuthenticationService : IAuthenticationService
         user.MustChangePassword = false;
         user.UpdatedAt = DateTime.UtcNow;
 
-        await SaveChangesWithRetryAsync();
-        await _auditLog.LogAsync(userId, "Password Changed");
+        await SaveChangesWithRetryAsync().ConfigureAwait(false);
+        await _auditLog.LogAsync(userId, "Password Changed").ConfigureAwait(false);
 
         return true;
     }
 
     public async Task LogoutAsync(int userId)
     {
-        await _auditLog.LogAsync(userId, "Logout");
+        await _auditLog.LogAsync(userId, "Logout").ConfigureAwait(false);
         CurrentUser = null;
     }
 
@@ -102,13 +102,13 @@ public sealed class AuthenticationService : IAuthenticationService
         {
             try
             {
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync().ConfigureAwait(false);
                 return;
             }
             catch (DbUpdateException) when (i < maxRetries - 1)
             {
                 // Wait before retry with exponential backoff
-                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i)));
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i))).ConfigureAwait(false);
             }
         }
     }

@@ -70,10 +70,7 @@ public sealed class TabManager
             var now = DateTime.UtcNow;
             foreach (var handle in handles)
             {
-                if (!observations.ContainsKey(handle))
-                {
-                    observations[handle] = new WindowObservation(now);
-                }
+                observations.TryAdd(handle, new WindowObservation(now));
             }
 
             foreach (var known in observations.Keys)

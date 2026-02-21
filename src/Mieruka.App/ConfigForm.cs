@@ -892,7 +892,7 @@ internal sealed class ConfigForm : WinForms.Form
         var entry = EntryReference.Create(EntryKind.Application, app.Id);
         var displayName = string.IsNullOrWhiteSpace(app.Window.Title) ? app.Id : app.Window.Title;
         var exeName = app.ExecutablePath;
-        try { exeName = System.IO.Path.GetFileName(app.ExecutablePath); } catch { /* keep full path */ }
+        try { exeName = System.IO.Path.GetFileName(app.ExecutablePath); } catch (ArgumentException) { /* keep full path */ }
         var item = new WinForms.ListViewItem(displayName)
         {
             Tag = entry,

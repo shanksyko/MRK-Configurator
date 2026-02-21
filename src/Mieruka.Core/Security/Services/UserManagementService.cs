@@ -18,12 +18,12 @@ public sealed class UserManagementService : IUserManagementService
 
     public async Task<List<User>> GetAllUsersAsync()
     {
-        return await _context.Users.OrderBy(u => u.Username).ToListAsync();
+        return await _context.Users.OrderBy(u => u.Username).ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<User?> GetByIdAsync(int userId)
     {
-        return await _context.Users.FindAsync(userId);
+        return await _context.Users.FindAsync(userId).ConfigureAwait(false);
     }
 
     public async Task<(bool Success, string? Error)> CreateUserAsync(
@@ -35,7 +35,7 @@ public sealed class UserManagementService : IUserManagementService
         if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
             return (false, "Senha deve ter pelo menos 6 caracteres.");
 
-        var exists = await _context.Users.AnyAsync(u => u.Username == username);
+        var exists = await _context.Users.AnyAsync(u => u.Username == username).ConfigureAwait(false);
         if (exists)
             return (false, $"Usuário '{username}' já existe.");
 
@@ -55,8 +55,8 @@ public sealed class UserManagementService : IUserManagementService
         };
 
         _context.Users.Add(user);
-        await SaveChangesWithRetryAsync();
-        await _auditLog.LogAsync(null, "User Created", "User", null, $"Username: {username}, Role: {role}");
+        await SaveChangesWithRetryAsync().ConfigureAwait(false);
+        await _auditLog.LogAsync(null, "User Created", "User", null, $"Username: {username}, Role: {role}").ConfigureAwait(false);
 
         return (true, null);
     }
@@ -64,7 +64,7 @@ public sealed class UserManagementService : IUserManagementService
     public async Task<(bool Success, string? Error)> UpdateUserAsync(
         int userId, UserRole role, string? fullName, string? email, bool isActive)
     {
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId).ConfigureAwait(false);
         if (user is null)
             return (false, "Usuário não encontrado.");
 
@@ -74,9 +74,9 @@ public sealed class UserManagementService : IUserManagementService
         user.IsActive = isActive;
         user.UpdatedAt = DateTime.UtcNow;
 
-        await SaveChangesWithRetryAsync();
+        await SaveChangesWithRetryAsync().ConfigureAwait(false);
         await _auditLog.LogAsync(userId, "User Updated", "User", userId.ToString(),
-            $"Role: {role}, Active: {isActive}");
+            $"Role: {role}, Active: {isActive}").ConfigureAwait(false);
 
         return (true, null);
     }
@@ -87,7 +87,7 @@ public sealed class UserManagementService : IUserManagementService
         if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
             return (false, "Senha deve ter pelo menos 6 caracteres.");
 
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId).ConfigureAwait(false);
         if (user is null)
             return (false, "Usuário não encontrado.");
 
@@ -96,9 +96,9 @@ public sealed class UserManagementService : IUserManagementService
         user.MustChangePassword = true;
         user.UpdatedAt = DateTime.UtcNow;
 
-        await SaveChangesWithRetryAsync();
+        await SaveChangesWithRetryAsync().ConfigureAwait(false);
         await _auditLog.LogAsync(performedByUserId, "Password Reset", "User", userId.ToString(),
-            $"Reset for user: {user.Username}");
+            $"Reset for user: {user.Username}").ConfigureAwait(false);
 
         return (true, null);
     }
@@ -128,12 +128,12 @@ public sealed class UserManagementService : IUserManagementService
         {
             try
             {
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync().ConfigureAwait(false);
                 return;
             }
             catch (DbUpdateException) when (i < maxRetries - 1)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i)));
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i))).ConfigureAwait(false);
             }
         }
     }

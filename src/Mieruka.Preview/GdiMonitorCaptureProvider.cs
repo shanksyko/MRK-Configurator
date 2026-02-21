@@ -229,8 +229,9 @@ public sealed class GdiMonitorCaptureProvider : IMonitorCapture
             {
                 _ = StopAsync();
             }
-            catch
+            catch (Exception)
             {
+                // Best-effort stop after faulted capture loop; failure is non-critical.
             }
 
             throw;

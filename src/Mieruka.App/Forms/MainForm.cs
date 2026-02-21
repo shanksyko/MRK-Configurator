@@ -368,7 +368,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
                 return new PreviewGraphicsOptions();
             }
 
-            var json = File.ReadAllText(path);
+            var json = File.ReadAllText(path, System.Text.Encoding.UTF8);
             var options = System.Text.Json.JsonSerializer.Deserialize<PreviewGraphicsOptions>(json);
             return options?.Normalize() ?? new PreviewGraphicsOptions();
         }
@@ -406,7 +406,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         _programas.Add(new ProgramaConfig
         {
             Id = "app_principal",
-            ExecutablePath = @"C:\\Program Files\\Mieruka\\MierukaPlayer.exe",
+            ExecutablePath = @"C:\Program Files\Mieruka\MierukaPlayer.exe",
             AutoStart = true,
             TargetMonitorStableId = string.Empty,
         });

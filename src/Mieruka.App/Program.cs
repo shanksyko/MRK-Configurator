@@ -198,12 +198,13 @@ internal static class Program
 
         try
         {
-            var json = File.ReadAllText(path);
+            var json = File.ReadAllText(path, System.Text.Encoding.UTF8);
             var options = System.Text.Json.JsonSerializer.Deserialize<PreviewGraphicsOptions>(json);
             return options ?? new PreviewGraphicsOptions();
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Debug(ex, "Failed to load preview graphics options.");
             return new PreviewGraphicsOptions();
         }
     }

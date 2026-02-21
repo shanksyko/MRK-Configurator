@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
 using System.Text.RegularExpressions;
 using Mieruka.Core.Security;
 using Xunit;
@@ -9,25 +7,73 @@ namespace Mieruka.Tests;
 
 public sealed class RegexSmokeTest
 {
-    public static IEnumerable<object[]> CriticalRegexes()
+    [Theory]
+    [InlineData("body", true)]
+    [InlineData("div > .class", true)]
+    [InlineData("<script>", false)]
+    public void SelectorRegexValidates(string input, bool shouldMatch)
     {
-        yield return new object[] { typeof(InputSanitizer), "SelectorRegex", "body" };
-        yield return new object[] { typeof(InputSanitizer), "HostRegex", "example" };
-        yield return new object[] { typeof(Redaction), "EmailRegex", "user@example.com" };
-        yield return new object[] { typeof(Redaction), "TokenRegex", "bearer=abcdefghi" };
-        yield return new object[] { typeof(Redaction), "GuidRegex", "00000000-0000-0000-0000-000000000000" };
+        var result = TrySanitizeSelector(input);
+        Assert.Equal(shouldMatch, result);
     }
 
     [Theory]
-    [MemberData(nameof(CriticalRegexes))]
-    public void RegexPatternsCompile(Type declaringType, string fieldName, string sample)
+    [InlineData("example.com", true)]
+    [InlineData("sub.example.com", true)]
+    [InlineData("bad host!", false)]
+    public void HostRegexValidates(string input, bool shouldMatch)
     {
-        var field = declaringType.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(field);
+        var result = TrySanitizeHost(input);
+        Assert.Equal(shouldMatch, result);
+    }
 
-        var regex = Assert.IsType<Regex>(field!.GetValue(null));
-        regex.IsMatch(sample);
-        Assert.True(regex.Options.HasFlag(RegexOptions.Compiled));
-        Assert.True(regex.Options.HasFlag(RegexOptions.CultureInvariant));
+    [Fact]
+    public void EmailRedactionWorks()
+    {
+        var result = Redaction.Redact("contact user@example.com please");
+        Assert.DoesNotContain("user@example.com", result);
+        Assert.Contains("***@***", result);
+    }
+
+    [Fact]
+    public void TokenRedactionWorks()
+    {
+        var result = Redaction.Redact("bearer=abcdefghi");
+        Assert.DoesNotContain("abcdefghi", result);
+        Assert.Contains("<redacted>", result);
+    }
+
+    [Fact]
+    public void GuidRedactionWorks()
+    {
+        var result = Redaction.Redact("id=00000000-0000-0000-0000-000000000000");
+        Assert.DoesNotContain("00000000-0000-0000-0000-000000000000", result);
+        Assert.Contains("<id>", result);
+    }
+
+    private static bool TrySanitizeSelector(string value)
+    {
+        try
+        {
+            InputSanitizer.SanitizeSelector(value);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TrySanitizeHost(string value)
+    {
+        try
+        {
+            InputSanitizer.SanitizeHost(value);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

@@ -137,7 +137,7 @@ namespace Mieruka.Preview
                     return false;
                 }
             }
-            catch
+            catch (Exception)
             {
                 return false;
             }

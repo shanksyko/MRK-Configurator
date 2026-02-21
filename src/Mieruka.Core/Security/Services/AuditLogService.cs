@@ -19,7 +19,7 @@ public sealed class AuditLogService : IAuditLogService
         await Task.Run(async () =>
         {
             var username = userId.HasValue
-                ? (await _context.Users.FindAsync(userId.Value))?.Username ?? "Unknown"
+                ? (await _context.Users.FindAsync(userId.Value).ConfigureAwait(false))?.Username ?? "Unknown"
                 : "System";
 
             var entry = new AuditLogEntry
@@ -42,16 +42,16 @@ public sealed class AuditLogService : IAuditLogService
             {
                 try
                 {
-                    await _context.SaveChangesAsync();
+                    await _context.SaveChangesAsync().ConfigureAwait(false);
                     break;
                 }
                 catch (DbUpdateException) when (i < maxRetries - 1)
                 {
                     // Wait before retry with exponential backoff
-                    await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i)));
+                    await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, i))).ConfigureAwait(false);
                 }
             }
-        });
+        }).ConfigureAwait(false);
     }
 
     public async Task<List<AuditLogEntry>> GetLogsAsync(DateTime? from = null, DateTime? to = null, int? userId = null, int limit = 1000)
@@ -70,6 +70,6 @@ public sealed class AuditLogService : IAuditLogService
         return await query
             .OrderByDescending(l => l.Timestamp)
             .Take(limit)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 }

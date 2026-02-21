@@ -360,7 +360,7 @@ public sealed class HotkeyManager : IDisposable
                 throw new TimeoutException("Hotkey registration timed out.");
             }
 
-            return tcs.Task.Result;
+            return tcs.Task.GetAwaiter().GetResult();
         }
 
         public void Unregister(int registrationId)

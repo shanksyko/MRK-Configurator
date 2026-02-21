@@ -38,7 +38,7 @@ public static class MonitorLocator
                 }
             }
         }
-        catch
+        catch (Exception)
         {
             // Fallback to GDI enumeration when the DisplayConfig service is unavailable.
         }

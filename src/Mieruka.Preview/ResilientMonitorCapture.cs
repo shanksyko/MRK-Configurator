@@ -99,8 +99,9 @@ internal sealed class ResilientMonitorCapture : IMonitorCapture
         {
             await capture.StopAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception)
         {
+            // Best-effort stop during cleanup; failures are expected when the capture is already faulted.
         }
     }
 

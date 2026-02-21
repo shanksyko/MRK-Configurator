@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mieruka.Core.Models;
 using Mieruka.Core.Services;
+using Serilog;
 
 namespace Mieruka.App.Services;
 
@@ -364,6 +365,8 @@ public sealed class UpdaterService : IDisposable
         return path;
     }
 
+    private static readonly ILogger Logger = Log.ForContext<UpdaterService>();
+
     private static void TryDeleteDirectory(string path)
     {
         try
@@ -373,8 +376,9 @@ public sealed class UpdaterService : IDisposable
                 Directory.Delete(path, recursive: true);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to delete directory {Path}.", path);
         }
     }
 
@@ -387,8 +391,9 @@ public sealed class UpdaterService : IDisposable
                 File.Delete(path);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Failed to delete file {Path}.", path);
         }
     }
 
