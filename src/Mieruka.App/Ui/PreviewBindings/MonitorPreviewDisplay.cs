@@ -689,9 +689,9 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
                 {
                     await host.StopSafeAsync(default).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore stop failures during disposal.
+                    Logger.Debug(ex, "Stop failed during unbind disposal.");
                 }
                 finally
                 {

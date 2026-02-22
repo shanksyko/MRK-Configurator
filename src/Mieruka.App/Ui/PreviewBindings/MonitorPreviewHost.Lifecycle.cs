@@ -286,9 +286,9 @@ public sealed partial class MonitorPreviewHost
             {
                 _target.BeginInvoke(new Action(ResumeCore));
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore invoke failures during shutdown.
+                _logger.Debug(ex, "BeginInvoke for ResumeCore failed during shutdown.");
             }
 
             return;

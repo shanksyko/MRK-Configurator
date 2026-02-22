@@ -404,7 +404,7 @@ public sealed class InstalledAppsProvider
         }
         catch (Exception ex)
         {
-            Logger.Debug(ex, "Failed to release COM object.");
+            Logger.Warning(ex, "Failed to release COM object.");
         }
     }
 

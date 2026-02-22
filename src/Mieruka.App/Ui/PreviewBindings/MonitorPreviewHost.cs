@@ -77,6 +77,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private readonly object _stateGate = new();
     private readonly object _pendingFramesGate = new();
     private readonly List<Drawing.Bitmap> _pendingFrames = new();
+    private volatile bool _hasPendingFrame;
     private const int PendingFrameLimit = 4;
     private readonly Guid _previewSessionId = Guid.NewGuid();
     private Drawing.Bitmap? _previewPlaceholderBitmap;
@@ -172,14 +173,14 @@ public sealed partial class MonitorPreviewHost : IDisposable
         {
             try
             {
-                if (!_target.IsDisposed)
+                if (!_target.IsDisposed && _hasPendingFrame)
                 {
                     _target.Invalidate();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore animation callbacks during disposal.
+                _logger.Debug(ex, "Frame animation callback suppressed during disposal.");
             }
         };
         EnsurePictureBoxSizeMode();
@@ -311,10 +312,7 @@ public sealed partial class MonitorPreviewHost : IDisposable
     {
         get
         {
-            lock (_frameTimingGate)
-            {
-                return _frameThrottle;
-            }
+            return new TimeSpan(Volatile.Read(ref _frameThrottleTicks));
         }
         set
         {
