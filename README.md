@@ -1,24 +1,31 @@
 # MRK-Configurator
 
-Mieruka Configurator centralizes the setup of monitors, window bindings, and browser scenes
-used by the Mieruka digital signage environment. The application ships with a background tray
-agent, preview helpers, and automation scripts that depend on diagnostic data to troubleshoot
-field issues.
+O **MRK-Configurator** é a ferramenta central para configurar monitores, janelas e cenas de
+navegador no ambiente de sinalização digital Mieruka.
 
-## Support diagnostics
+## O que este programa faz?
 
-- **Log location / Local dos logs**: every launch writes daily files to
-  `%LOCALAPPDATA%\Mieruka\Logs\<yyyy-MM>`. Each month has its own folder and the
-  current day is stored as `<yyyy-MM-dd>.log`.
-- **Retention / Retenção**: log files older than 14 days are removed automatically during
-  startup. If you need to keep a longer history, copy the folder before launching the app.
-- **Trace mode / Modo detalhado**: set the environment variable `MIERUKA_TRACE` to `1`,
-  `true`, or `verbose` before starting the Configurator to switch the log level to `Verbose`
-  without rebuilding the binaries.
-- **Support package / Pacote de suporte**: compress the entire
-  `%LOCALAPPDATA%\Mieruka\Logs` directory when sending information to the support team. This
-  includes the monthly folders created for retention and any crash dumps generated in the same
-  location.
+- Centraliza a configuração de telas e posicionamento de janelas.
+- Ajuda a preparar cenas de navegador para exibição.
+- Inclui agente em background (tray), recursos de preview e automações para operação diária.
+- Gera dados de diagnóstico para facilitar suporte e resolução de problemas em campo.
 
-Additional troubleshooting steps and Windows-specific collection tips are available in
+## Projeto feito com IA
+
+Este projeto foi desenvolvido com **apoio integral de Inteligência Artificial (IA)**, com
+assistência na geração de código, documentação e sugestões de implementação.
+
+## Diagnóstico e suporte
+
+- **Local dos logs**: a cada execução, o app grava arquivos diários em
+  `%LOCALAPPDATA%\Mieruka\Logs\<yyyy-MM>`. Cada mês fica em sua própria pasta e o arquivo do dia
+  atual é salvo como `<yyyy-MM-dd>.log`.
+- **Retenção**: logs com mais de 14 dias são removidos automaticamente na inicialização.
+  Se precisar manter histórico maior, copie a pasta antes de abrir o app.
+- **Modo detalhado (trace)**: defina a variável de ambiente `MIERUKA_TRACE` como `1`, `true`
+  ou `verbose` antes de iniciar o Configurator para usar nível de log `Verbose` sem recompilar.
+- **Pacote para suporte**: compacte toda a pasta `%LOCALAPPDATA%\Mieruka\Logs` ao enviar
+  informações para suporte. Isso inclui pastas mensais e eventuais crash dumps no mesmo local.
+
+Mais dicas de troubleshooting e coleta no Windows em
 [`docs/Troubleshooting.md`](docs/Troubleshooting.md).
