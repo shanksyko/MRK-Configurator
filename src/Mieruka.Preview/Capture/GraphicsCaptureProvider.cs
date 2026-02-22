@@ -1125,24 +1125,27 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         try
         {
             scaled = new Bitmap(target.LogicalWidth, target.LogicalHeight, bitmap.PixelFormat);
-            using var graphics = Graphics.FromImage(scaled);
-            graphics.CompositingMode = CompositingMode.SourceCopy;
-            graphics.CompositingQuality = CompositingQuality.HighSpeed;
-            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
-            graphics.PixelOffsetMode = PixelOffsetMode.HighSpeed;
-            graphics.SmoothingMode = SmoothingMode.None;
-            graphics.DrawImage(
-                bitmap,
-                new Rectangle(0, 0, scaled.Width, scaled.Height),
-                new Rectangle(0, 0, bitmap.Width, bitmap.Height),
-                GraphicsUnit.Pixel);
+            using (var graphics = Graphics.FromImage(scaled))
+            {
+                graphics.CompositingMode = CompositingMode.SourceCopy;
+                graphics.CompositingQuality = CompositingQuality.HighSpeed;
+                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+                graphics.PixelOffsetMode = PixelOffsetMode.HighSpeed;
+                graphics.SmoothingMode = SmoothingMode.None;
+                graphics.DrawImage(
+                    bitmap,
+                    new Rectangle(0, 0, scaled.Width, scaled.Height),
+                    new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                    GraphicsUnit.Pixel);
+            }
 
             bitmap.Dispose();
             return scaled;
         }
-        catch
+        catch (Exception ex)
         {
             scaled?.Dispose();
+            Logger.Debug(ex, "Failed to scale bitmap to preview resolution.");
             return bitmap;
         }
     }

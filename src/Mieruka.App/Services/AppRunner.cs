@@ -161,7 +161,7 @@ public sealed class AppRunner : IAppRunner
             throw new InvalidOperationException("A janela de destino não foi localizada.");
         }
 
-        WindowMover.MoveTo(handle, monitor, bounds, alwaysOnTop, WindowMoveMode.Absolute, relativeToMonitor: false, restoreIfMinimized: true);
+        WindowMover.MoveTo(handle, bounds, alwaysOnTop, restoreIfMinimized: true);
         User32.SetForegroundWindow(handle);
     }
 

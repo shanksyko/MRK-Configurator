@@ -14,6 +14,7 @@ public enum WindowMoveMode
 
 public static class WindowMover
 {
+    [Obsolete("Use MoveTo(IntPtr, Rectangle, bool, bool) directly. Monitor-relative mode is not implemented.")]
     public static void MoveTo(
         IntPtr hwnd,
         MonitorInfo monitor,

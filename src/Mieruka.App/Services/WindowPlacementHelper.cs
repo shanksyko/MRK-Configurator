@@ -572,6 +572,8 @@ internal static class WindowPlacementHelper
 
     /// <summary>
     /// Positions a window handle inside the provided monitor zone.
+    /// Uses Thread.Sleep for retry delays — must NOT be called from the UI thread.
+    /// Use <see cref="PlaceWindowAsync"/> for UI-thread-safe placement.
     /// </summary>
     public static bool PlaceWindow(nint hWnd, MonitorInfo monitor, ZoneRect zone, bool topMost, TimeSpan? timeout = null)
     {

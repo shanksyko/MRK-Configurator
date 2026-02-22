@@ -638,7 +638,11 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
                 return false;
             }
 
-            context.Process = process;
+            lock (_gate)
+            {
+                context.Process = process;
+            }
+
             context.LastHandle = IntPtr.Zero;
             context.LastBindTime = DateTimeOffset.MinValue;
             _telemetry.Info($"Application '{context.Config.Id}' started (PID {process.Id}).");
@@ -672,7 +676,11 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
                 return false;
             }
 
-            context.Process = process;
+            lock (_gate)
+            {
+                context.Process = process;
+            }
+
             context.LastHandle = IntPtr.Zero;
             context.LastBindTime = DateTimeOffset.MinValue;
             _telemetry.Info($"Site '{context.Config.Id}' launched using {executable} (PID {process.Id}).");
@@ -699,42 +707,52 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
             return false;
         }
 
-        foreach (var candidate in Process.GetProcessesByName(processName))
+        var candidates = Process.GetProcessesByName(processName);
+        Process? matched = null;
+        try
         {
-            var keepCandidate = false;
-
-            try
+            foreach (var candidate in candidates)
             {
-                var module = SafeGetMainModulePath(candidate);
-                if (module is null)
+                try
                 {
-                    continue;
+                    var module = SafeGetMainModulePath(candidate);
+                    if (module is null)
+                    {
+                        continue;
+                    }
+
+                    if (!string.Equals(NormalizePath(module), executablePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    lock (_gate)
+                    {
+                        context.Process = candidate;
+                    }
+
+                    _telemetry.Info($"Attached to running application '{context.Config.Id}' (PID {candidate.Id}).");
+                    matched = candidate;
+                    break;
                 }
-
-                if (!string.Equals(NormalizePath(module), executablePath, StringComparison.OrdinalIgnoreCase))
+                catch (Exception exception)
                 {
-                    continue;
+                    _telemetry.Warn($"Failed to inspect process {candidate.Id} while attaching to application '{context.Config.Id}'.", exception);
                 }
-
-                context.Process = candidate;
-                _telemetry.Info($"Attached to running application '{context.Config.Id}' (PID {candidate.Id}).");
-                keepCandidate = true;
-                return true;
             }
-            catch (Exception exception)
+        }
+        finally
+        {
+            foreach (var candidate in candidates)
             {
-                _telemetry.Warn($"Failed to inspect process {candidate.Id} while attaching to application '{context.Config.Id}'.", exception);
-            }
-            finally
-            {
-                if (!keepCandidate)
+                if (!ReferenceEquals(candidate, matched))
                 {
-                    candidate.Dispose();
+                    try { candidate.Dispose(); } catch (Exception ex) { Log.Debug(ex, "Failed to dispose candidate process."); }
                 }
             }
         }
 
-        return false;
+        return matched is not null;
     }
 
     private bool TryAttachSiteProcess(SiteWatchContext context)
@@ -749,31 +767,46 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
         var browserProcessNames = GetBrowserProcessNames(context.Config.Browser);
         foreach (var processName in browserProcessNames)
         {
-            foreach (var candidate in Process.GetProcessesByName(processName))
+            var candidates = Process.GetProcessesByName(processName);
+            Process? matched = null;
+            try
             {
-                var keepCandidate = false;
+                foreach (var candidate in candidates)
+                {
+                    try
+                    {
+                        if (string.Equals(candidate.MainWindowTitle, expectedTitle, StringComparison.OrdinalIgnoreCase))
+                        {
+                            lock (_gate)
+                            {
+                                context.Process = candidate;
+                            }
 
-                try
-                {
-                    if (string.Equals(candidate.MainWindowTitle, expectedTitle, StringComparison.OrdinalIgnoreCase))
+                            _telemetry.Info($"Attached to running site '{context.Config.Id}' (PID {candidate.Id}).");
+                            matched = candidate;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
                     {
-                        context.Process = candidate;
-                        _telemetry.Info($"Attached to running site '{context.Config.Id}' (PID {candidate.Id}).");
-                        keepCandidate = true;
-                        return true;
+                        _telemetry.Info("Cannot access process during site attach.", ex);
                     }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                foreach (var candidate in candidates)
                 {
-                    _telemetry.Info("Cannot access process during site attach.", ex);
-                }
-                finally
-                {
-                    if (!keepCandidate)
+                    if (!ReferenceEquals(candidate, matched))
                     {
-                        candidate.Dispose();
+                        try { candidate.Dispose(); } catch (Exception ex) { Log.Debug(ex, "Failed to dispose candidate process."); }
                     }
                 }
+            }
+
+            if (matched is not null)
+            {
+                return true;
             }
         }
 
@@ -1051,8 +1084,9 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
             process.Refresh();
             return process.MainWindowHandle;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Debug(ex, "GetWindowHandle failed for process.");
             return IntPtr.Zero;
         }
     }
@@ -1062,10 +1096,6 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
         try
         {
             return process.MainModule?.FileName;
-        }
-        catch (Exception) when (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return null;
         }
         catch (Exception)
         {
@@ -1205,8 +1235,9 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
                 {
                     process.Dispose();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Log.Debug(ex, "ReleaseProcess: failed to dispose process.");
                 }
             }
 

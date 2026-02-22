@@ -167,6 +167,7 @@ public sealed partial class MonitorPreviewHost
             }
 
             _pendingFrames.Add(frame);
+            _hasPendingFrame = true;
             pendingCount = _pendingFrames.Count;
         }
 
@@ -179,12 +180,16 @@ public sealed partial class MonitorPreviewHost
         {
             var previousCount = _pendingFrames.Count;
             _pendingFrames.Remove(frame);
-            if (_pendingFrames.Count == 0 && previousCount > 0)
+            if (_pendingFrames.Count == 0)
             {
-                ForQueueEvent("FrameQueueIdle").Debug(
-                    "Fila de frames vazia; preview ocioso. Sessao={Session} Visivel={IsVisibleState}",
-                    _previewSessionId,
-                    IsVisible);
+                _hasPendingFrame = false;
+                if (previousCount > 0)
+                {
+                    ForQueueEvent("FrameQueueIdle").Debug(
+                        "Fila de frames vazia; preview ocioso. Sessao={Session} Visivel={IsVisibleState}",
+                        _previewSessionId,
+                        IsVisible);
+                }
             }
         }
     }
@@ -199,6 +204,7 @@ public sealed partial class MonitorPreviewHost
             {
                 frames = _pendingFrames.ToArray();
                 _pendingFrames.Clear();
+                _hasPendingFrame = false;
             }
         }
 

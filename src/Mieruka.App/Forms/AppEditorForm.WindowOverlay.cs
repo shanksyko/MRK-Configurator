@@ -190,13 +190,20 @@ public partial class AppEditorForm
     {
       foreach (var control in _controls)
       {
-        if (!control.IsHandleCreated)
+        try
         {
-          continue;
-        }
+          if (!control.IsHandleCreated)
+          {
+            continue;
+          }
 
-        SendMessage(control.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
-        control.Invalidate();
+          SendMessage(control.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
+          control.Invalidate();
+        }
+        catch (ObjectDisposedException)
+        {
+          // Control was disposed between handle check and invalidation.
+        }
       }
     }
 

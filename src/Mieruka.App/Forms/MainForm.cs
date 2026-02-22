@@ -891,16 +891,22 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         }
 
         tlpMonitores.SuspendLayout();
-        tlpMonitores.ColumnStyles.Clear();
-        tlpMonitores.ColumnCount = desiredColumns;
-
-        var percent = 100F / desiredColumns;
-        for (var i = 0; i < desiredColumns; i++)
+        try
         {
-            tlpMonitores.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, percent));
+            tlpMonitores.ColumnStyles.Clear();
+            tlpMonitores.ColumnCount = desiredColumns;
+
+            var percent = 100F / desiredColumns;
+            for (var i = 0; i < desiredColumns; i++)
+            {
+                tlpMonitores.ColumnStyles.Add(new WinForms.ColumnStyle(SizeType.Percent, percent));
+            }
+        }
+        finally
+        {
+            tlpMonitores.ResumeLayout(true);
         }
 
-        tlpMonitores.ResumeLayout(true);
         RelayoutMonitorCards();
     }
 
@@ -912,32 +918,39 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         }
 
         tlpMonitores.SuspendLayout();
-        tlpMonitores.Controls.Clear();
-        tlpMonitores.RowStyles.Clear();
-
-        var columnCount = Math.Max(1, tlpMonitores.ColumnCount);
-        var row = 0;
-        var column = 0;
-
-        foreach (var context in _monitorCardOrder)
+        try
         {
-            if (column >= columnCount)
+            tlpMonitores.Controls.Clear();
+            tlpMonitores.RowStyles.Clear();
+
+            var columnCount = Math.Max(1, tlpMonitores.ColumnCount);
+            var row = 0;
+            var column = 0;
+
+            foreach (var context in _monitorCardOrder)
             {
-                column = 0;
-                row++;
+                if (column >= columnCount)
+                {
+                    column = 0;
+                    row++;
+                }
+
+                if (tlpMonitores.RowStyles.Count <= row)
+                {
+                    tlpMonitores.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
+                }
+
+                tlpMonitores.Controls.Add(context.Card, column, row);
+                column++;
             }
 
-            if (tlpMonitores.RowStyles.Count <= row)
-            {
-                tlpMonitores.RowStyles.Add(new WinForms.RowStyle(SizeType.AutoSize));
-            }
-
-            tlpMonitores.Controls.Add(context.Card, column, row);
-            column++;
+            tlpMonitores.RowCount = Math.Max(1, row + (column > 0 ? 1 : 0));
+        }
+        finally
+        {
+            tlpMonitores.ResumeLayout(true);
         }
 
-        tlpMonitores.RowCount = Math.Max(1, row + (column > 0 ? 1 : 0));
-        tlpMonitores.ResumeLayout(true);
         UpdateMonitorSelectionVisuals();
     }
 
@@ -1219,9 +1232,13 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             }
             else
             {
-                context.Card.BackColor = isSelected
+                var newColor = isSelected
                     ? System.Drawing.SystemColors.GradientInactiveCaption
                     : System.Drawing.SystemColors.Control;
+                if (context.Card.BackColor != newColor)
+                {
+                    context.Card.BackColor = newColor;
+                }
             }
         }
     }
