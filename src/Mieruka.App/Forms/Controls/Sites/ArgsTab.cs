@@ -50,11 +50,48 @@ internal sealed partial class ArgsTab : WinForms.UserControl
         chkAppMode.Checked = site.AppMode;
         chkIncognito.Checked = site.BrowserArguments?.Any(argument =>
             argument.Contains("--incognito", StringComparison.OrdinalIgnoreCase)) ?? false;
-        txtProxy.Text = string.Empty;
-        txtBypass.Text = string.Empty;
+
+        // Extract proxy/bypass from existing browser arguments.
+        txtProxy.Text = ExtractArgumentValue(site.BrowserArguments, "--proxy-server=");
+        txtBypass.Text = ExtractArgumentValue(site.BrowserArguments, "--proxy-bypass-list=");
+
         nudTimeout.Value = Math.Clamp(site.Login?.TimeoutSeconds ?? 30, (int)nudTimeout.Minimum, (int)nudTimeout.Maximum);
         nudPostLoginDelay.Value = Math.Clamp(10, (int)nudPostLoginDelay.Minimum, (int)nudPostLoginDelay.Maximum);
         UpdatePreview();
+    }
+
+    /// <summary>
+    /// Collects the current argument values from the UI controls.
+    /// </summary>
+    public (bool Kiosk, bool AppMode, bool Incognito, int Timeout, int PostLoginDelay, string? Proxy, string? ProxyBypass) CollectArgs()
+    {
+        return (
+            chkKiosk.Checked,
+            chkAppMode.Checked,
+            chkIncognito.Checked,
+            (int)nudTimeout.Value,
+            (int)nudPostLoginDelay.Value,
+            string.IsNullOrWhiteSpace(txtProxy.Text) ? null : txtProxy.Text.Trim(),
+            string.IsNullOrWhiteSpace(txtBypass.Text) ? null : txtBypass.Text.Trim());
+    }
+
+    private static string ExtractArgumentValue(IReadOnlyList<string>? arguments, string prefix)
+    {
+        if (arguments is null)
+        {
+            return string.Empty;
+        }
+
+        foreach (var arg in arguments)
+        {
+            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = arg[prefix.Length..].Trim('"');
+                return value;
+            }
+        }
+
+        return string.Empty;
     }
 
     private void UpdatePreview()
@@ -72,7 +109,8 @@ internal sealed partial class ArgsTab : WinForms.UserControl
         }
         if (chkAppMode.Checked)
         {
-            args.Add("--app-mode");
+            var url = _site.Url;
+            args.Add(string.IsNullOrWhiteSpace(url) ? "--app" : $"--app=\"{url}\"");
         }
         if (chkIncognito.Checked)
         {
@@ -80,11 +118,11 @@ internal sealed partial class ArgsTab : WinForms.UserControl
         }
         if (!string.IsNullOrWhiteSpace(txtProxy.Text))
         {
-            args.Add($"--proxy-server={txtProxy.Text.Trim()}");
+            args.Add($"--proxy-server=\"{txtProxy.Text.Trim()}\"");
         }
         if (!string.IsNullOrWhiteSpace(txtBypass.Text))
         {
-            args.Add($"--proxy-bypass-list={txtBypass.Text.Trim()}");
+            args.Add($"--proxy-bypass-list=\"{txtBypass.Text.Trim()}\"");
         }
 
         var timeout = (int)nudTimeout.Value;

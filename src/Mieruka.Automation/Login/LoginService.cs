@@ -47,17 +47,15 @@ public sealed class LoginService
     };
 
     private readonly ITelemetry _telemetry;
-    private readonly CredentialVault _credentialVault;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LoginService"/> class.
     /// </summary>
     /// <param name="telemetry">Telemetry sink used to record automation events.</param>
-    public LoginService(ITelemetry telemetry, CredentialVault? credentialVault = null)
+    public LoginService(ITelemetry telemetry)
     {
         ArgumentNullException.ThrowIfNull(telemetry);
         _telemetry = telemetry;
-        _credentialVault = credentialVault ?? new CredentialVault("Mieruka.CredentialVault");
     }
 
     /// <summary>
@@ -71,21 +69,6 @@ public sealed class LoginService
     {
         ArgumentNullException.ThrowIfNull(driver);
         ArgumentNullException.ThrowIfNull(profile);
-
-        try
-        {
-            profile = _credentialVault.Resolve(profile);
-        }
-        catch (PlatformNotSupportedException exception)
-        {
-            _telemetry.Error("Credential vault is not supported on this platform.", exception);
-            return false;
-        }
-        catch (InvalidOperationException exception)
-        {
-            _telemetry.Error("Credential vault entry could not be resolved.", exception);
-            return false;
-        }
 
         if (string.IsNullOrEmpty(profile.Username) && string.IsNullOrEmpty(profile.Password) && string.IsNullOrWhiteSpace(profile.Script))
         {

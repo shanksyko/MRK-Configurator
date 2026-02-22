@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Sites;
 using Mieruka.Core.Models;
@@ -25,6 +27,9 @@ public partial class SitesEditorControl : WinForms.UserControl
         _ = credentialVaultPanel ?? throw new InvalidOperationException("CredentialVaultPanel não foi criado.");
 
         bsSites.DataSource = _sites;
+
+        // Wire SecretsProvider from CredentialVaultPanel into LoginAutoTab.
+        loginAutoTab.SetSecretsProvider(credentialVaultPanel.Secrets);
 
         loginAutoTab.TestLoginRequested += (_, site) =>
         {
@@ -95,6 +100,69 @@ public partial class SitesEditorControl : WinForms.UserControl
         }
     }
 
+    /// <summary>
+    /// Commits any pending edits from the tab controls back into the selected site's entry in the list.
+    /// Called automatically before switching sites and can be called externally before saving.
+    /// </summary>
+    public void CommitCurrentSiteEdits()
+    {
+        if (_selectedSite is null)
+        {
+            return;
+        }
+
+        var index = _sites.IndexOf(_selectedSite);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var login = loginAutoTab.CollectLoginProfile();
+        var args = argsTab.CollectArgs();
+
+        // Merge timeout from ArgsTab into the login profile.
+        if (login is not null)
+        {
+            login = login with { TimeoutSeconds = args.Timeout };
+        }
+
+        var extraArgs = new List<string>(_selectedSite.BrowserArguments ?? Array.Empty<string>());
+
+        // Remove args that are managed by ArgsTab to avoid duplicates.
+        extraArgs.RemoveAll(a =>
+            a.StartsWith("--kiosk", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("--app", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("--incognito", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("--proxy-server", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("--proxy-bypass-list", StringComparison.OrdinalIgnoreCase));
+
+        if (args.Incognito)
+        {
+            extraArgs.Add("--incognito");
+        }
+
+        if (!string.IsNullOrWhiteSpace(args.Proxy))
+        {
+            extraArgs.Add($"--proxy-server=\"{args.Proxy}\"");
+        }
+
+        if (!string.IsNullOrWhiteSpace(args.ProxyBypass))
+        {
+            extraArgs.Add($"--proxy-bypass-list=\"{args.ProxyBypass}\"");
+        }
+
+        var updated = _selectedSite with
+        {
+            Login = login,
+            KioskMode = args.Kiosk,
+            AppMode = args.AppMode,
+            BrowserArguments = extraArgs,
+        };
+
+        _sites[index] = updated;
+        _selectedSite = updated;
+    }
+
     private void btnAdicionarSite_Click(object? sender, EventArgs e)
     {
         AddRequested?.Invoke(this, EventArgs.Empty);
@@ -128,6 +196,8 @@ public partial class SitesEditorControl : WinForms.UserControl
 
     private void dgvSites_SelectionChanged(object? sender, EventArgs e)
     {
+        // Commit edits from the previous site before switching.
+        CommitCurrentSiteEdits();
         UpdateSelection();
     }
 

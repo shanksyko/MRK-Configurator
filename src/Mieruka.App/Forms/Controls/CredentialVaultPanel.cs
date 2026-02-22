@@ -18,6 +18,11 @@ public sealed partial class CredentialVaultPanel : WinForms.UserControl
 
     public event EventHandler<string>? TestLoginRequested;
 
+    /// <summary>
+    /// Returns the underlying <see cref="SecretsProvider"/> created by this panel, if available.
+    /// </summary>
+    public SecretsProvider? Secrets => _secretsProvider;
+
     public CredentialVaultPanel()
     {
         InitializeComponent();

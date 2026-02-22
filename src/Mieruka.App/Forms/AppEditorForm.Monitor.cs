@@ -16,10 +16,9 @@ namespace Mieruka.App.Forms;
 
 public partial class AppEditorForm
 {
-    private async void rbExe_CheckedChanged(object? sender, EventArgs e)
+    private void rbExe_CheckedChanged(object? sender, EventArgs e)
     {
         ApplyAppTypeUI();
-        await EnsureAppsListAsync().ConfigureAwait(true);
     }
 
     private void rbBrowser_CheckedChanged(object? sender, EventArgs e)

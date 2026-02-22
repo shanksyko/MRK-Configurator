@@ -1041,6 +1041,10 @@ public sealed class GraphicsCaptureProvider : IMonitorCapture
         }
 
         _stagingTexture?.Dispose();
+        _stagingTexture = null;
+        _stagingWidth = 0;
+        _stagingHeight = 0;
+
         _stagingTexture = _d3dDevice!.CreateTexture2D(new Texture2DDescription
         {
             Width = (uint)width,

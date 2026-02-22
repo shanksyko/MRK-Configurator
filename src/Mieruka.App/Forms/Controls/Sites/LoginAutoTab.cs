@@ -1,19 +1,24 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Automation.Login;
 using Mieruka.Core.Interop;
 using Mieruka.Core.Models;
+using Mieruka.Core.Security;
+using Mieruka.App.Services;
 using WinForms = System.Windows.Forms;
 
 namespace Mieruka.App.Forms.Controls.Sites;
 
 internal sealed partial class LoginAutoTab : WinForms.UserControl
 {
-    private readonly LoginOrchestrator _orchestrator = new();
     private readonly BindingList<string> _ssoHints = new();
+    private LoginOrchestrator? _orchestrator;
+    private SecretsProvider? _secretsProvider;
     private SiteConfig? _site;
 
     public LoginAutoTab()
@@ -42,10 +47,26 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
     public event EventHandler<string>? TestLoginRequested;
     public event EventHandler<string>? ApplyPositionRequested;
 
+    /// <summary>
+    /// Sets the <see cref="SecretsProvider"/> used to resolve credentials during login tests.
+    /// </summary>
+    public void SetSecretsProvider(SecretsProvider? provider)
+    {
+        _secretsProvider = provider;
+        _orchestrator = provider is not null
+            ? new LoginOrchestrator(provider)
+            : null;
+    }
+
     public void BindSite(SiteConfig? site)
     {
         _site = site;
         txtTotpSecretKeyRef.Clear();
+        txtUserSelector.Clear();
+        txtPasswordSelector.Clear();
+        txtSubmitSelector.Clear();
+        txtPostSubmitSelector.Clear();
+        txtExtraWaitSelectors.Clear();
         _ssoHints.Clear();
 
         if (site is null)
@@ -59,10 +80,50 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
             ? string.Empty
             : Mieruka.Core.Security.CredentialVault.BuildTotpKey(site.Id);
 
-        foreach (var hint in site.Login?.SsoHints ?? Array.Empty<string>())
+        // Load selectors from the login profile.
+        if (site.Login is { } login)
         {
-            _ssoHints.Add(hint);
+            txtUserSelector.Text = login.UserSelector ?? string.Empty;
+            txtPasswordSelector.Text = login.PassSelector ?? string.Empty;
+            txtSubmitSelector.Text = login.SubmitSelector ?? string.Empty;
+
+            foreach (var hint in login.SsoHints ?? Array.Empty<string>())
+            {
+                _ssoHints.Add(hint);
+            }
         }
+    }
+
+    /// <summary>
+    /// Collects the current selector values and returns a <see cref="LoginProfile"/>.
+    /// Returns <c>null</c> when no site is bound.
+    /// </summary>
+    public LoginProfile? CollectLoginProfile()
+    {
+        if (_site is null)
+        {
+            return null;
+        }
+
+        var userSelector = NullIfEmpty(txtUserSelector.Text);
+        var passSelector = NullIfEmpty(txtPasswordSelector.Text);
+        var submitSelector = NullIfEmpty(txtSubmitSelector.Text);
+        var script = _site.Login?.Script;
+
+        return new LoginProfile
+        {
+            UserSelector = userSelector,
+            PassSelector = passSelector,
+            SubmitSelector = submitSelector,
+            Script = script,
+            TimeoutSeconds = _site.Login?.TimeoutSeconds ?? 30,
+            SsoHints = new List<string>(_ssoHints),
+        };
+    }
+
+    private static string? NullIfEmpty(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private async void btnDetectarCampos_Click(object? sender, EventArgs e)
@@ -118,7 +179,7 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
         }
     }
 
-    private void btnTestarLogin_Click(object? sender, EventArgs e)
+    private async void btnTestarLogin_Click(object? sender, EventArgs e)
     {
         if (_site is null)
         {
@@ -126,19 +187,34 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
             return;
         }
 
+        if (_orchestrator is null)
+        {
+            WinForms.MessageBox.Show(this, "Serviço de credenciais não disponível.", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+            return;
+        }
+
+        btnTestarLogin.Enabled = false;
         try
         {
-            var sucesso = _orchestrator.EnsureLoggedIn(_site);
+            var browserArgs = BrowserArgumentBuilder.CollectBrowserArguments(_site);
+            var sucesso = await _orchestrator.EnsureLoggedInAsync(_site, browserArgs).ConfigureAwait(true);
             var mensagem = sucesso ? "Login bem-sucedido." : "Falha ao efetuar login.";
             var icone = sucesso ? WinForms.MessageBoxIcon.Information : WinForms.MessageBoxIcon.Warning;
             WinForms.MessageBox.Show(this, mensagem, "Login Automático", WinForms.MessageBoxButtons.OK, icone);
+
+            if (sucesso)
+            {
+                TestLoginRequested?.Invoke(this, _site.Id);
+            }
         }
         catch (Exception ex)
         {
             WinForms.MessageBox.Show(this, $"Erro ao testar login: {ex.Message}", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
         }
-
-        TestLoginRequested?.Invoke(this, _site.Id);
+        finally
+        {
+            btnTestarLogin.Enabled = true;
+        }
     }
 
     private void btnAplicarPosicao_Click(object? sender, EventArgs e)

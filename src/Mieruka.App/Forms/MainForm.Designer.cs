@@ -42,16 +42,16 @@ partial class MainForm
     internal DataGridView dgvProgramas = null!;
     internal BindingSource bsProgramas = null!;
     internal FlowLayoutPanel painelBotoes = null!;
-    internal Button btnAdicionar = null!;
-    internal Button btnEditar = null!;
-    internal Button btnDuplicar = null!;
-    internal Button btnExcluir = null!;
-    internal Button btnExecutar = null!;
-    internal Button btnParar = null!;
-    internal Button btnSalvarPerfil = null!;
-    internal Button btnExecutarPerfil = null!;
-    internal Button btnPararPerfil = null!;
-    internal Button btnTestarItem = null!;
+    internal Controls.ModernButton btnAdicionar = null!;
+    internal Controls.ModernButton btnEditar = null!;
+    internal Controls.ModernButton btnDuplicar = null!;
+    internal Controls.ModernButton btnExcluir = null!;
+    internal Controls.ModernButton btnExecutar = null!;
+    internal Controls.ModernButton btnParar = null!;
+    internal Controls.ModernButton btnSalvarPerfil = null!;
+    internal Controls.ModernButton btnExecutarPerfil = null!;
+    internal Controls.ModernButton btnPararPerfil = null!;
+    internal Controls.ModernButton btnTestarItem = null!;
     internal ErrorProvider errorProvider = null!;
     internal StatusStrip statusBar = null!;
     internal ToolStripStatusLabel lblStatus = null!;
@@ -110,16 +110,16 @@ partial class MainForm
         dgvProgramas = new DataGridView();
         bsProgramas = new BindingSource(components);
         painelBotoes = new FlowLayoutPanel();
-        btnAdicionar = new Button();
-        btnEditar = new Button();
-        btnDuplicar = new Button();
-        btnExcluir = new Button();
-        btnExecutar = new Button();
-        btnParar = new Button();
-        btnSalvarPerfil = new Button();
-        btnExecutarPerfil = new Button();
-        btnPararPerfil = new Button();
-        btnTestarItem = new Button();
+        btnAdicionar = new Controls.ModernButton();
+        btnEditar = new Controls.ModernButton();
+        btnDuplicar = new Controls.ModernButton();
+        btnExcluir = new Controls.ModernButton();
+        btnExecutar = new Controls.ModernButton();
+        btnParar = new Controls.ModernButton();
+        btnSalvarPerfil = new Controls.ModernButton();
+        btnExecutarPerfil = new Controls.ModernButton();
+        btnPararPerfil = new Controls.ModernButton();
+        btnTestarItem = new Controls.ModernButton();
         errorProvider = new ErrorProvider(components);
         statusBar = new StatusStrip();
         lblStatus = new ToolStripStatusLabel();
@@ -451,7 +451,6 @@ partial class MainForm
         //
         // btnAdicionar
         //
-        btnAdicionar.FlatStyle = FlatStyle.Flat;
         btnAdicionar.BackColor = System.Drawing.Color.FromArgb(0, 120, 215);
         btnAdicionar.ForeColor = System.Drawing.Color.White;
         btnAdicionar.Margin = new Padding(0, 0, 0, 6);
@@ -461,13 +460,10 @@ partial class MainForm
         btnAdicionar.Text = "\u2795  Adicionar";
         btnAdicionar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnAdicionar.Padding = new Padding(8, 0, 0, 0);
-        btnAdicionar.UseVisualStyleBackColor = false;
-        btnAdicionar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnAdicionar.Click += btnAdicionar_Click;
         //
         // btnEditar
         //
-        btnEditar.FlatStyle = FlatStyle.Flat;
         btnEditar.Margin = new Padding(0, 0, 0, 6);
         btnEditar.Name = "btnEditar";
         btnEditar.Size = new System.Drawing.Size(130, 30);
@@ -475,13 +471,10 @@ partial class MainForm
         btnEditar.Text = "\u270F\uFE0F  Editar";
         btnEditar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnEditar.Padding = new Padding(8, 0, 0, 0);
-        btnEditar.UseVisualStyleBackColor = true;
-        btnEditar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnEditar.Click += btnEditar_Click;
         //
         // btnDuplicar
         //
-        btnDuplicar.FlatStyle = FlatStyle.Flat;
         btnDuplicar.Margin = new Padding(0, 0, 0, 6);
         btnDuplicar.Name = "btnDuplicar";
         btnDuplicar.Size = new System.Drawing.Size(130, 30);
@@ -489,13 +482,10 @@ partial class MainForm
         btnDuplicar.Text = "\uD83D\uDCCB  Duplicar";
         btnDuplicar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnDuplicar.Padding = new Padding(8, 0, 0, 0);
-        btnDuplicar.UseVisualStyleBackColor = true;
-        btnDuplicar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnDuplicar.Click += btnDuplicar_Click;
         //
         // btnExcluir
         //
-        btnExcluir.FlatStyle = FlatStyle.Flat;
         btnExcluir.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
         btnExcluir.ForeColor = System.Drawing.Color.White;
         btnExcluir.Margin = new Padding(0, 0, 0, 6);
@@ -505,13 +495,10 @@ partial class MainForm
         btnExcluir.Text = "\u2716  Excluir";
         btnExcluir.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnExcluir.Padding = new Padding(8, 0, 0, 0);
-        btnExcluir.UseVisualStyleBackColor = false;
-        btnExcluir.Cursor = System.Windows.Forms.Cursors.Hand;
         btnExcluir.Click += btnExcluir_Click;
         //
         // btnExecutar
         //
-        btnExecutar.FlatStyle = FlatStyle.Flat;
         btnExecutar.BackColor = System.Drawing.Color.FromArgb(40, 167, 69);
         btnExecutar.ForeColor = System.Drawing.Color.White;
         btnExecutar.Margin = new Padding(0, 0, 0, 6);
@@ -521,13 +508,10 @@ partial class MainForm
         btnExecutar.Text = "\u25B6  Executar";
         btnExecutar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnExecutar.Padding = new Padding(8, 0, 0, 0);
-        btnExecutar.UseVisualStyleBackColor = false;
-        btnExecutar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnExecutar.Click += btnExecutar_Click;
         //
         // btnParar
         //
-        btnParar.FlatStyle = FlatStyle.Flat;
         btnParar.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
         btnParar.ForeColor = System.Drawing.Color.White;
         btnParar.Margin = new Padding(0, 0, 0, 6);
@@ -537,13 +521,10 @@ partial class MainForm
         btnParar.Text = "\u23F9  Parar";
         btnParar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnParar.Padding = new Padding(8, 0, 0, 0);
-        btnParar.UseVisualStyleBackColor = false;
-        btnParar.Cursor = System.Windows.Forms.Cursors.Hand;
         btnParar.Click += btnParar_Click;
         //
         // btnSalvarPerfil
         //
-        btnSalvarPerfil.FlatStyle = FlatStyle.Flat;
         btnSalvarPerfil.Margin = new Padding(0, 0, 0, 6);
         btnSalvarPerfil.Name = "btnSalvarPerfil";
         btnSalvarPerfil.Size = new System.Drawing.Size(130, 30);
@@ -551,13 +532,10 @@ partial class MainForm
         btnSalvarPerfil.Text = "\uD83D\uDCBE  Salvar perfil";
         btnSalvarPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnSalvarPerfil.Padding = new Padding(8, 0, 0, 0);
-        btnSalvarPerfil.UseVisualStyleBackColor = true;
-        btnSalvarPerfil.Cursor = System.Windows.Forms.Cursors.Hand;
         btnSalvarPerfil.Click += btnSalvarPerfil_Click;
         //
         // btnExecutarPerfil
         //
-        btnExecutarPerfil.FlatStyle = FlatStyle.Flat;
         btnExecutarPerfil.BackColor = System.Drawing.Color.FromArgb(40, 167, 69);
         btnExecutarPerfil.ForeColor = System.Drawing.Color.White;
         btnExecutarPerfil.Margin = new Padding(0, 0, 0, 6);
@@ -567,13 +545,10 @@ partial class MainForm
         btnExecutarPerfil.Text = "\u25B6  Exec. perfil";
         btnExecutarPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnExecutarPerfil.Padding = new Padding(8, 0, 0, 0);
-        btnExecutarPerfil.UseVisualStyleBackColor = false;
-        btnExecutarPerfil.Cursor = System.Windows.Forms.Cursors.Hand;
         btnExecutarPerfil.Click += btnExecutarPerfil_Click;
         //
         // btnPararPerfil
         //
-        btnPararPerfil.FlatStyle = FlatStyle.Flat;
         btnPararPerfil.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
         btnPararPerfil.ForeColor = System.Drawing.Color.White;
         btnPararPerfil.Margin = new Padding(0, 0, 0, 6);
@@ -583,13 +558,10 @@ partial class MainForm
         btnPararPerfil.Text = "\u23F9  Parar perfil";
         btnPararPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnPararPerfil.Padding = new Padding(8, 0, 0, 0);
-        btnPararPerfil.UseVisualStyleBackColor = false;
-        btnPararPerfil.Cursor = System.Windows.Forms.Cursors.Hand;
         btnPararPerfil.Click += btnPararPerfil_Click;
         //
         // btnTestarItem
         //
-        btnTestarItem.FlatStyle = FlatStyle.Flat;
         btnTestarItem.BackColor = System.Drawing.Color.FromArgb(255, 152, 0);
         btnTestarItem.ForeColor = System.Drawing.Color.White;
         btnTestarItem.Margin = new Padding(0, 0, 0, 6);
@@ -599,8 +571,6 @@ partial class MainForm
         btnTestarItem.Text = "\uD83E\uDDEA  Testar item";
         btnTestarItem.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnTestarItem.Padding = new Padding(8, 0, 0, 0);
-        btnTestarItem.UseVisualStyleBackColor = false;
-        btnTestarItem.Cursor = System.Windows.Forms.Cursors.Hand;
         btnTestarItem.Click += btnTestarItem_Click;
         //
         // errorProvider

@@ -93,7 +93,15 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
 
             if (_monitorTask is not null)
             {
-                return Task.CompletedTask;
+                if (!_monitorTask.IsCompleted)
+                {
+                    return Task.CompletedTask;
+                }
+
+                // Task completed (faulted/canceled) — clean up and restart.
+                _monitorTask = null;
+                _monitorCancellation?.Dispose();
+                _monitorCancellation = null;
             }
 
             _monitorCancellation = new CancellationTokenSource();
@@ -288,6 +296,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
 
         EnsureApplicationBinding(context, now);
         await EnsureHealthAsync(context, now, cancellationToken).ConfigureAwait(false);
+        TryWindowRecheck(context, now);
     }
 
     private async Task MonitorSiteAsync(SiteWatchContext context, DateTimeOffset now, CancellationToken cancellationToken)
@@ -306,6 +315,7 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
 
         EnsureSiteBinding(context, now);
         await EnsureHealthAsync(context, now, cancellationToken).ConfigureAwait(false);
+        TryWindowRecheck(context, now);
 
         TryPeriodicReload(context, now);
     }
@@ -497,6 +507,37 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
             _bindingService.Bind(context.Config, handle);
             context.LastHandle = handle;
             context.LastBindTime = now;
+        }
+    }
+
+    private void TryWindowRecheck<TConfig>(WatchContextBase<TConfig> context, DateTimeOffset now)
+        where TConfig : class
+    {
+        var recheckInterval = context.Settings.WindowRecheckIntervalSeconds;
+        if (recheckInterval <= 0)
+        {
+            return;
+        }
+
+        if (now < context.NextWindowRecheck)
+        {
+            return;
+        }
+
+        context.NextWindowRecheck = now + TimeSpan.FromSeconds(recheckInterval);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            _bindingService.TryReapplyBinding(context.Kind, context.Id, out _);
+        }
+        catch (Exception ex)
+        {
+            _telemetry.Info($"Window recheck failed for {context.DisplayName}.", ex);
         }
     }
 
@@ -800,11 +841,14 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
     private void ScheduleRetry<TConfig>(WatchContextBase<TConfig> context, DateTimeOffset now, string reason)
         where TConfig : class
     {
-        var delay = context.Backoff;
-        if (delay > MaxBackoff)
+        var maxAttempts = context.Settings.MaxRestartAttempts;
+        if (maxAttempts > 0 && context.FailureCount >= maxAttempts)
         {
-            delay = MaxBackoff;
+            _telemetry.Warn($"MaxRestartAttempts reached for {context.DisplayName} ({context.FailureCount}/{maxAttempts}). Giving up.");
+            return;
         }
+
+        var delay = context.Backoff;
 
         context.NextAttempt = now + delay;
         context.Backoff = IncreaseBackoff(context.Backoff);
@@ -1164,6 +1208,8 @@ internal sealed class WatchdogService : IOrchestrationComponent, IDisposable, IA
         public DateTimeOffset LastBindTime { get; set; }
 
         public int FailureCount { get; set; }
+
+        public DateTimeOffset NextWindowRecheck { get; set; } = DateTimeOffset.MinValue;
 
         public abstract EntryKind Kind { get; }
 

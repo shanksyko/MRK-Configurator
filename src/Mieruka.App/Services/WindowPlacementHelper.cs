@@ -696,12 +696,12 @@ internal static class WindowPlacementHelper
             ? window.Height.Value
             : monitorBounds.Height;
 
-        if (width <= 0)
+        if (width < 100)
         {
             width = monitorBounds.Width;
         }
 
-        if (height <= 0)
+        if (height < 100)
         {
             height = monitorBounds.Height;
         }

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using WinForms = System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Apps;
+using Mieruka.App.Services;
 using Mieruka.Core.Config;
 using Mieruka.Core.Models;
 using Mieruka.Core.Interop;
@@ -17,6 +18,9 @@ public partial class AppEditorForm
 {
   private void btnSalvar_Click(object? sender, EventArgs e)
   {
+    // Commit any pending site edits before validation and save.
+    sitesEditorControl?.CommitCurrentSiteEdits();
+
     if (!ValidarCampos())
     {
       DialogResult = WinForms.DialogResult.None;
@@ -88,6 +92,8 @@ public partial class AppEditorForm
       {
         Enabled = chkWatchdogEnabled.Checked,
         RestartGracePeriodSeconds = (int)nudWatchdogGrace.Value,
+        MaxRestartAttempts = (int)nudMaxRestartAttempts.Value,
+        WindowRecheckIntervalSeconds = (int)nudWindowRecheckInterval.Value,
         HealthCheck = BuildHealthCheckConfig(),
       },
       EnvironmentVariables = ParseEnvironmentVariables(),
@@ -301,67 +307,67 @@ public partial class AppEditorForm
     }
   }
 
-  private void AppsTab_ExecutableChosen(object? sender, AppSelectionEventArgs e)
+  private async void BtnSelectApp_ClickAsync(object? sender, EventArgs e)
   {
-    if (_suppressListSelectionChanged)
+    using var dialog = new Form
+    {
+      Text = "Selecionar Aplicativo",
+      Size = new System.Drawing.Size(900, 600),
+      MinimumSize = new System.Drawing.Size(600, 400),
+      StartPosition = FormStartPosition.CenterParent,
+      ShowInTaskbar = false,
+      MaximizeBox = true,
+      MinimizeBox = false,
+      FormBorderStyle = FormBorderStyle.Sizable,
+      Icon = Icon,
+      Padding = new WinForms.Padding(8),
+    };
+    Mieruka.App.Services.Ui.DoubleBufferingHelper.EnableOptimizedDoubleBuffering(dialog);
+
+    var pickerTab = new Controls.Apps.AppsTab
+    {
+      Dock = DockStyle.Fill,
+      Margin = new WinForms.Padding(4),
+    };
+    var currentPath = txtExecutavel.Text.Trim();
+    pickerTab.ExecutablePath = currentPath;
+
+    InstalledAppInfo? selectedApp = null;
+
+    pickerTab.ExecutableChosen += (_, args) =>
+    {
+      selectedApp = args.App;
+      dialog.DialogResult = WinForms.DialogResult.OK;
+      dialog.Close();
+    };
+
+    dialog.Controls.Add(pickerTab);
+
+    var previousCursor = Cursor.Current;
+    Cursor.Current = Cursors.WaitCursor;
+    dialog.UseWaitCursor = true;
+    try
+    {
+      var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
+      pickerTab.SetInstalledApps(apps);
+      pickerTab.TrySelectByPath(currentPath);
+    }
+    catch (Exception ex)
+    {
+      _logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
+    }
+    finally
+    {
+      Cursor.Current = previousCursor;
+      dialog.UseWaitCursor = false;
+    }
+
+    if (dialog.ShowDialog(this) != WinForms.DialogResult.OK || selectedApp is null)
     {
       return;
     }
 
-    if (e.App is null)
-    {
-      _execSourceMode = ExecSourceMode.Custom;
-      txtExecutavel.Text = e.ExecutablePath;
-      appsTabControl!.ExecutablePath = e.ExecutablePath;
-      UpdateExePreview();
-
-      if (ClearAppsInventorySelectionMethod is not null)
-      {
-        try
-        {
-          _suppressListSelectionChanged = true;
-          ClearAppsInventorySelectionMethod.Invoke(appsTabControl, Array.Empty<object>());
-        }
-        catch (System.Reflection.TargetInvocationException)
-        {
-          // Ignored: falha ao limpar a seleção não deve impedir a seleção personalizada.
-        }
-        finally
-        {
-          _suppressListSelectionChanged = false;
-        }
-      }
-
-      return;
-    }
-
-    if (_execSourceMode == ExecSourceMode.Custom)
-    {
-      return;
-    }
-
-    _execSourceMode = ExecSourceMode.Inventory;
-    txtExecutavel.Text = e.ExecutablePath;
-    appsTabControl!.ExecutablePath = e.ExecutablePath;
-    UpdateExePreview();
-  }
-
-  private void AppsTab_ExecutableCleared(object? sender, EventArgs e)
-  {
-    if (_suppressListSelectionChanged)
-    {
-      return;
-    }
-
-    _execSourceMode = ExecSourceMode.None;
-    txtExecutavel.Text = string.Empty;
-    appsTabControl!.ExecutablePath = string.Empty;
-    UpdateExePreview();
-  }
-
-  private void AppsTab_ArgumentsChanged(object? sender, string e)
-  {
-    txtArgumentos.Text = e;
+    txtExecutavel.Text = selectedApp.ExecutablePath;
     UpdateExePreview();
   }
 

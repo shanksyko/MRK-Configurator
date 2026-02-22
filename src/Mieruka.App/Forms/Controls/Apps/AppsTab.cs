@@ -261,6 +261,54 @@ public sealed class AppsTab : WinForms.UserControl
         }
     }
 
+    /// <summary>
+    /// Tries to select the grid row matching the given executable path.
+    /// Call after the apps list has been populated.
+    /// </summary>
+    public void TrySelectByPath(string? executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath) || _grid.IsDisposed)
+        {
+            return;
+        }
+
+        _suppressSelectionNotifications = true;
+        try
+        {
+            for (var i = 0; i < _grid.Rows.Count; i++)
+            {
+                if (_grid.Rows[i].DataBoundItem is InstalledAppInfo app &&
+                    string.Equals(app.ExecutablePath, executablePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _grid.ClearSelection();
+                    _grid.Rows[i].Selected = true;
+                    _settingCurrentCell = true;
+                    try
+                    {
+                        _grid.CurrentCell = _grid.Rows[i].Cells[0];
+                    }
+                    finally
+                    {
+                        _settingCurrentCell = false;
+                    }
+
+                    if (i < _grid.FirstDisplayedScrollingRowIndex ||
+                        i >= _grid.FirstDisplayedScrollingRowIndex + _grid.DisplayedRowCount(false))
+                    {
+                        _grid.FirstDisplayedScrollingRowIndex = i;
+                    }
+
+                    _selectedApp = app;
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            _suppressSelectionNotifications = false;
+        }
+    }
+
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Arguments
     {

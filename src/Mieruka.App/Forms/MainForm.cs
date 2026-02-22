@@ -666,6 +666,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             }
         }
 
+        var previousSelection = SelectedMonitorId;
         if (SelectedMonitorId is not null && !actualIds.Contains(SelectedMonitorId))
         {
             SelectedMonitorId = null;
@@ -673,7 +674,14 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         if (SelectedMonitorId is null && _monitorCardOrder.Count > 0)
         {
-            UpdateSelectedMonitor(_monitorCardOrder[0].MonitorId, notify: false);
+            if (previousSelection is not null && actualIds.Contains(previousSelection))
+            {
+                UpdateSelectedMonitor(previousSelection, notify: false);
+            }
+            else
+            {
+                UpdateSelectedMonitor(_monitorCardOrder[0].MonitorId, notify: false);
+            }
         }
         else
         {
@@ -1506,7 +1514,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         }
     }
 
-    private async void btnTestarItem_Click(object? sender, EventArgs e)
+    private void btnTestarItem_Click(object? sender, EventArgs e)
     {
         var selecionado = ObterProgramaSelecionado();
         if (selecionado is null)
@@ -1515,13 +1523,64 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return;
         }
 
+        AbrirEditorParaTesteAsync(selecionado);
+    }
+
+    private async void AbrirEditorParaTesteAsync(ProgramaConfig selecionado)
+    {
         try
         {
-            await _appTestRunner.RunTestAsync(selecionado, this).ConfigureAwait(true);
+            var monitors = _monitorSnapshot.Count > 0
+                ? _monitorSnapshot.ToList()
+                : CaptureMonitorSnapshot().ToList();
+
+            var hadPreviews = _previewsRequested;
+
+            try
+            {
+                await PausePreviewsAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _telemetry.Warn("Falha ao pausar previews antes de abrir editor para teste.", ex);
+            }
+
+            try
+            {
+                using var editor = new AppEditorForm(selecionado, monitors, SelectedMonitorId, _appRunner, _programas);
+                editor.FocusWindowTab();
+                var resultado = editor.ShowDialog(this);
+                var editorSelectedMonitor = editor.SelectedMonitorId;
+                var programa = editor.Resultado;
+
+                if (resultado == WinForms.DialogResult.OK && programa is not null)
+                {
+                    if (!string.IsNullOrEmpty(editorSelectedMonitor))
+                    {
+                        UpdateSelectedMonitor(editorSelectedMonitor, notify: false);
+                    }
+
+                    var indice = _programas.IndexOf(selecionado);
+                    if (indice >= 0)
+                    {
+                        _programas[indice] = programa;
+                        bsProgramas.ResetBindings(false);
+                        SelecionarPrograma(programa);
+                    }
+                }
+            }
+            finally
+            {
+                if (hadPreviews && !IsDisposed)
+                {
+                    _previewsRequested = true;
+                    await StartAutomaticPreviewsAsync().ConfigureAwait(true);
+                }
+            }
         }
         catch (Exception ex)
         {
-            _telemetry.Error("Falha ao testar item.", ex);
+            _telemetry.Error("Falha ao abrir editor para teste.", ex);
         }
     }
 

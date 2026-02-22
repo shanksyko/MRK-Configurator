@@ -100,7 +100,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
     private MonitorOrientation _orientation;
     private int _rotation;
     private int _refreshRate;
-    private DateTime _nextFrameAt;
     private bool _hasActiveSession;
     private bool _isGpuActive;
     private Drawing.Rectangle _lastSelectionBounds = Drawing.Rectangle.Empty;
@@ -336,7 +335,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
                 Volatile.Write(ref _frameThrottleTicks, sanitized.Ticks);
                 if (_frameThrottle <= TimeSpan.Zero)
                 {
-                    _nextFrameAt = DateTime.MinValue;
                     Volatile.Write(ref _nextFrameAtTicks, 0L);
                 }
             }
@@ -364,7 +362,6 @@ public sealed partial class MonitorPreviewHost : IDisposable
                     {
                         _frameThrottle = SafeModeFrameThrottle;
                         Volatile.Write(ref _frameThrottleTicks, SafeModeFrameThrottle.Ticks);
-                        _nextFrameAt = DateTime.MinValue;
                         Volatile.Write(ref _nextFrameAtTicks, 0L);
                     }
                 }

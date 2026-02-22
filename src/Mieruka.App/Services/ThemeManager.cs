@@ -131,6 +131,11 @@ public static class ThemeManager
                 tp.ForeColor = DarkFore;
                 break;
 
+            case Forms.Controls.ModernButton modernBtn:
+                modernBtn.BackColor = DarkControl;
+                modernBtn.ForeColor = DarkFore;
+                break;
+
             case Button btn:
                 btn.BackColor = DarkControl;
                 btn.ForeColor = DarkFore;
@@ -236,6 +241,11 @@ public static class ThemeManager
             case TabPage tp:
                 tp.BackColor = SystemColors.Control;
                 tp.ForeColor = SystemColors.ControlText;
+                break;
+
+            case Forms.Controls.ModernButton modernBtn:
+                modernBtn.BackColor = SystemColors.Control;
+                modernBtn.ForeColor = SystemColors.ControlText;
                 break;
 
             case Button btn:

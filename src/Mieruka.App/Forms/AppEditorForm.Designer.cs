@@ -14,6 +14,7 @@ partial class AppEditorForm
     internal TabControl tabEditor = null!;
     internal TabPage tpGeral = null!;
     internal TabPage tabAplicativos = null!;
+    internal Controls.ModernButton btnSelectApp = null!;
     internal TabPage tpJanela = null!;
     internal TabPage tabSites = null!;
     internal TabPage tpCiclo = null!;
@@ -24,13 +25,13 @@ partial class AppEditorForm
     internal Panel pnlBrowserPanel = null!;
     internal AppsTab appsTabControl = null!;
     internal TableLayoutPanel tlpAplicativos = null!;
-    internal Button btnSalvar = null!;
-    internal Button btnCancelar = null!;
-    internal Button btnTestarJanela = null!;
-    internal Button btnTestReal = null!;
-    internal Button btnCyclePlay = null!;
-    internal Button btnCycleStep = null!;
-    internal Button btnCycleStop = null!;
+    internal Controls.ModernButton btnSalvar = null!;
+    internal Controls.ModernButton btnCancelar = null!;
+    internal Controls.ModernButton btnTestarJanela = null!;
+    internal Controls.ModernButton btnTestReal = null!;
+    internal Controls.ModernButton btnCyclePlay = null!;
+    internal Controls.ModernButton btnCycleStep = null!;
+    internal Controls.ModernButton btnCycleStop = null!;
     internal TextBox txtId = null!;
     internal TextBox txtExecutavel = null!;
     internal ComboBox cmbNavegadores = null!;
@@ -38,7 +39,7 @@ partial class AppEditorForm
     internal TextBox txtCmdPreviewExe = null!;
     internal RadioButton rbExe = null!;
     internal RadioButton rbBrowser = null!;
-    internal Button btnBrowseExe = null!;
+    internal Controls.ModernButton btnBrowseExe = null!;
     internal CheckBox chkAutoStart = null!;
     internal NumericUpDown nudJanelaX = null!;
     internal NumericUpDown nudJanelaY = null!;
@@ -53,8 +54,8 @@ partial class AppEditorForm
     internal DataGridView dgvCycle = null!;
     internal BindingSource bsCycle = null!;
     internal FlowLayoutPanel flpCycleButtons = null!;
-    internal Button btnCycleUp = null!;
-    internal Button btnCycleDown = null!;
+    internal Controls.ModernButton btnCycleUp = null!;
+    internal Controls.ModernButton btnCycleDown = null!;
     internal ErrorProvider errorProvider = null!;
     internal FlowLayoutPanel flowCycleControls = null!;
     internal FlowLayoutPanel flowCycleItems = null!;
@@ -64,6 +65,8 @@ partial class AppEditorForm
     internal TextBox txtEnvVars = null!;
     internal CheckBox chkWatchdogEnabled = null!;
     internal NumericUpDown nudWatchdogGrace = null!;
+    internal NumericUpDown nudMaxRestartAttempts = null!;
+    internal NumericUpDown nudWindowRecheckInterval = null!;
     internal ToolTip editorToolTip = null!;
     internal TextBox txtWindowTitle = null!;
     internal CheckBox chkAlwaysOnTop = null!;
@@ -107,10 +110,10 @@ partial class AppEditorForm
         var flowBrowserHeader = new FlowLayoutPanel();
         var lblBrowserEngine = new Label();
         var painelRodape = new FlowLayoutPanel();
-        btnSalvar = new Button();
-        btnCancelar = new Button();
-        btnTestarJanela = new Button();
-        btnTestReal = new Button();
+        btnSalvar = new Controls.ModernButton();
+        btnCancelar = new Controls.ModernButton();
+        btnTestarJanela = new Controls.ModernButton();
+        btnTestReal = new Controls.ModernButton();
         var tlpGeral = new TableLayoutPanel();
         var lblId = new Label();
         txtId = new TextBox();
@@ -125,7 +128,8 @@ partial class AppEditorForm
         chkAutoStart = new CheckBox();
         rbExe = new RadioButton();
         rbBrowser = new RadioButton();
-        btnBrowseExe = new Button();
+        btnBrowseExe = new Controls.ModernButton();
+        btnSelectApp = new Controls.ModernButton();
         var flowAppType = new FlowLayoutPanel();
         var tlpExecutavel = new TableLayoutPanel();
         var tlpJanela = new TableLayoutPanel();
@@ -147,13 +151,13 @@ partial class AppEditorForm
         var tlpCycleList = new TableLayoutPanel();
         dgvCycle = new DataGridView();
         flowCycleControls = new FlowLayoutPanel();
-        btnCyclePlay = new Button();
-        btnCycleStep = new Button();
-        btnCycleStop = new Button();
+        btnCyclePlay = new Controls.ModernButton();
+        btnCycleStep = new Controls.ModernButton();
+        btnCycleStop = new Controls.ModernButton();
         chkCycleRedeDisponivel = new CheckBox();
         flpCycleButtons = new FlowLayoutPanel();
-        btnCycleUp = new Button();
-        btnCycleDown = new Button();
+        btnCycleUp = new Controls.ModernButton();
+        btnCycleDown = new Controls.ModernButton();
         flowCycleItems = new FlowLayoutPanel();
         errorProvider = new ErrorProvider(components);
         cycleToolTip = ToolTipTamer.Create(components);
@@ -162,6 +166,8 @@ partial class AppEditorForm
         txtEnvVars = new TextBox();
         chkWatchdogEnabled = new CheckBox();
         nudWatchdogGrace = new NumericUpDown();
+        nudMaxRestartAttempts = new NumericUpDown();
+        nudWindowRecheckInterval = new NumericUpDown();
         txtWindowTitle = new TextBox();
         chkAlwaysOnTop = new CheckBox();
         cmbHealthCheckType = new ComboBox();
@@ -175,6 +181,8 @@ partial class AppEditorForm
         var lblWindowTitle = new Label();
         var lblEnvVars = new Label();
         var lblWatchdogGrace = new Label();
+        var lblMaxRestartAttempts = new Label();
+        var lblWindowRecheckInterval = new Label();
         var lblHealthCheckType = new Label();
         var lblHealthCheckUrl = new Label();
         var lblHealthCheckDomSelector = new Label();
@@ -182,6 +190,8 @@ partial class AppEditorForm
         var lblHealthCheckInterval = new Label();
         var lblHealthCheckTimeout = new Label();
         ((ISupportInitialize)nudWatchdogGrace).BeginInit();
+        ((ISupportInitialize)nudMaxRestartAttempts).BeginInit();
+        ((ISupportInitialize)nudWindowRecheckInterval).BeginInit();
         ((ISupportInitialize)nudHealthCheckInterval).BeginInit();
         ((ISupportInitialize)nudHealthCheckTimeout).BeginInit();
         tlpExecutavel.SuspendLayout();
@@ -215,7 +225,6 @@ partial class AppEditorForm
         // tabEditor
         //
         tabEditor.Controls.Add(tpGeral);
-        tabEditor.Controls.Add(tabAplicativos);
         tabEditor.Controls.Add(tpJanela);
         tabEditor.Controls.Add(tabSites);
         tabEditor.Controls.Add(tpCiclo);
@@ -395,11 +404,13 @@ partial class AppEditorForm
         //
         // tlpExecutavel
         //
-        tlpExecutavel.ColumnCount = 2;
+        tlpExecutavel.ColumnCount = 3;
         tlpExecutavel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tlpExecutavel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpExecutavel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         tlpExecutavel.Controls.Add(txtExecutavel, 0, 0);
-        tlpExecutavel.Controls.Add(btnBrowseExe, 1, 0);
+        tlpExecutavel.Controls.Add(btnSelectApp, 1, 0);
+        tlpExecutavel.Controls.Add(btnBrowseExe, 2, 0);
         tlpExecutavel.Dock = DockStyle.Fill;
         tlpExecutavel.Location = new System.Drawing.Point(74, 283);
         tlpExecutavel.Margin = new Padding(0, 0, 0, 8);
@@ -430,6 +441,18 @@ partial class AppEditorForm
         btnBrowseExe.Text = "Procurar...";
         btnBrowseExe.UseVisualStyleBackColor = true;
         editorToolTip.SetToolTip(btnBrowseExe, "Selecionar arquivo executável (.exe)");
+        //
+        // btnSelectApp
+        //
+        btnSelectApp.AutoSize = true;
+        btnSelectApp.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnSelectApp.Margin = new Padding(8, 0, 0, 0);
+        btnSelectApp.Name = "btnSelectApp";
+        btnSelectApp.Size = new System.Drawing.Size(100, 25);
+        btnSelectApp.TabIndex = 2;
+        btnSelectApp.Text = "Selecionar...";
+        btnSelectApp.UseVisualStyleBackColor = true;
+        editorToolTip.SetToolTip(btnSelectApp, "Selecionar aplicativo da lista de programas instalados");
         //
         // lblArgumentos
         //
@@ -653,7 +676,9 @@ partial class AppEditorForm
         // nudJanelaLargura
         //
         nudJanelaLargura.Margin = new Padding(0, 0, 8, 8);
+        nudJanelaLargura.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
         nudJanelaLargura.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
+        nudJanelaLargura.Value = new decimal(new int[] { 800, 0, 0, 0 });
         nudJanelaLargura.Name = "nudJanelaLargura";
         nudJanelaLargura.Size = new System.Drawing.Size(160, 23);
         nudJanelaLargura.TabIndex = 6;
@@ -670,7 +695,9 @@ partial class AppEditorForm
         // nudJanelaAltura
         //
         nudJanelaAltura.Margin = new Padding(0, 0, 8, 8);
+        nudJanelaAltura.Minimum = new decimal(new int[] { 100, 0, 0, 0 });
         nudJanelaAltura.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
+        nudJanelaAltura.Value = new decimal(new int[] { 600, 0, 0, 0 });
         nudJanelaAltura.Name = "nudJanelaAltura";
         nudJanelaAltura.Size = new System.Drawing.Size(160, 23);
         nudJanelaAltura.TabIndex = 8;
@@ -1039,41 +1066,47 @@ partial class AppEditorForm
         tlpAvancado.SetColumnSpan(chkWatchdogEnabled, 2);
         tlpAvancado.Controls.Add(lblWatchdogGrace, 0, 4);
         tlpAvancado.Controls.Add(nudWatchdogGrace, 1, 4);
-        tlpAvancado.Controls.Add(lblHealthCheckType, 0, 5);
-        tlpAvancado.Controls.Add(cmbHealthCheckType, 1, 5);
-        tlpAvancado.Controls.Add(lblHealthCheckUrl, 0, 6);
-        tlpAvancado.Controls.Add(txtHealthCheckUrl, 1, 6);
-        tlpAvancado.Controls.Add(lblHealthCheckDomSelector, 0, 7);
-        tlpAvancado.Controls.Add(txtHealthCheckDomSelector, 1, 7);
-        tlpAvancado.Controls.Add(lblHealthCheckContainsText, 0, 8);
-        tlpAvancado.Controls.Add(txtHealthCheckContainsText, 1, 8);
-        tlpAvancado.Controls.Add(lblHealthCheckInterval, 0, 9);
-        tlpAvancado.Controls.Add(nudHealthCheckInterval, 1, 9);
-        tlpAvancado.Controls.Add(lblHealthCheckTimeout, 0, 10);
-        tlpAvancado.Controls.Add(nudHealthCheckTimeout, 1, 10);
-        tlpAvancado.Controls.Add(lblEnvVars, 0, 11);
+        tlpAvancado.Controls.Add(lblMaxRestartAttempts, 0, 5);
+        tlpAvancado.Controls.Add(nudMaxRestartAttempts, 1, 5);
+        tlpAvancado.Controls.Add(lblWindowRecheckInterval, 0, 6);
+        tlpAvancado.Controls.Add(nudWindowRecheckInterval, 1, 6);
+        tlpAvancado.Controls.Add(lblHealthCheckType, 0, 7);
+        tlpAvancado.Controls.Add(cmbHealthCheckType, 1, 7);
+        tlpAvancado.Controls.Add(lblHealthCheckUrl, 0, 8);
+        tlpAvancado.Controls.Add(txtHealthCheckUrl, 1, 8);
+        tlpAvancado.Controls.Add(lblHealthCheckDomSelector, 0, 9);
+        tlpAvancado.Controls.Add(txtHealthCheckDomSelector, 1, 9);
+        tlpAvancado.Controls.Add(lblHealthCheckContainsText, 0, 10);
+        tlpAvancado.Controls.Add(txtHealthCheckContainsText, 1, 10);
+        tlpAvancado.Controls.Add(lblHealthCheckInterval, 0, 11);
+        tlpAvancado.Controls.Add(nudHealthCheckInterval, 1, 11);
+        tlpAvancado.Controls.Add(lblHealthCheckTimeout, 0, 12);
+        tlpAvancado.Controls.Add(nudHealthCheckTimeout, 1, 12);
+        tlpAvancado.Controls.Add(lblEnvVars, 0, 13);
         tlpAvancado.SetColumnSpan(lblEnvVars, 2);
-        tlpAvancado.Controls.Add(txtEnvVars, 0, 12);
+        tlpAvancado.Controls.Add(txtEnvVars, 0, 14);
         tlpAvancado.SetColumnSpan(txtEnvVars, 2);
         tlpAvancado.Dock = DockStyle.Fill;
         tlpAvancado.Location = new System.Drawing.Point(8, 8);
         tlpAvancado.Margin = new Padding(0);
         tlpAvancado.Name = "tlpAvancado";
         tlpAvancado.Padding = new Padding(0, 0, 0, 8);
-        tlpAvancado.RowCount = 13;
+        tlpAvancado.RowCount = 15;
         tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 0 Nome
         tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 1 Window Title
         tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 2 AlwaysOnTop
         tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 3 Watchdog
         tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 4 Grace
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 5 HC Type
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 6 HC URL
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 7 HC DOM
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 8 HC Text
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 9 HC Interval
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 10 HC Timeout
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 11 EnvVars label
-        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // 12 EnvVars text
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 5 MaxRestartAttempts
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 6 WindowRecheckInterval
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 7 HC Type
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 8 HC URL
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 9 HC DOM
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 10 HC Text
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 11 HC Interval
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 12 HC Timeout
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 13 EnvVars label
+        tlpAvancado.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // 14 EnvVars text
         tlpAvancado.Size = new System.Drawing.Size(1016, 604);
         tlpAvancado.TabIndex = 0;
         //
@@ -1152,6 +1185,44 @@ partial class AppEditorForm
         nudWatchdogGrace.Size = new System.Drawing.Size(160, 23);
         nudWatchdogGrace.TabIndex = 7;
         nudWatchdogGrace.Value = new decimal(new int[] { 15, 0, 0, 0 });
+        //
+        // lblMaxRestartAttempts
+        //
+        lblMaxRestartAttempts.AutoSize = true;
+        lblMaxRestartAttempts.Margin = new Padding(0, 0, 8, 8);
+        lblMaxRestartAttempts.Name = "lblMaxRestartAttempts";
+        lblMaxRestartAttempts.Size = new System.Drawing.Size(220, 15);
+        lblMaxRestartAttempts.TabIndex = 30;
+        lblMaxRestartAttempts.Text = "Máx. tentativas de restart (0 = infinito)";
+        //
+        // nudMaxRestartAttempts
+        //
+        nudMaxRestartAttempts.Margin = new Padding(0, 0, 8, 8);
+        nudMaxRestartAttempts.Maximum = new decimal(new int[] { 999, 0, 0, 0 });
+        nudMaxRestartAttempts.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+        nudMaxRestartAttempts.Name = "nudMaxRestartAttempts";
+        nudMaxRestartAttempts.Size = new System.Drawing.Size(160, 23);
+        nudMaxRestartAttempts.TabIndex = 31;
+        nudMaxRestartAttempts.Value = new decimal(new int[] { 0, 0, 0, 0 });
+        //
+        // lblWindowRecheckInterval
+        //
+        lblWindowRecheckInterval.AutoSize = true;
+        lblWindowRecheckInterval.Margin = new Padding(0, 0, 8, 8);
+        lblWindowRecheckInterval.Name = "lblWindowRecheckInterval";
+        lblWindowRecheckInterval.Size = new System.Drawing.Size(260, 15);
+        lblWindowRecheckInterval.TabIndex = 32;
+        lblWindowRecheckInterval.Text = "Re-checar posição da janela (seg, 0 = desab.)";
+        //
+        // nudWindowRecheckInterval
+        //
+        nudWindowRecheckInterval.Margin = new Padding(0, 0, 8, 8);
+        nudWindowRecheckInterval.Maximum = new decimal(new int[] { 3600, 0, 0, 0 });
+        nudWindowRecheckInterval.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+        nudWindowRecheckInterval.Name = "nudWindowRecheckInterval";
+        nudWindowRecheckInterval.Size = new System.Drawing.Size(160, 23);
+        nudWindowRecheckInterval.TabIndex = 33;
+        nudWindowRecheckInterval.Value = new decimal(new int[] { 0, 0, 0, 0 });
         //
         // lblHealthCheckType
         //
@@ -1366,6 +1437,8 @@ partial class AppEditorForm
         tpAvancado.ResumeLayout(false);
         tpAvancado.PerformLayout();
         ((ISupportInitialize)nudWatchdogGrace).EndInit();
+        ((ISupportInitialize)nudMaxRestartAttempts).EndInit();
+        ((ISupportInitialize)nudWindowRecheckInterval).EndInit();
         ((ISupportInitialize)nudHealthCheckInterval).EndInit();
         ((ISupportInitialize)nudHealthCheckTimeout).EndInit();
         painelRodape.ResumeLayout(false);

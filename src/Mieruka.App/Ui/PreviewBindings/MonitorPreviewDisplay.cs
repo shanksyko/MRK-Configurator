@@ -39,6 +39,14 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     private string? _placeholderMessage;
     private int _paintExceptionCount;
 
+    // Drag/resize state for interactive SimRect manipulation.
+    private enum DragMode { None, Move, ResizeN, ResizeS, ResizeW, ResizeE, ResizeNW, ResizeNE, ResizeSW, ResizeSE }
+    private DragMode _dragMode = DragMode.None;
+    private int _dragSimRectIndex = -1;
+    private Drawing.Point _dragStartMon;
+    private Drawing.Rectangle _dragOrigMonRel;
+    private bool _interactiveMode;
+
     private const string AskGlyph = "❓";
     private const string AskTooltipText = "Solicitar confirmação antes de iniciar.";
     private const string NetworkGlyph = "🌐";
@@ -160,6 +168,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         _tooltip = ToolTipTamer.Create();
 
         _pictureBox.MouseDown += PictureBoxOnMouseDown;
+        _pictureBox.MouseUp += PictureBoxOnMouseUp;
         _pictureBox.MouseMove += PictureBoxOnMouseMove;
         _pictureBox.MouseLeave += PictureBoxOnMouseLeave;
         _pictureBox.Paint += PictureBoxOnPaint;
@@ -217,6 +226,21 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
     public event EventHandler<MonitorMouseEventArgs>? MonitorMouseClick;
 
     /// <summary>
+    /// Raised when a SimRect is moved or resized interactively. Bounds are in monitor-relative pixels.
+    /// </summary>
+    public event EventHandler<SimRectMovedEventArgs>? SimRectMoved;
+
+    /// <summary>
+    /// Enables interactive drag/resize of SimRects via mouse.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool InteractiveMode
+    {
+        get => _interactiveMode;
+        set => _interactiveMode = value;
+    }
+
+    /// <summary>
     /// Gets a value indicating whether user interactions should be ignored due to the host being paused or busy.
     /// </summary>
     public bool IsInteractionSuppressed
@@ -252,6 +276,18 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         public Drawing.PointF MonitorPoint { get; }
 
         public WinForms.MouseButtons Button { get; }
+    }
+
+    public sealed class SimRectMovedEventArgs : EventArgs
+    {
+        public SimRectMovedEventArgs(int index, Drawing.Rectangle monitorBounds)
+        {
+            Index = index;
+            MonitorBounds = monitorBounds;
+        }
+
+        public int Index { get; }
+        public Drawing.Rectangle MonitorBounds { get; }
     }
 
     /// <summary>
@@ -605,6 +641,7 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         {
             Unbind();
             _pictureBox.MouseDown -= PictureBoxOnMouseDown;
+            _pictureBox.MouseUp -= PictureBoxOnMouseUp;
             _pictureBox.MouseMove -= PictureBoxOnMouseMove;
             _pictureBox.MouseLeave -= PictureBoxOnMouseLeave;
             _pictureBox.Paint -= PictureBoxOnPaint;
@@ -793,6 +830,26 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
             return;
         }
 
+        // Interactive drag/resize mode
+        if (_interactiveMode && _coordinateMapper is not null && _simRects.Count > 0)
+        {
+            var displayRect = GetDisplayRectangleForMapping(_pictureBox);
+            if (displayRect.Width > 0 && displayRect.Height > 0)
+            {
+                var hitMode = HitTestSimRects(e.Location, displayRect, out var hitIndex);
+                if (hitMode != DragMode.None && hitIndex >= 0)
+                {
+                    _dragMode = hitMode;
+                    _dragSimRectIndex = hitIndex;
+                    _dragOrigMonRel = _simRects[hitIndex].MonRel;
+                    var monPoint = _coordinateMapper.UiToMonitor(e.Location, displayRect);
+                    _dragStartMon = Drawing.Point.Round(monPoint);
+                    _pictureBox.Capture = true;
+                    return;
+                }
+            }
+        }
+
         if (TryClientToMonitor(e.Location, out var monitorPoint))
         {
             MonitorMouseClick?.Invoke(
@@ -802,6 +859,23 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
                     monitorPoint,
                     e.Button));
         }
+    }
+
+    private void PictureBoxOnMouseUp(object? sender, WinForms.MouseEventArgs e)
+    {
+        if (_dragMode == DragMode.None)
+        {
+            return;
+        }
+
+        _pictureBox.Capture = false;
+        var index = _dragSimRectIndex;
+        var finalBounds = _simRects[index].MonRel;
+        _dragMode = DragMode.None;
+        _dragSimRectIndex = -1;
+        _pictureBox.Cursor = WinForms.Cursors.Default;
+
+        SimRectMoved?.Invoke(this, new SimRectMovedEventArgs(index, finalBounds));
     }
 
     public async Task StopPreviewAsync(CancellationToken cancellationToken = default)
@@ -895,6 +969,54 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
         if (!guard.Entered)
         {
             return;
+        }
+
+        // Handle active drag/resize
+        if (_dragMode != DragMode.None && _coordinateMapper is not null && _dragSimRectIndex >= 0 && _dragSimRectIndex < _simRects.Count)
+        {
+            var displayRect = GetDisplayRectangleForMapping(_pictureBox);
+            if (displayRect.Width > 0 && displayRect.Height > 0)
+            {
+                var monPoint = Drawing.Point.Round(_coordinateMapper.UiToMonitor(e.Location, displayRect));
+                var dx = monPoint.X - _dragStartMon.X;
+                var dy = monPoint.Y - _dragStartMon.Y;
+                var orig = _dragOrigMonRel;
+                var rect = _dragMode switch
+                {
+                    DragMode.Move => new Drawing.Rectangle(orig.X + dx, orig.Y + dy, orig.Width, orig.Height),
+                    DragMode.ResizeE => new Drawing.Rectangle(orig.X, orig.Y, Math.Max(100, orig.Width + dx), orig.Height),
+                    DragMode.ResizeW => new Drawing.Rectangle(orig.X + dx, orig.Y, Math.Max(100, orig.Width - dx), orig.Height),
+                    DragMode.ResizeS => new Drawing.Rectangle(orig.X, orig.Y, orig.Width, Math.Max(100, orig.Height + dy)),
+                    DragMode.ResizeN => new Drawing.Rectangle(orig.X, orig.Y + dy, orig.Width, Math.Max(100, orig.Height - dy)),
+                    DragMode.ResizeSE => new Drawing.Rectangle(orig.X, orig.Y, Math.Max(100, orig.Width + dx), Math.Max(100, orig.Height + dy)),
+                    DragMode.ResizeNE => new Drawing.Rectangle(orig.X, orig.Y + dy, Math.Max(100, orig.Width + dx), Math.Max(100, orig.Height - dy)),
+                    DragMode.ResizeSW => new Drawing.Rectangle(orig.X + dx, orig.Y, Math.Max(100, orig.Width - dx), Math.Max(100, orig.Height + dy)),
+                    DragMode.ResizeNW => new Drawing.Rectangle(orig.X + dx, orig.Y + dy, Math.Max(100, orig.Width - dx), Math.Max(100, orig.Height - dy)),
+                    _ => orig,
+                };
+                _simRects[_dragSimRectIndex].MonRel = rect;
+                _pictureBox.Invalidate();
+            }
+            return;
+        }
+
+        // Update cursor for interactive mode hover
+        if (_interactiveMode && _coordinateMapper is not null && _simRects.Count > 0)
+        {
+            var displayRect = GetDisplayRectangleForMapping(_pictureBox);
+            if (displayRect.Width > 0 && displayRect.Height > 0)
+            {
+                var hitMode = HitTestSimRects(e.Location, displayRect, out _);
+                _pictureBox.Cursor = hitMode switch
+                {
+                    DragMode.Move => WinForms.Cursors.SizeAll,
+                    DragMode.ResizeN or DragMode.ResizeS => WinForms.Cursors.SizeNS,
+                    DragMode.ResizeW or DragMode.ResizeE => WinForms.Cursors.SizeWE,
+                    DragMode.ResizeNW or DragMode.ResizeSE => WinForms.Cursors.SizeNWSE,
+                    DragMode.ResizeNE or DragMode.ResizeSW => WinForms.Cursors.SizeNESW,
+                    _ => WinForms.Cursors.Default,
+                };
+            }
         }
 
         UpdateGlyphTooltip(e.Location);
@@ -1162,6 +1284,56 @@ public sealed class MonitorPreviewDisplay : WinForms.UserControl
 
         var orderText = rect.Order.ToString(CultureInfo.InvariantCulture);
         return string.Concat(orderText, ". ", title);
+    }
+
+    private DragMode HitTestSimRects(Drawing.Point clientPoint, Drawing.RectangleF displayRect, out int hitIndex)
+    {
+        const int grip = 6;
+        hitIndex = -1;
+        var mapper = _coordinateMapper;
+        if (mapper is null)
+        {
+            return DragMode.None;
+        }
+
+        for (var i = _simRects.Count - 1; i >= 0; i--)
+        {
+            var sr = _simRects[i];
+            if (sr.MonRel.Width <= 0 || sr.MonRel.Height <= 0)
+            {
+                continue;
+            }
+
+            var previewRect = mapper.MonitorToPreview(sr.MonRel);
+            var canvasRect = mapper.PreviewToUi(previewRect, displayRect);
+            var cr = Drawing.Rectangle.Round(canvasRect);
+            var inflated = Drawing.Rectangle.Inflate(cr, grip, grip);
+
+            if (!inflated.Contains(clientPoint))
+            {
+                continue;
+            }
+
+            hitIndex = i;
+
+            var onLeft = clientPoint.X <= cr.Left + grip;
+            var onRight = clientPoint.X >= cr.Right - grip;
+            var onTop = clientPoint.Y <= cr.Top + grip;
+            var onBottom = clientPoint.Y >= cr.Bottom - grip;
+
+            if (onTop && onLeft) return DragMode.ResizeNW;
+            if (onTop && onRight) return DragMode.ResizeNE;
+            if (onBottom && onLeft) return DragMode.ResizeSW;
+            if (onBottom && onRight) return DragMode.ResizeSE;
+            if (onTop) return DragMode.ResizeN;
+            if (onBottom) return DragMode.ResizeS;
+            if (onLeft) return DragMode.ResizeW;
+            if (onRight) return DragMode.ResizeE;
+
+            return DragMode.Move;
+        }
+
+        return DragMode.None;
     }
 
     private static Drawing.RectangleF GetImageDisplayRectangle(WinForms.PictureBox pictureBox)

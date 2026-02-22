@@ -441,50 +441,38 @@ public partial class AppEditorForm
     var bounds = WindowPlacementHelper.ResolveBounds(window, monitor);
 
     // Check if the application is already running before launching a new instance.
-    var existingProcess = AppRunner.FindRunningProcess(appInfo.ExecutablePath);
+    using var existingProcess = AppRunner.FindRunningProcess(appInfo.ExecutablePath);
     if (existingProcess is not null)
     {
       try
       {
-        if (existingProcess.HasExited)
+        if (!existingProcess.HasExited)
         {
-          existingProcess.Dispose();
-        }
-        else
-        {
+          existingProcess.Refresh();
+          var handle = existingProcess.MainWindowHandle;
+          if (handle == IntPtr.Zero)
+          {
+            handle = await WindowWaiter.WaitForMainWindowAsync(existingProcess, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
+          }
+
           try
           {
-            existingProcess.Refresh();
-            var handle = existingProcess.MainWindowHandle;
-            if (handle == IntPtr.Zero)
-            {
-              handle = await WindowWaiter.WaitForMainWindowAsync(existingProcess, WindowTestTimeout, CancellationToken.None).ConfigureAwait(true);
-            }
-
-            try
-            {
-              await SuspendPreviewCaptureAsync().ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-              _logger.Warning(ex, "Falha ao suspender pré-visualização antes do movimento da janela de teste.");
-            }
-            try
-            {
-              WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
-              User32.SetForegroundWindow(handle);
-            }
-            finally
-            {
-              SchedulePreviewResume();
-            }
-            await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(true);
-            return;
+            await SuspendPreviewCaptureAsync().ConfigureAwait(true);
+          }
+          catch (Exception ex)
+          {
+            _logger.Warning(ex, "Falha ao suspender pré-visualização antes do movimento da janela de teste.");
+          }
+          try
+          {
+            WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
+            User32.SetForegroundWindow(handle);
           }
           finally
           {
-            existingProcess.Dispose();
+            SchedulePreviewResume();
           }
+          return;
         }
       }
       catch (Exception ex)
@@ -525,31 +513,15 @@ public partial class AppEditorForm
       try
       {
         WindowMover.MoveTo(handle, bounds, window.AlwaysOnTop, restoreIfMinimized: true);
+        User32.SetForegroundWindow(handle);
       }
       finally
       {
         SchedulePreviewResume();
       }
-      await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(true);
     }
     finally
     {
-      try
-      {
-        if (!process.HasExited)
-        {
-          process.CloseMainWindow();
-          if (!process.WaitForExit((int)WindowTestTimeout.TotalMilliseconds))
-          {
-            process.Kill(entireProcessTree: true);
-          }
-        }
-      }
-      catch (Exception ex)
-      {
-        _logger.Debug(ex, "Falha ao fechar aplicativo de teste.");
-      }
-
       process.Dispose();
     }
   }
@@ -702,6 +674,10 @@ public partial class AppEditorForm
     DisposeSimRectDisplays();
     _appRunner.BeforeMoveWindow -= AppRunnerOnBeforeMoveWindow;
     _appRunner.AfterMoveWindow -= AppRunnerOnAfterMoveWindow;
+    if (monitorPreviewDisplay is not null)
+    {
+      monitorPreviewDisplay.SimRectMoved -= MonitorPreviewDisplay_OnSimRectMoved;
+    }
     CancelHoverThrottleTimer();
     _logScope.Dispose();
   }

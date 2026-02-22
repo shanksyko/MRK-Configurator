@@ -127,6 +127,13 @@ public sealed class AppRunner : IAppRunner
             .WaitForMainWindowAsync(process, WindowWaitTimeout, cancellationToken)
             .ConfigureAwait(false);
 
+        // Give the app time to initialize its layout before positioning.
+        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+
+        ApplyWindowPosition(handle, monitor, bounds, alwaysOnTop);
+
+        // Re-apply after a short delay for apps that reset their size on startup.
+        await Task.Delay(150, cancellationToken).ConfigureAwait(false);
         ApplyWindowPosition(handle, monitor, bounds, alwaysOnTop);
     }
 

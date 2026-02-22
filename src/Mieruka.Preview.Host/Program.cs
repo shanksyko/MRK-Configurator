@@ -154,7 +154,7 @@ internal sealed class CaptureRunner
         return await CaptureFactory.GdiAsync(_monitorId).ConfigureAwait(false);
     }
 
-    private void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
+    private async void OnFrameArrived(object? sender, MonitorFrameArrivedEventArgs e)
     {
         if (_backend is null)
         {
@@ -171,7 +171,7 @@ internal sealed class CaptureRunner
             }
 
             _nextFrameAtUtc = nowUtc + _frameInterval;
-            using var processed = DownscaleFrame(e.Frame, _resolution);
+            var processed = DownscaleFrame(e.Frame, _resolution);
             var bmpData = processed.LockBits(new Rectangle(0, 0, processed.Width, processed.Height),
                 ImageLockMode.ReadOnly,
                 PixelFormat.Format32bppPArgb);
@@ -192,12 +192,16 @@ internal sealed class CaptureRunner
                     e.Timestamp,
                     buffer);
 
-                _ = _server.SendAsync(PreviewIpcMessageKind.Frame, frame, buffer, CancellationToken.None);
+                await _server.SendAsync(PreviewIpcMessageKind.Frame, frame, buffer, CancellationToken.None).ConfigureAwait(false);
             }
             finally
             {
                 processed.UnlockBits(bmpData);
                 ArrayPool<byte>.Shared.Return(buffer);
+                if (!ReferenceEquals(processed, e.Frame))
+                {
+                    processed.Dispose();
+                }
             }
         }
         finally

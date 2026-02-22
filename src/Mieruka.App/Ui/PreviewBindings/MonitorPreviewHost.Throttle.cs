@@ -87,10 +87,6 @@ public sealed partial class MonitorPreviewHost
     private void ResetFrameThrottle()
     {
         Volatile.Write(ref _nextFrameAtTicks, 0L);
-        lock (_frameTimingGate)
-        {
-            _nextFrameAt = DateTime.MinValue;
-        }
     }
 
     private void UpdateFrameThrottleForCapture(IMonitorCapture capture)
@@ -106,7 +102,6 @@ public sealed partial class MonitorPreviewHost
             {
                 _frameThrottle = SafeModeFrameThrottle;
                 Volatile.Write(ref _frameThrottleTicks, SafeModeFrameThrottle.Ticks);
-                _nextFrameAt = DateTime.MinValue;
                 Volatile.Write(ref _nextFrameAtTicks, 0L);
                 return;
             }
@@ -116,7 +111,6 @@ public sealed partial class MonitorPreviewHost
             Volatile.Write(ref _frameThrottleTicks, targetThrottle.Ticks);
             if (_frameThrottle <= TimeSpan.Zero)
             {
-                _nextFrameAt = DateTime.MinValue;
                 Volatile.Write(ref _nextFrameAtTicks, 0L);
             }
         }

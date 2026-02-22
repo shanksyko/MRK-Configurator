@@ -15,16 +15,11 @@ namespace Mieruka.App.Forms;
 
 public partial class AppEditorForm
 {
-  private async void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
+  private void TabEditor_SelectedIndexChanged(object? sender, EventArgs e)
   {
     try
     {
       UpdatePreviewVisibility();
-
-      if (tabEditor?.SelectedTab is { } tab && ReferenceEquals(tab, tabAplicativos))
-      {
-        await EnsureAppsListAsync().ConfigureAwait(true);
-      }
     }
     catch (Exception ex)
     {
@@ -277,6 +272,30 @@ public partial class AppEditorForm
     }
 
     _ = ClampWindowInputsToMonitor(null);
+    InvalidateWindowPreviewOverlay();
+  }
+
+  private void MonitorPreviewDisplay_OnSimRectMoved(object? sender, MonitorPreviewDisplay.SimRectMovedEventArgs e)
+  {
+    if (chkJanelaTelaCheia.Checked)
+    {
+      return;
+    }
+
+    _suppressWindowInputHandlers = true;
+    try
+    {
+      var bounds = e.MonitorBounds;
+      nudJanelaX.Value = AjustarRange(nudJanelaX, bounds.X);
+      nudJanelaY.Value = AjustarRange(nudJanelaY, bounds.Y);
+      nudJanelaLargura.Value = AjustarRange(nudJanelaLargura, bounds.Width);
+      nudJanelaAltura.Value = AjustarRange(nudJanelaAltura, bounds.Height);
+    }
+    finally
+    {
+      _suppressWindowInputHandlers = false;
+    }
+
     InvalidateWindowPreviewOverlay();
   }
 

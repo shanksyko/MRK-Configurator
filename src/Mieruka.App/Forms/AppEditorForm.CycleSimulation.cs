@@ -80,25 +80,17 @@ public partial class AppEditorForm
         isBrowser);
 
     var tabControl = tabEditor;
-    var appsTabPage = tabAplicativos;
     var sitesTabPage = tabSites;
 
-    if (tabControl is not null && appsTabPage is not null && sitesTabPage is not null)
+    if (tabControl is not null && sitesTabPage is not null)
     {
-      SetTabVisibility(tabControl, appsTabPage, _tabAplicativosIndex, isExecutable);
       SetTabVisibility(tabControl, sitesTabPage, _tabSitesIndex, !isExecutable);
 
-      if (isExecutable && ReferenceEquals(tabControl.SelectedTab, sitesTabPage))
-      {
-        tabControl.SelectedTab = tabControl.TabPages.Contains(appsTabPage)
-            ? appsTabPage
-            : (tabControl.TabPages.Count > 0 ? tabControl.TabPages[0] : null);
-      }
-      else if (!isExecutable && ReferenceEquals(tabControl.SelectedTab, appsTabPage))
+      if (!isExecutable && tabControl.TabPages.Count > 0 && tabControl.SelectedTab is null)
       {
         tabControl.SelectedTab = tabControl.TabPages.Contains(sitesTabPage)
             ? sitesTabPage
-            : (tabControl.TabPages.Count > 0 ? tabControl.TabPages[0] : null);
+            : tabControl.TabPages[0];
       }
 
       if (tabControl.SelectedTab is not null && !tabControl.TabPages.Contains(tabControl.SelectedTab))
@@ -110,6 +102,13 @@ public partial class AppEditorForm
     if (appsTabControl is not null)
     {
       appsTabControl.Enabled = isExecutable;
+    }
+
+    if (btnSelectApp is not null)
+    {
+      btnSelectApp.Visible = isExecutable;
+      btnSelectApp.Enabled = isExecutable;
+      btnSelectApp.TabStop = isExecutable;
     }
 
     if (btnBrowseExe is not null)
@@ -207,47 +206,6 @@ public partial class AppEditorForm
     else if (contains)
     {
       pages.Remove(tabPage);
-    }
-  }
-
-  private async Task EnsureAppsListAsync()
-  {
-    if (rbExe?.Checked != true)
-    {
-      return;
-    }
-
-    if (_appsListLoaded)
-    {
-      return;
-    }
-
-    if (IsDisposed || !IsHandleCreated)
-    {
-      return;
-    }
-
-    _appsListLoaded = true;
-
-    UseWaitCursor = true;
-    var previousCursor = Cursor.Current;
-    Cursor.Current = Cursors.WaitCursor;
-
-    try
-    {
-      var apps = await _installedAppsProvider.QueryAsync().ConfigureAwait(true);
-      appsTabControl?.SetInstalledApps(apps);
-    }
-    catch (Exception ex)
-    {
-      _logger.Error(ex, "Falha ao carregar a lista de aplicativos instalados.");
-      _appsListLoaded = false;
-    }
-    finally
-    {
-      Cursor.Current = previousCursor;
-      UseWaitCursor = false;
-      ApplyAppTypeUI();
     }
   }
 
@@ -620,13 +578,15 @@ public partial class AppEditorForm
   {
     var panel = new WinForms.Panel
     {
-      Width = 200,
-      Height = 120,
+      Width = 220,
+      Height = 130,
       Margin = new WinForms.Padding(12),
       Padding = new WinForms.Padding(4),
-      BorderStyle = BorderStyle.FixedSingle,
-      BackColor = System.Drawing.SystemColors.ControlLightLight,
+      BorderStyle = BorderStyle.None,
+      BackColor = Drawing.Color.Transparent,
     };
+    Services.Ui.DoubleBufferingHelper.EnableOptimizedDoubleBuffering(panel);
+    panel.Paint += SimRectPanel_Paint;
 
     var label = new WinForms.Label
     {
@@ -635,13 +595,67 @@ public partial class AppEditorForm
       TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
       Text = rect.DisplayName,
       AutoEllipsis = true,
-      Padding = new WinForms.Padding(4),
+      Padding = new WinForms.Padding(8),
+      BackColor = Drawing.Color.Transparent,
     };
 
     panel.Controls.Add(label);
     panel.Tag = rect;
 
     return new SimRectDisplay(rect, panel, label);
+  }
+
+  private static void SimRectPanel_Paint(object? sender, WinForms.PaintEventArgs e)
+  {
+    if (sender is not WinForms.Panel panel)
+    {
+      return;
+    }
+
+    var g = e.Graphics;
+    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+    var rect = new Drawing.Rectangle(1, 1, panel.Width - 3, panel.Height - 3);
+    const int radius = 8;
+    var isActive = panel.Tag is string tag && tag == "active";
+
+    // Shadow
+    var shadowRect = new Drawing.Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height);
+    using (var shadowPath = CreateRoundedRect(shadowRect, radius))
+    using (var shadowBrush = new System.Drawing.SolidBrush(Drawing.Color.FromArgb(30, 0, 0, 0)))
+    {
+      g.FillPath(shadowBrush, shadowPath);
+    }
+
+    using var path = CreateRoundedRect(rect, radius);
+
+    // Fill
+    var fillColor = panel.BackColor == Drawing.Color.Transparent
+        ? System.Drawing.SystemColors.ControlLightLight
+        : panel.BackColor;
+    using (var brush = new System.Drawing.SolidBrush(fillColor))
+    {
+      g.FillPath(brush, path);
+    }
+
+    // Border
+    var borderColor = Drawing.Color.FromArgb(200, 200, 200);
+    using (var pen = new Drawing.Pen(borderColor, 1f))
+    {
+      g.DrawPath(pen, path);
+    }
+  }
+
+  private static System.Drawing.Drawing2D.GraphicsPath CreateRoundedRect(Drawing.Rectangle rect, int radius)
+  {
+    var path = new System.Drawing.Drawing2D.GraphicsPath();
+    var diameter = radius * 2;
+    path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
+    path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
+    path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+    path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
+    path.CloseFigure();
+    return path;
   }
 
   private void ApplySimRectTooltip(SimRectDisplay display)
@@ -903,18 +917,18 @@ public partial class AppEditorForm
 
     if (isActive)
     {
-      display.Panel.BorderStyle = BorderStyle.Fixed3D;
       display.Panel.BackColor = Drawing.Color.FromArgb(32, 146, 204);
       display.Label.ForeColor = Drawing.Color.White;
       display.Label.Font = display.BoldFont;
     }
     else
     {
-      display.Panel.BorderStyle = BorderStyle.FixedSingle;
-      display.Panel.BackColor = System.Drawing.SystemColors.ControlLightLight;
+      display.Panel.BackColor = Drawing.Color.Transparent;
       display.Label.ForeColor = System.Drawing.SystemColors.ControlText;
       display.Label.Font = display.NormalFont;
     }
+
+    display.Panel.Invalidate();
   }
 
   private void ClearActiveSimRect()

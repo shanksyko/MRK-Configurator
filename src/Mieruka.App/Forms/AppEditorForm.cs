@@ -40,8 +40,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan HoverThrottleInterval = TimeSpan.FromMilliseconds(1000d / 30d);
-    private static readonly MethodInfo? ClearAppsInventorySelectionMethod =
-        typeof(AppsTab).GetMethod("ClearSelection", BindingFlags.Instance | BindingFlags.NonPublic);
     private static readonly Drawing.Color[] SimulationPalette =
     {
         Drawing.Color.FromArgb(0x4A, 0x90, 0xE2),
@@ -53,13 +51,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         Drawing.Color.FromArgb(0xE6, 0x7E, 0x22),
         Drawing.Color.FromArgb(0x2E, 0x86, 0xAB),
     };
-
-    private enum ExecSourceMode
-    {
-        None,
-        Inventory,
-        Custom,
-    }
 
     private readonly record struct WindowPreviewSnapshot(
         string? MonitorId,
@@ -81,12 +72,9 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
     private readonly IList<ProgramaConfig>? _profileApps;
     private readonly BindingList<ProfileItemMetadata> _profileItems = new();
     private ProfileItemMetadata? _editingMetadata;
-    private readonly int _tabAplicativosIndex;
     private readonly int _tabSitesIndex;
     private bool _suppressCycleUpdates;
     private bool _suppressCycleSelectionEvents;
-    private ExecSourceMode _execSourceMode;
-    private bool _suppressListSelectionChanged;
     private MonitorInfo? _selectedMonitorInfo;
     private string? _selectedMonitorId;
     private bool _suppressMonitorComboEvents;
@@ -105,7 +93,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
     private readonly SynchronizationContext? _uiContext;
     private readonly int _uiThreadId;
     private readonly IInstalledAppsProvider _installedAppsProvider = new RegistryInstalledAppsProvider();
-    private bool _appsListLoaded;
     private readonly Guid _editSessionId;
     private readonly IDisposable _logScope;
     private readonly IBindingService _bindingBatchService = new BindingBatchService();
@@ -198,12 +185,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         cmbHealthCheckType.SelectedIndexChanged += (_, _) => UpdateHealthCheckFieldsVisibility();
         UpdateHealthCheckFieldsVisibility();
 
-        _tabAplicativosIndex = editorTabs.TabPages.IndexOf(appsTabPage);
-        if (_tabAplicativosIndex < 0)
-        {
-            throw new InvalidOperationException("A aba de aplicativos não foi adicionada ao controle de abas.");
-        }
-
         _tabSitesIndex = editorTabs.TabPages.IndexOf(sitesTabPage);
         if (_tabSitesIndex < 0)
         {
@@ -256,11 +237,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             resumePreview: null,
             Log.ForContext<TabEditCoordinator>().ForContext("EditSessionId", _editSessionId));
 
-        appsTab.ExecutableChosen += AppsTab_ExecutableChosen;
-        appsTab.ExecutableCleared += AppsTab_ExecutableCleared;
-        appsTab.ArgumentsChanged += AppsTab_ArgumentsChanged;
-        appsTab.OpenRequested += AppsTab_OpenRequestedAsync;
-        appsTab.TestRequested += AppsTab_TestRequestedAsync;
+        btnSelectApp.Click += BtnSelectApp_ClickAsync;
 
         txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
         txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
@@ -273,6 +250,8 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         previewControl.MonitorMouseMove += MonitorPreviewDisplay_OnMonitorMouseMove;
         previewControl.MonitorMouseClick += MonitorPreviewDisplay_OnMonitorMouseClick;
         previewControl.MonitorMouseLeft += MonitorPreviewDisplay_MonitorMouseLeft;
+        previewControl.SimRectMoved += MonitorPreviewDisplay_OnSimRectMoved;
+        previewControl.InteractiveMode = true;
 
         janelaTab.SizeChanged += (_, _) => AdjustMonitorPreviewWidth();
 
@@ -325,8 +304,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             _ = UpdateMonitorPreviewSafelyAsync();
         }
 
-        appsTab.ExecutablePath = txtExecutavel.Text;
-        appsTab.Arguments = txtArgumentos.Text;
         UpdateExePreview();
 
         InitializeCycleSimulation();
@@ -347,6 +324,17 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         WireDirtyTracking();
         _suppressDirtyTracking = false;
         _isDirty = false;
+    }
+
+    /// <summary>
+    /// Selects the Window/Positioning tab so the editor opens focused on window settings.
+    /// </summary>
+    internal void FocusWindowTab()
+    {
+        if (tabEditor is not null && tpJanela is not null)
+        {
+            tabEditor.SelectedTab = tpJanela;
+        }
     }
 
     private void MarkDirty()
@@ -374,6 +362,8 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         txtEnvVars.TextChanged += (_, _) => MarkDirty();
         chkWatchdogEnabled.CheckedChanged += (_, _) => MarkDirty();
         nudWatchdogGrace.ValueChanged += (_, _) => MarkDirty();
+        nudMaxRestartAttempts.ValueChanged += (_, _) => MarkDirty();
+        nudWindowRecheckInterval.ValueChanged += (_, _) => MarkDirty();
     }
 
     public ProgramaConfig? Resultado { get; private set; }
@@ -457,9 +447,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             }
         }
 
-        appsTabControl!.ExecutablePath = programa.ExecutablePath;
-        appsTabControl.Arguments = programa.Arguments ?? string.Empty;
-
         // Avançado
         txtNomeAmigavel.Text = programa.Name ?? string.Empty;
         txtWindowTitle.Text = janela.Title ?? string.Empty;
@@ -467,6 +454,8 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         var wd = programa.Watchdog ?? new WatchdogSettings();
         chkWatchdogEnabled.Checked = wd.Enabled;
         nudWatchdogGrace.Value = AjustarRange(nudWatchdogGrace, wd.RestartGracePeriodSeconds);
+        nudMaxRestartAttempts.Value = AjustarRange(nudMaxRestartAttempts, wd.MaxRestartAttempts);
+        nudWindowRecheckInterval.Value = AjustarRange(nudWindowRecheckInterval, wd.WindowRecheckIntervalSeconds);
 
         var hc = wd.HealthCheck;
         cmbHealthCheckType.SelectedIndex = hc is null ? 0 : (int)hc.Type;
