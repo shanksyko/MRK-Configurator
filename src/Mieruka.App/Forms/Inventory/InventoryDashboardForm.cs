@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Data.Entities;
 using Mieruka.Core.Data.Services;
+using Mieruka.App.Services.Ui;
 
 namespace Mieruka.App.Forms.Inventory;
 
@@ -54,6 +55,13 @@ public sealed class InventoryDashboardForm : Form
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
         AutoScroll = true;
+        Font = new Font("Segoe UI", 9f);
+
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_gridCategorySummary);
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_gridStatusSummary);
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_gridLocationSummary);
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_gridExpiringWarranty);
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_gridOverdueMaintenance);
 
         var mainPanel = new FlowLayoutPanel
         {
@@ -112,10 +120,17 @@ public sealed class InventoryDashboardForm : Form
     {
         var card = new Panel
         {
-            Size = new Size(200, 80),
+            Size = new Size(210, 86),
             Margin = new Padding(0, 0, 12, 0),
-            BorderStyle = BorderStyle.FixedSingle,
+            BorderStyle = BorderStyle.None,
             BackColor = Color.White,
+        };
+
+        // Subtle shadow border via Paint
+        card.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(220, 220, 220));
+            e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
         };
 
         var accent = new Panel
@@ -129,15 +144,15 @@ public sealed class InventoryDashboardForm : Form
         {
             Text = title,
             AutoSize = true,
-            Location = new Point(14, 8),
+            Location = new Point(16, 10),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
-            ForeColor = Color.Gray,
+            ForeColor = Color.FromArgb(120, 120, 120),
         };
 
         valueLabel.Text = "...";
         valueLabel.AutoSize = true;
-        valueLabel.Location = new Point(14, 36);
-        valueLabel.Font = new Font("Segoe UI", 18f, FontStyle.Bold);
+        valueLabel.Location = new Point(16, 36);
+        valueLabel.Font = new Font("Segoe UI", 20f, FontStyle.Bold);
         valueLabel.ForeColor = accentColor;
 
         card.Controls.Add(accent);
@@ -151,7 +166,7 @@ public sealed class InventoryDashboardForm : Form
     {
         var panel = new Panel
         {
-            Size = new Size(width, height + 24),
+            Size = new Size(width, height + 28),
             Margin = new Padding(0, 0, 12, 12),
         };
 
@@ -160,10 +175,11 @@ public sealed class InventoryDashboardForm : Form
             Text = title,
             AutoSize = true,
             Location = new Point(0, 0),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Font = new Font("Segoe UI Semibold", 9.5f),
+            ForeColor = Color.FromArgb(60, 60, 60),
         };
 
-        grid.Location = new Point(0, 22);
+        grid.Location = new Point(0, 26);
         grid.Size = new Size(width, height);
         grid.AllowUserToAddRows = false;
         grid.AllowUserToDeleteRows = false;
@@ -173,6 +189,37 @@ public sealed class InventoryDashboardForm : Form
         grid.BackgroundColor = SystemColors.Window;
         grid.BorderStyle = BorderStyle.FixedSingle;
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        grid.GridColor = Color.FromArgb(230, 230, 230);
+
+        // Header styling
+        grid.EnableHeadersVisualStyles = false;
+        grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(240, 240, 240),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            Font = new Font("Segoe UI Semibold", 8.5f),
+            Padding = new Padding(4, 2, 4, 2),
+            SelectionBackColor = Color.FromArgb(240, 240, 240),
+            SelectionForeColor = Color.FromArgb(60, 60, 60),
+        };
+        grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        grid.ColumnHeadersHeight = 26;
+
+        // Row styling
+        grid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            Font = new Font("Segoe UI", 8.5f),
+            Padding = new Padding(4, 1, 4, 1),
+            SelectionBackColor = Color.FromArgb(0, 120, 215),
+            SelectionForeColor = Color.White,
+        };
+        grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(245, 248, 255),
+        };
+        grid.RowTemplate.Height = 24;
 
         panel.Controls.Add(lbl);
         panel.Controls.Add(grid);

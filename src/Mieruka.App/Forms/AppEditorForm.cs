@@ -36,7 +36,6 @@ namespace Mieruka.App.Forms;
 public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
 {
     private readonly ILogger _logger = Log.ForContext<AppEditorForm>();
-    private static readonly TimeSpan WindowTestTimeout = TimeSpan.FromSeconds(5);
     private const int EnumCurrentSettings = -1;
     private static readonly TimeSpan PreviewResumeDelay = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan HoverThrottleInterval = TimeSpan.FromMilliseconds(1000d / 30d);
@@ -238,6 +237,7 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
             Log.ForContext<TabEditCoordinator>().ForContext("EditSessionId", _editSessionId));
 
         btnSelectApp.Click += BtnSelectApp_ClickAsync;
+        btnBrowseExe.Click += BtnBrowseExe_Click;
 
         txtExecutavel.TextChanged += (_, _) => UpdateExePreview();
         txtArgumentos.TextChanged += (_, _) => UpdateExePreview();
@@ -324,17 +324,6 @@ public partial class AppEditorForm : WinForms.Form, IMonitorSelectionProvider
         WireDirtyTracking();
         _suppressDirtyTracking = false;
         _isDirty = false;
-    }
-
-    /// <summary>
-    /// Selects the Window/Positioning tab so the editor opens focused on window settings.
-    /// </summary>
-    internal void FocusWindowTab()
-    {
-        if (tabEditor is not null && tpJanela is not null)
-        {
-            tabEditor.SelectedTab = tpJanela;
-        }
     }
 
     private void MarkDirty()

@@ -26,6 +26,7 @@ public sealed partial class CredentialVaultPanel : WinForms.UserControl
     public CredentialVaultPanel()
     {
         InitializeComponent();
+        DoubleBuffered = true;
 
         _ = layoutPrincipal ?? throw new InvalidOperationException("Layout não carregado.");
         _ = lblScope ?? throw new InvalidOperationException("Label scope não carregado.");

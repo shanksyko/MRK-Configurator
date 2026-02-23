@@ -21,6 +21,7 @@ internal sealed class CoordinateInputDialog : Form
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(300, 210);
         ShowInTaskbar = false;
+        DoubleBuffered = true;
 
         var lblX = new Label { Text = "X:", Location = new Point(16, 22), AutoSize = true };
         _nudX = new NumericUpDown

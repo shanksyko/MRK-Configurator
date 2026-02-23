@@ -24,8 +24,7 @@ internal sealed class ModernButton : Button
             ControlStyles.UserPaint |
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
         DoubleBuffered = true;
         FlatStyle = FlatStyle.Flat;
@@ -42,6 +41,18 @@ internal sealed class ModernButton : Button
     [DefaultValue(15)]
     public int PressedDarkenPercent { get; set; } = 15;
 
+    /// <summary>
+    /// Swallow the Designer-generated <c>UseVisualStyleBackColor = true</c>.
+    /// It is meaningless for custom-painted buttons and can interfere with BackColor resolution.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
+    public new bool UseVisualStyleBackColor
+    {
+        get => false;
+        set { /* intentionally ignored */ }
+    }
+
     private Color ResolvedBaseColor
     {
         get
@@ -51,6 +62,13 @@ internal sealed class ModernButton : Button
                 _baseBackColor = BackColor;
                 _baseBackColorInitialized = true;
             }
+
+            // Guard against transparent or empty colors (can happen when no explicit BackColor is set).
+            if (_baseBackColor.A == 0 || _baseBackColor == Color.Empty)
+            {
+                return SystemColors.Control;
+            }
+
             return _baseBackColor;
         }
     }
@@ -107,6 +125,29 @@ internal sealed class ModernButton : Button
         base.OnEnabledChanged(e);
     }
 
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        UpdateClipRegion();
+    }
+
+    private void UpdateClipRegion()
+    {
+        var rect = ClientRectangle;
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var drawRect = new Rectangle(rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+        var radius = Math.Min(CornerRadius, Math.Min(drawRect.Width, drawRect.Height) / 2);
+
+        using var path = CreateRoundedRectPath(drawRect, radius);
+        var oldRegion = Region;
+        Region = new Region(path);
+        oldRegion?.Dispose();
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -117,6 +158,13 @@ internal sealed class ModernButton : Button
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;
+        }
+
+        // Clear entire background with parent color to avoid artifacts outside rounded corners.
+        var parentColor = Parent?.BackColor ?? SystemColors.Control;
+        using (var clearBrush = new SolidBrush(parentColor))
+        {
+            g.FillRectangle(clearBrush, rect);
         }
 
         // Shrink by 1 pixel so the border fits inside
@@ -154,7 +202,7 @@ internal sealed class ModernButton : Button
 
         // Draw border
         var borderColor = Enabled
-            ? DarkenColor(fillColor, 12)
+            ? DarkenColor(fillColor, 30)
             : SystemColors.ControlDark;
         using (var pen = new Pen(borderColor, 1f))
         {
@@ -191,9 +239,6 @@ internal sealed class ModernButton : Button
             drawRect.Height - Padding.Vertical);
 
         TextRenderer.DrawText(g, Text, Font, textRect, textColor, flags);
-
-        // Set region so clicks outside rounded corners don't fire
-        Region = new Region(path);
     }
 
     private static GraphicsPath CreateRoundedRectPath(Rectangle rect, int radius)

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Security.Models;
 using Mieruka.Core.Security.Services;
+using Mieruka.App.Services.Ui;
 using Serilog;
 
 namespace Mieruka.App.Forms.Security;
@@ -45,6 +46,7 @@ public sealed class AuditLogViewerForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(700, 420);
         StartPosition = FormStartPosition.CenterParent;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         DoubleBuffered = true;
 
         // ── Filter bar ──
@@ -125,6 +127,7 @@ public sealed class AuditLogViewerForm : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEntityType", HeaderText = "Tipo", FillWeight = 12, MinimumWidth = 70, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEntityId", HeaderText = "ID", FillWeight = 9, MinimumWidth = 60, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colDetails", HeaderText = "Detalhes", FillWeight = 28, MinimumWidth = 120, ReadOnly = true });
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_grid);
 
         // ── Bottom button bar ──
         var bottomPanel = new FlowLayoutPanel

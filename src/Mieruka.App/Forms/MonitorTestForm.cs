@@ -19,6 +19,7 @@ internal sealed class MonitorTestForm : WinForms.Form
         MinimumSize = new Drawing.Size(200, 150);
         BackColor = Drawing.Color.FromArgb(32, 32, 32);
         ForeColor = Drawing.Color.White;
+        DoubleBuffered = true;
 
         var font = SystemFonts.CaptionFont ?? WinForms.Control.DefaultFont;
         var boldFont = font is null

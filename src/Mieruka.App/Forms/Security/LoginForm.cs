@@ -20,6 +20,7 @@ public partial class LoginForm : Form
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         InitializeComponent();
+        DoubleBuffered = true;
     }
 
     private void LoginForm_Load(object? sender, EventArgs e)

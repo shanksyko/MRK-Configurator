@@ -61,6 +61,7 @@ public sealed class InventoryItemEditorForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
+        Font = new Font("Segoe UI", 9f);
 
         var layout = new TableLayoutPanel
         {
@@ -195,13 +196,18 @@ public sealed class InventoryItemEditorForm : Form
             Padding = new Padding(8),
         };
         _btnCancel.Text = "Cancelar";
-        _btnCancel.AutoSize = true;
+        _btnCancel.AutoSize = false;
+        _btnCancel.Size = new Size(90, 30);
+        _btnCancel.FlatStyle = FlatStyle.Flat;
+        _btnCancel.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         _btnSave.BackColor = Color.FromArgb(0, 120, 215);
         _btnSave.FlatStyle = FlatStyle.Flat;
+        _btnSave.FlatAppearance.BorderSize = 0;
         _btnSave.ForeColor = Color.White;
         _btnSave.Text = "Salvar";
-        _btnSave.AutoSize = true;
+        _btnSave.AutoSize = false;
+        _btnSave.Size = new Size(90, 30);
         _btnSave.UseVisualStyleBackColor = false;
         _btnSave.Click += OnSaveClicked;
         buttonPanel.Controls.Add(_btnCancel);

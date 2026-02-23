@@ -24,6 +24,7 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
     public LoginAutoTab()
     {
         InitializeComponent();
+        DoubleBuffered = true;
 
         _ = layoutPrincipal ?? throw new InvalidOperationException("Layout principal não inicializado.");
         _ = txtUserSelector ?? throw new InvalidOperationException("Campo de usuário não carregado.");
@@ -61,36 +62,45 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
     public void BindSite(SiteConfig? site)
     {
         _site = site;
-        txtTotpSecretKeyRef.Clear();
-        txtUserSelector.Clear();
-        txtPasswordSelector.Clear();
-        txtSubmitSelector.Clear();
-        txtPostSubmitSelector.Clear();
-        txtExtraWaitSelectors.Clear();
-        _ssoHints.Clear();
-
-        if (site is null)
+        SuspendLayout();
+        try
         {
-            Enabled = false;
-            return;
-        }
+            txtTotpSecretKeyRef.Clear();
+            txtUserSelector.Clear();
+            txtPasswordSelector.Clear();
+            txtSubmitSelector.Clear();
+            txtPostSubmitSelector.Clear();
+            txtExtraWaitSelectors.Clear();
+            _ssoHints.Clear();
 
-        Enabled = true;
-        txtTotpSecretKeyRef.Text = string.IsNullOrEmpty(site.Id)
-            ? string.Empty
-            : Mieruka.Core.Security.CredentialVault.BuildTotpKey(site.Id);
-
-        // Load selectors from the login profile.
-        if (site.Login is { } login)
-        {
-            txtUserSelector.Text = login.UserSelector ?? string.Empty;
-            txtPasswordSelector.Text = login.PassSelector ?? string.Empty;
-            txtSubmitSelector.Text = login.SubmitSelector ?? string.Empty;
-
-            foreach (var hint in login.SsoHints ?? Array.Empty<string>())
+            if (site is null)
             {
-                _ssoHints.Add(hint);
+                Enabled = false;
+                return;
             }
+
+            Enabled = true;
+            txtTotpSecretKeyRef.Text = string.IsNullOrEmpty(site.Id)
+                ? string.Empty
+                : Mieruka.Core.Security.CredentialVault.BuildTotpKey(site.Id);
+
+            // Load selectors from the login profile.
+            if (site.Login is { } login)
+            {
+                txtUserSelector.Text = login.UserSelector ?? string.Empty;
+                txtPasswordSelector.Text = login.PassSelector ?? string.Empty;
+                txtSubmitSelector.Text = login.SubmitSelector ?? string.Empty;
+
+                foreach (var hint in login.SsoHints ?? Array.Empty<string>())
+                {
+                    _ssoHints.Add(hint);
+                }
+            }
+        }
+        finally
+        {
+            ResumeLayout(false);
+            PerformLayout();
         }
     }
 
@@ -128,7 +138,14 @@ internal sealed partial class LoginAutoTab : WinForms.UserControl
 
     private async void btnDetectarCampos_Click(object? sender, EventArgs e)
     {
-        await DetectarCamposAsync();
+        try
+        {
+            await DetectarCamposAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            WinForms.MessageBox.Show(this, $"Erro inesperado ao detectar campos: {ex.Message}", "Login Automático", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+        }
     }
 
     private async Task DetectarCamposAsync()

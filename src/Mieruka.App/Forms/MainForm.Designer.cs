@@ -12,14 +12,11 @@ partial class MainForm
     internal ToolStripMenuItem menuPerfisSalvar = null!;
     internal ToolStripMenuItem menuPerfisExecutar = null!;
     internal ToolStripMenuItem menuPerfisParar = null!;
-    internal ToolStripMenuItem menuPerfisTestar = null!;
     internal ToolStripSeparator menuPerfisSeparador = null!;
     internal ToolStripMenuItem menuPerfisCarregar = null!;
 
     internal ToolStripMenuItem menuSeguranca = null!;
-    internal ToolStripMenuItem menuSegurancaUsuarios = null!;
     internal ToolStripMenuItem menuSegurancaCredenciais = null!;
-    internal ToolStripSeparator menuSegurancaSeparador = null!;
     internal ToolStripMenuItem menuSegurancaAuditoria = null!;
 
     internal ToolStripMenuItem menuConfiguracao = null!;
@@ -46,12 +43,9 @@ partial class MainForm
     internal Controls.ModernButton btnEditar = null!;
     internal Controls.ModernButton btnDuplicar = null!;
     internal Controls.ModernButton btnExcluir = null!;
-    internal Controls.ModernButton btnExecutar = null!;
-    internal Controls.ModernButton btnParar = null!;
     internal Controls.ModernButton btnSalvarPerfil = null!;
     internal Controls.ModernButton btnExecutarPerfil = null!;
     internal Controls.ModernButton btnPararPerfil = null!;
-    internal Controls.ModernButton btnTestarItem = null!;
     internal ErrorProvider errorProvider = null!;
     internal StatusStrip statusBar = null!;
     internal ToolStripStatusLabel lblStatus = null!;
@@ -76,14 +70,11 @@ partial class MainForm
         menuPerfisSalvar = new ToolStripMenuItem();
         menuPerfisExecutar = new ToolStripMenuItem();
         menuPerfisParar = new ToolStripMenuItem();
-        menuPerfisTestar = new ToolStripMenuItem();
         menuPerfisSeparador = new ToolStripSeparator();
         menuPerfisCarregar = new ToolStripMenuItem();
 
         menuSeguranca = new ToolStripMenuItem();
-        menuSegurancaUsuarios = new ToolStripMenuItem();
         menuSegurancaCredenciais = new ToolStripMenuItem();
-        menuSegurancaSeparador = new ToolStripSeparator();
         menuSegurancaAuditoria = new ToolStripMenuItem();
 
         menuConfiguracao = new ToolStripMenuItem();
@@ -114,12 +105,9 @@ partial class MainForm
         btnEditar = new Controls.ModernButton();
         btnDuplicar = new Controls.ModernButton();
         btnExcluir = new Controls.ModernButton();
-        btnExecutar = new Controls.ModernButton();
-        btnParar = new Controls.ModernButton();
         btnSalvarPerfil = new Controls.ModernButton();
         btnExecutarPerfil = new Controls.ModernButton();
         btnPararPerfil = new Controls.ModernButton();
-        btnTestarItem = new Controls.ModernButton();
         errorProvider = new ErrorProvider(components);
         statusBar = new StatusStrip();
         lblStatus = new ToolStripStatusLabel();
@@ -150,7 +138,7 @@ partial class MainForm
         //
         // menuPerfis
         //
-        menuPerfis.DropDownItems.AddRange(new ToolStripItem[] { menuPerfisSalvar, menuPerfisExecutar, menuPerfisParar, menuPerfisTestar, menuPerfisSeparador, menuPerfisCarregar });
+        menuPerfis.DropDownItems.AddRange(new ToolStripItem[] { menuPerfisSalvar, menuPerfisExecutar, menuPerfisParar, menuPerfisSeparador, menuPerfisCarregar });
         menuPerfis.Name = "menuPerfis";
         menuPerfis.Size = new System.Drawing.Size(61, 24);
         menuPerfis.Text = "&Perfis";
@@ -176,13 +164,6 @@ partial class MainForm
         menuPerfisParar.Text = "Parar";
         menuPerfisParar.Click += menuPerfisParar_Click;
         //
-        // menuPerfisTestar
-        //
-        menuPerfisTestar.Name = "menuPerfisTestar";
-        menuPerfisTestar.Size = new System.Drawing.Size(246, 26);
-        menuPerfisTestar.Text = "Testar item";
-        menuPerfisTestar.Click += menuPerfisTestar_Click;
-        //
         // menuPerfisSeparador
         //
         menuPerfisSeparador.Name = "menuPerfisSeparador";
@@ -197,25 +178,15 @@ partial class MainForm
         //
         // menuSeguranca
         //
-        menuSeguranca.DropDownItems.AddRange(new ToolStripItem[] { menuSegurancaUsuarios, menuSegurancaCredenciais, menuSegurancaSeparador, menuSegurancaAuditoria });
+        menuSeguranca.DropDownItems.AddRange(new ToolStripItem[] { menuSegurancaCredenciais, menuSegurancaAuditoria });
         menuSeguranca.Name = "menuSeguranca";
         menuSeguranca.Text = "&Segurança";
-        //
-        // menuSegurancaUsuarios
-        //
-        menuSegurancaUsuarios.Name = "menuSegurancaUsuarios";
-        menuSegurancaUsuarios.Text = "Gerenciar Usuários";
-        menuSegurancaUsuarios.Click += menuSegurancaUsuarios_Click;
         //
         // menuSegurancaCredenciais
         //
         menuSegurancaCredenciais.Name = "menuSegurancaCredenciais";
         menuSegurancaCredenciais.Text = "Gerenciar Credenciais";
         menuSegurancaCredenciais.Click += menuSegurancaCredenciais_Click;
-        //
-        // menuSegurancaSeparador
-        //
-        menuSegurancaSeparador.Name = "menuSegurancaSeparador";
         //
         // menuSegurancaAuditoria
         //
@@ -391,6 +362,7 @@ partial class MainForm
         dgvProgramas.Size = new System.Drawing.Size(1009, 648);
         dgvProgramas.TabIndex = 0;
         dgvProgramas.CellDoubleClick += dgvProgramas_CellDoubleClick;
+        dgvProgramas.CellContentClick += dgvProgramas_CellContentClick;
         dgvProgramas.SelectionChanged += dgvProgramas_SelectionChanged;
         dgvProgramas.KeyDown += dgvProgramas_KeyDown;
         //
@@ -426,16 +398,11 @@ partial class MainForm
         painelBotoes.AutoSize = true;
         painelBotoes.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         var sep1 = new Label { AutoSize = false, Height = 1, Dock = DockStyle.Top, BorderStyle = BorderStyle.Fixed3D, Margin = new Padding(0, 4, 0, 4) };
-        var sep2 = new Label { AutoSize = false, Height = 1, Dock = DockStyle.Top, BorderStyle = BorderStyle.Fixed3D, Margin = new Padding(0, 4, 0, 4) };
         painelBotoes.Controls.Add(btnAdicionar);
         painelBotoes.Controls.Add(btnEditar);
         painelBotoes.Controls.Add(btnDuplicar);
         painelBotoes.Controls.Add(btnExcluir);
         painelBotoes.Controls.Add(sep1);
-        painelBotoes.Controls.Add(btnExecutar);
-        painelBotoes.Controls.Add(btnParar);
-        painelBotoes.Controls.Add(btnTestarItem);
-        painelBotoes.Controls.Add(sep2);
         painelBotoes.Controls.Add(btnSalvarPerfil);
         painelBotoes.Controls.Add(btnExecutarPerfil);
         painelBotoes.Controls.Add(btnPararPerfil);
@@ -497,32 +464,6 @@ partial class MainForm
         btnExcluir.Padding = new Padding(8, 0, 0, 0);
         btnExcluir.Click += btnExcluir_Click;
         //
-        // btnExecutar
-        //
-        btnExecutar.BackColor = System.Drawing.Color.FromArgb(40, 167, 69);
-        btnExecutar.ForeColor = System.Drawing.Color.White;
-        btnExecutar.Margin = new Padding(0, 0, 0, 6);
-        btnExecutar.Name = "btnExecutar";
-        btnExecutar.Size = new System.Drawing.Size(130, 30);
-        btnExecutar.TabIndex = 4;
-        btnExecutar.Text = "\u25B6  Executar";
-        btnExecutar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-        btnExecutar.Padding = new Padding(8, 0, 0, 0);
-        btnExecutar.Click += btnExecutar_Click;
-        //
-        // btnParar
-        //
-        btnParar.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
-        btnParar.ForeColor = System.Drawing.Color.White;
-        btnParar.Margin = new Padding(0, 0, 0, 6);
-        btnParar.Name = "btnParar";
-        btnParar.Size = new System.Drawing.Size(130, 30);
-        btnParar.TabIndex = 5;
-        btnParar.Text = "\u23F9  Parar";
-        btnParar.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-        btnParar.Padding = new Padding(8, 0, 0, 0);
-        btnParar.Click += btnParar_Click;
-        //
         // btnSalvarPerfil
         //
         btnSalvarPerfil.Margin = new Padding(0, 0, 0, 6);
@@ -542,7 +483,7 @@ partial class MainForm
         btnExecutarPerfil.Name = "btnExecutarPerfil";
         btnExecutarPerfil.Size = new System.Drawing.Size(130, 30);
         btnExecutarPerfil.TabIndex = 7;
-        btnExecutarPerfil.Text = "\u25B6  Exec. perfil";
+        btnExecutarPerfil.Text = "\u25B6  Executar";
         btnExecutarPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnExecutarPerfil.Padding = new Padding(8, 0, 0, 0);
         btnExecutarPerfil.Click += btnExecutarPerfil_Click;
@@ -555,23 +496,10 @@ partial class MainForm
         btnPararPerfil.Name = "btnPararPerfil";
         btnPararPerfil.Size = new System.Drawing.Size(130, 30);
         btnPararPerfil.TabIndex = 8;
-        btnPararPerfil.Text = "\u23F9  Parar perfil";
+        btnPararPerfil.Text = "\u23F9  Parar";
         btnPararPerfil.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         btnPararPerfil.Padding = new Padding(8, 0, 0, 0);
         btnPararPerfil.Click += btnPararPerfil_Click;
-        //
-        // btnTestarItem
-        //
-        btnTestarItem.BackColor = System.Drawing.Color.FromArgb(255, 152, 0);
-        btnTestarItem.ForeColor = System.Drawing.Color.White;
-        btnTestarItem.Margin = new Padding(0, 0, 0, 6);
-        btnTestarItem.Name = "btnTestarItem";
-        btnTestarItem.Size = new System.Drawing.Size(130, 30);
-        btnTestarItem.TabIndex = 9;
-        btnTestarItem.Text = "\uD83E\uDDEA  Testar item";
-        btnTestarItem.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-        btnTestarItem.Padding = new Padding(8, 0, 0, 0);
-        btnTestarItem.Click += btnTestarItem_Click;
         //
         // errorProvider
         //

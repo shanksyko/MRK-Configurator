@@ -144,7 +144,7 @@ public partial class AppEditorForm
     var showDom = type == HealthCheckKind.Dom;
 
     txtHealthCheckUrl.Visible = showPing;
-    txtHealthCheckUrl.Parent!.GetContainerControl()?.ToString(); // force layout
+    txtHealthCheckUrl.Parent!.PerformLayout();
     nudHealthCheckInterval.Visible = showPing;
     nudHealthCheckTimeout.Visible = showPing;
 
@@ -275,35 +275,35 @@ public partial class AppEditorForm
 
   protected override async void OnFormClosing(WinForms.FormClosingEventArgs e)
   {
-    if (DialogResult != WinForms.DialogResult.OK && _isDirty)
+    try
     {
-      var result = MessageBox.Show(
-          this,
-          "Existem alterações não salvas. Deseja descartar?",
-          "Confirmação",
-          MessageBoxButtons.YesNo,
-          MessageBoxIcon.Question);
-
-      if (result != WinForms.DialogResult.Yes)
+      if (DialogResult != WinForms.DialogResult.OK && _isDirty)
       {
-        e.Cancel = true;
-        return;
+        var result = MessageBox.Show(
+            this,
+            "Existem alterações não salvas. Deseja descartar?",
+            "Confirmação",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (result != WinForms.DialogResult.Yes)
+        {
+          e.Cancel = true;
+          return;
+        }
       }
-    }
 
-    StopCycleSimulation();
-    base.OnFormClosing(e);
+      StopCycleSimulation();
+      base.OnFormClosing(e);
 
-    if (monitorPreviewDisplay is { } preview)
-    {
-      try
+      if (monitorPreviewDisplay is { } preview)
       {
         await preview.StopPreviewAsync().ConfigureAwait(true);
       }
-      catch (Exception ex)
-      {
-        _logger.Warning(ex, "Falha ao encerrar pré-visualização ao fechar o editor.");
-      }
+    }
+    catch (Exception ex)
+    {
+      _logger.Warning(ex, "Falha ao encerrar recursos durante o fechamento do editor.");
     }
   }
 
@@ -369,6 +369,32 @@ public partial class AppEditorForm
 
     txtExecutavel.Text = selectedApp.ExecutablePath;
     UpdateExePreview();
+  }
+
+  private void BtnBrowseExe_Click(object? sender, EventArgs e)
+  {
+    using var dialog = new WinForms.OpenFileDialog
+    {
+      Title = "Selecionar executável",
+      Filter = "Aplicativos (*.exe)|*.exe|Todos os arquivos (*.*)|*.*",
+      CheckFileExists = true,
+    };
+
+    var current = txtExecutavel.Text.Trim();
+    if (!string.IsNullOrWhiteSpace(current))
+    {
+      var dir = System.IO.Path.GetDirectoryName(current);
+      if (!string.IsNullOrWhiteSpace(dir) && System.IO.Directory.Exists(dir))
+      {
+        dialog.InitialDirectory = dir;
+      }
+    }
+
+    if (dialog.ShowDialog(this) == WinForms.DialogResult.OK)
+    {
+      txtExecutavel.Text = dialog.FileName;
+      UpdateExePreview();
+    }
   }
 
   private void UpdateExePreview()

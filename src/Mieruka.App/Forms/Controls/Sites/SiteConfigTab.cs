@@ -17,6 +17,7 @@ internal sealed partial class SiteConfigTab : WinForms.UserControl
     public SiteConfigTab()
     {
         InitializeComponent();
+        DoubleBuffered = true;
 
         _ = layoutPrincipal ?? throw new InvalidOperationException("Layout principal não foi carregado.");
         _ = txtUrl ?? throw new InvalidOperationException("Campo de URL não foi carregado.");
@@ -38,25 +39,34 @@ internal sealed partial class SiteConfigTab : WinForms.UserControl
     public void Bind(SiteConfig? site)
     {
         _site = site;
-        _hosts.Clear();
-
-        if (site is null)
+        SuspendLayout();
+        try
         {
-            Enabled = false;
-            txtUrl.Text = string.Empty;
-            txtProfileName.Text = string.Empty;
+            _hosts.Clear();
+
+            if (site is null)
+            {
+                Enabled = false;
+                txtUrl.Text = string.Empty;
+                txtProfileName.Text = string.Empty;
+                txtSessionSelector.Text = string.Empty;
+                return;
+            }
+
+            Enabled = true;
+            txtUrl.Text = site.Url;
+            txtProfileName.Text = site.ProfileDirectory ?? string.Empty;
             txtSessionSelector.Text = string.Empty;
-            return;
+
+            foreach (var host in site.AllowedTabHosts ?? Enumerable.Empty<string>())
+            {
+                _hosts.Add(host);
+            }
         }
-
-        Enabled = true;
-        txtUrl.Text = site.Url;
-        txtProfileName.Text = site.ProfileDirectory ?? string.Empty;
-        txtSessionSelector.Text = string.Empty;
-
-        foreach (var host in site.AllowedTabHosts ?? Enumerable.Empty<string>())
+        finally
         {
-            _hosts.Add(host);
+            ResumeLayout(false);
+            PerformLayout();
         }
     }
 

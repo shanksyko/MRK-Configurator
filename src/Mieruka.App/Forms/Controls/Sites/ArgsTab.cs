@@ -15,6 +15,7 @@ internal sealed partial class ArgsTab : WinForms.UserControl
     public ArgsTab()
     {
         InitializeComponent();
+        DoubleBuffered = true;
 
         _ = layoutPrincipal ?? throw new InvalidOperationException("Layout principal não foi carregado.");
         _ = chkKiosk ?? throw new InvalidOperationException("CheckBox kiosk não foi carregado.");
@@ -38,26 +39,35 @@ internal sealed partial class ArgsTab : WinForms.UserControl
     public void BindSite(SiteConfig? site)
     {
         _site = site;
-        if (site is null)
+        SuspendLayout();
+        try
         {
-            Enabled = false;
-            txtPreview.Clear();
-            return;
+            if (site is null)
+            {
+                Enabled = false;
+                txtPreview.Clear();
+                return;
+            }
+
+            Enabled = true;
+            chkKiosk.Checked = site.KioskMode;
+            chkAppMode.Checked = site.AppMode;
+            chkIncognito.Checked = site.BrowserArguments?.Any(argument =>
+                argument.Contains("--incognito", StringComparison.OrdinalIgnoreCase)) ?? false;
+
+            // Extract proxy/bypass from existing browser arguments.
+            txtProxy.Text = ExtractArgumentValue(site.BrowserArguments, "--proxy-server=");
+            txtBypass.Text = ExtractArgumentValue(site.BrowserArguments, "--proxy-bypass-list=");
+
+            nudTimeout.Value = Math.Clamp(site.Login?.TimeoutSeconds ?? 30, (int)nudTimeout.Minimum, (int)nudTimeout.Maximum);
+            nudPostLoginDelay.Value = Math.Clamp(10, (int)nudPostLoginDelay.Minimum, (int)nudPostLoginDelay.Maximum);
+            UpdatePreview();
         }
-
-        Enabled = true;
-        chkKiosk.Checked = site.KioskMode;
-        chkAppMode.Checked = site.AppMode;
-        chkIncognito.Checked = site.BrowserArguments?.Any(argument =>
-            argument.Contains("--incognito", StringComparison.OrdinalIgnoreCase)) ?? false;
-
-        // Extract proxy/bypass from existing browser arguments.
-        txtProxy.Text = ExtractArgumentValue(site.BrowserArguments, "--proxy-server=");
-        txtBypass.Text = ExtractArgumentValue(site.BrowserArguments, "--proxy-bypass-list=");
-
-        nudTimeout.Value = Math.Clamp(site.Login?.TimeoutSeconds ?? 30, (int)nudTimeout.Minimum, (int)nudTimeout.Maximum);
-        nudPostLoginDelay.Value = Math.Clamp(10, (int)nudPostLoginDelay.Minimum, (int)nudPostLoginDelay.Maximum);
-        UpdatePreview();
+        finally
+        {
+            ResumeLayout(false);
+            PerformLayout();
+        }
     }
 
     /// <summary>

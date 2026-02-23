@@ -35,12 +35,14 @@ public sealed class MovementHistoryForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
+        Font = new Font("Segoe UI", 9f);
 
         _listView.Dock = DockStyle.Fill;
         _listView.View = View.Details;
         _listView.FullRowSelect = true;
         _listView.GridLines = true;
         _listView.MultiSelect = false;
+        _listView.BorderStyle = BorderStyle.None;
 
         _listView.Columns.AddRange(new[]
         {
@@ -59,11 +61,13 @@ public sealed class MovementHistoryForm : Form
             Dock = DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
             AutoSize = true,
-            Padding = new Padding(4),
+            Padding = new Padding(6),
         };
 
         _btnClose.Text = "Fechar";
-        _btnClose.Size = new Size(90, 28);
+        _btnClose.Size = new Size(90, 30);
+        _btnClose.FlatStyle = FlatStyle.Flat;
+        _btnClose.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnClose.Click += (_, _) => Close();
         panelBottom.Controls.Add(_btnClose);
 

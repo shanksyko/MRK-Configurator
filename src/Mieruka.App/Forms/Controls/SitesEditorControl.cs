@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Forms;
 using Mieruka.App.Forms.Controls.Sites;
+using Mieruka.App.Services.Ui;
 using Mieruka.Core.Models;
 using WinForms = System.Windows.Forms;
 
@@ -17,9 +18,11 @@ public partial class SitesEditorControl : WinForms.UserControl
     public SitesEditorControl()
     {
         InitializeComponent();
+        DoubleBuffered = true;
 
         _ = bsSites ?? throw new InvalidOperationException("BindingSource não inicializado.");
         _ = dgvSites ?? throw new InvalidOperationException("DataGridView não inicializado.");
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(dgvSites);
         _ = siteConfigTab ?? throw new InvalidOperationException("SiteConfigTab não foi criado.");
         _ = loginAutoTab ?? throw new InvalidOperationException("LoginAutoTab não foi criado.");
         _ = whitelistTab ?? throw new InvalidOperationException("WhitelistTab não foi criado.");
@@ -203,25 +206,34 @@ public partial class SitesEditorControl : WinForms.UserControl
 
     private void UpdateSelection()
     {
-        if (bsSites.Current is SiteConfig site)
+        SuspendLayout();
+        try
         {
-            _selectedSite = site;
+            if (bsSites.Current is SiteConfig site)
+            {
+                _selectedSite = site;
+            }
+            else
+            {
+                _selectedSite = null;
+            }
+
+            siteConfigTab.Bind(_selectedSite);
+            loginAutoTab.BindSite(_selectedSite);
+            whitelistTab.BindSite(_selectedSite);
+            argsTab.BindSite(_selectedSite);
+            credentialVaultPanel.ScopeSiteId = _selectedSite?.Id;
+
+            var hasSelection = _selectedSite is not null;
+            btnRemoverSite.Enabled = hasSelection;
+            btnClonarSite.Enabled = hasSelection;
+            btnTestarSite.Enabled = hasSelection;
+            btnAplicarPosicao.Enabled = hasSelection;
         }
-        else
+        finally
         {
-            _selectedSite = null;
+            ResumeLayout(false);
+            PerformLayout();
         }
-
-        siteConfigTab.Bind(_selectedSite);
-        loginAutoTab.BindSite(_selectedSite);
-        whitelistTab.BindSite(_selectedSite);
-        argsTab.BindSite(_selectedSite);
-        credentialVaultPanel.ScopeSiteId = _selectedSite?.Id;
-
-        var hasSelection = _selectedSite is not null;
-        btnRemoverSite.Enabled = hasSelection;
-        btnClonarSite.Enabled = hasSelection;
-        btnTestarSite.Enabled = hasSelection;
-        btnAplicarPosicao.Enabled = hasSelection;
     }
 }

@@ -17,6 +17,7 @@ internal sealed partial class WhitelistTab : WinForms.UserControl
     public WhitelistTab()
     {
         InitializeComponent();
+        DoubleBuffered = true;
 
         _ = layoutPrincipal ?? throw new InvalidOperationException("Layout principal não inicializado.");
         _ = lstHosts ?? throw new InvalidOperationException("Lista de hosts não carregada.");
@@ -30,17 +31,26 @@ internal sealed partial class WhitelistTab : WinForms.UserControl
     public void BindSite(SiteConfig? site)
     {
         _site = site;
-        _hosts.Clear();
-        Enabled = site is not null;
-
-        if (site is null)
+        SuspendLayout();
+        try
         {
-            return;
+            _hosts.Clear();
+            Enabled = site is not null;
+
+            if (site is null)
+            {
+                return;
+            }
+
+            foreach (var host in site.AllowedTabHosts ?? Enumerable.Empty<string>())
+            {
+                _hosts.Add(host);
+            }
         }
-
-        foreach (var host in site.AllowedTabHosts ?? Enumerable.Empty<string>())
+        finally
         {
-            _hosts.Add(host);
+            ResumeLayout(false);
+            PerformLayout();
         }
     }
 

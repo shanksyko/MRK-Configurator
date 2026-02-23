@@ -11,11 +11,15 @@ using Mieruka.Core.Data;
 using Mieruka.Core.Data.Entities;
 using Mieruka.Core.Data.Services;
 using Mieruka.Core.Models;
+using Mieruka.App.Services.Ui;
+using Serilog;
 
 namespace Mieruka.App.Forms.Inventory;
 
 public sealed class InventoryForm : Form
 {
+    private static readonly ILogger Logger = Log.ForContext<InventoryForm>();
+
     private readonly MierukaDbContext _db;
     private readonly InventoryService _inventoryService;
     private readonly InventoryCategoryService _categoryService;
@@ -44,7 +48,8 @@ public sealed class InventoryForm : Form
     private ToolStripButton _btnRefresh = null!;
     private ToolStripButton _btnCategories = null!;
     private ToolStripButton _btnDashboard = null!;
-    private ToolStripButton _btnExport = null!;
+    private ToolStripDropDownButton _btnExport = null!;
+    private ToolStripDropDownButton _btnImport = null!;
 
     public InventoryForm(
         MierukaDbContext db,
@@ -62,7 +67,7 @@ public sealed class InventoryForm : Form
         _monitors = monitors ?? Array.Empty<MonitorInfo>();
 
         BuildLayout();
-        Shown += async (_, _) => await LoadAllAsync();
+        Shown += async (_, _) => await LoadAllAsync().ConfigureAwait(true);
     }
 
     private void BuildLayout()
@@ -72,6 +77,8 @@ public sealed class InventoryForm : Form
         MinimumSize = new Size(800, 500);
         FormBorderStyle = FormBorderStyle.Sizable;
         StartPosition = FormStartPosition.CenterParent;
+        Font = new Font("Segoe UI", 9f);
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         DoubleBuffered = true;
 
         // ── ToolStrip ──────────────────────────────────────────────────────────
@@ -86,37 +93,62 @@ public sealed class InventoryForm : Form
         };
 
         // Left panel — categories tree
+        var lblCategories = new Label
+        {
+            Text = "Categorias",
+            Dock = DockStyle.Top,
+            AutoSize = false,
+            Height = 28,
+            Font = new Font("Segoe UI Semibold", 9.5f),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(4, 0, 0, 0),
+            BackColor = Color.FromArgb(240, 240, 240),
+        };
         _treeCategories.Dock = DockStyle.Fill;
         _treeCategories.HideSelection = false;
+        _treeCategories.Font = new Font("Segoe UI", 9f);
+        _treeCategories.ItemHeight = 24;
+        _treeCategories.BorderStyle = BorderStyle.None;
+        _treeCategories.BackColor = Color.White;
         _treeCategories.AfterSelect += (_, _) => ApplyFilter();
         split.Panel1.Controls.Add(_treeCategories);
+        split.Panel1.Controls.Add(lblCategories);
 
         // Right panel — grid + search bar + status bar (search below the grid)
         var rightPanel = new Panel { Dock = DockStyle.Fill };
 
         // Status bar (Dock.Bottom — added first so it docks last)
-        _lblCount.AutoSize = true;
+        _lblCount.AutoSize = false;
         _lblCount.Text = "0 itens";
         _lblCount.Dock = DockStyle.Bottom;
-        _lblCount.Padding = new Padding(4, 4, 0, 4);
+        _lblCount.Height = 24;
+        _lblCount.Padding = new Padding(6, 0, 0, 0);
+        _lblCount.Font = new Font("Segoe UI", 8.5f);
+        _lblCount.ForeColor = Color.FromArgb(100, 100, 100);
+        _lblCount.TextAlign = ContentAlignment.MiddleLeft;
+        _lblCount.BackColor = Color.FromArgb(245, 245, 245);
 
         // Search bar (Dock.Bottom — sits above status bar)
         var searchPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
-            Height = 36,
+            Height = 38,
             AutoSize = false,
-            Padding = new Padding(4, 4, 4, 4),
+            Padding = new Padding(6, 6, 6, 6),
             WrapContents = false,
+            BackColor = Color.FromArgb(248, 248, 248),
         };
 
-        var lblSearch = new Label { Text = "Buscar:", AutoSize = true, Margin = new Padding(0, 4, 4, 0) };
+        var lblSearch = new Label { Text = "Buscar:", AutoSize = true, Margin = new Padding(0, 4, 4, 0), Font = new Font("Segoe UI", 9f) };
         _txtSearch.Width = 240;
-        _txtSearch.Margin = new Padding(0, 0, 8, 0);
+        _txtSearch.Margin = new Padding(0, 0, 12, 0);
+        _txtSearch.Font = new Font("Segoe UI", 9f);
         _txtSearch.TextChanged += (_, _) => ApplyFilter();
 
-        var lblStatus = new Label { Text = "Status:", AutoSize = true, Margin = new Padding(0, 4, 4, 0) };
+        var lblStatus = new Label { Text = "Status:", AutoSize = true, Margin = new Padding(0, 4, 4, 0), Font = new Font("Segoe UI", 9f) };
         _cmbStatus.Width = 140;
+        _cmbStatus.Font = new Font("Segoe UI", 9f);
         _cmbStatus.DropDownStyle = ComboBoxStyle.DropDownList;
         _cmbStatus.Items.Add("(Todos)");
         foreach (var status in Mieruka.Core.Data.Services.InventoryItemStatus.All)
@@ -152,17 +184,28 @@ public sealed class InventoryForm : Form
         _toolStrip.GripStyle = ToolStripGripStyle.Hidden;
         _toolStrip.RenderMode = ToolStripRenderMode.System;
         _toolStrip.Dock = DockStyle.Top;
+        _toolStrip.Font = new Font("Segoe UI", 9f);
+        _toolStrip.Padding = new Padding(4, 0, 4, 0);
+        _toolStrip.BackColor = Color.FromArgb(248, 248, 248);
 
-        _btnNew = new ToolStripButton("Novo",        null, async (_, _) => await OnNewClickedAsync())        { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnEdit = new ToolStripButton("Editar",     null, async (_, _) => await OnEditClickedAsync())       { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnDelete = new ToolStripButton("Excluir",  null, async (_, _) => await OnDeleteClickedAsync())     { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnMove = new ToolStripButton("Movimentação", null, async (_, _) => await OnMoveClickedAsync())     { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnNew = new ToolStripButton("Novo", null, async (_, _) => await OnNewClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnEdit = new ToolStripButton("Editar", null, async (_, _) => await OnEditClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnDelete = new ToolStripButton("Excluir", null, async (_, _) => await OnDeleteClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnMove = new ToolStripButton("Movimentação", null, async (_, _) => await OnMoveClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnMaintenance = new ToolStripButton("Manutenção", null, async (_, _) => await OnMaintenanceClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnHistory = new ToolStripButton("Histórico", null, async (_, _) => await OnHistoryClickedAsync())  { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnRefresh = new ToolStripButton("Atualizar", null, async (_, _) => await LoadAllAsync())           { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnCategories = new ToolStripButton("Categorias", null, (_, _) => OnCategoriesClicked())           { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnDashboard = new ToolStripButton("Dashboard", null, (_, _) => OnDashboardClicked())              { DisplayStyle = ToolStripItemDisplayStyle.Text };
-        _btnExport = new ToolStripButton("Exportar CSV", null, (_, _) => OnExportCsvClicked())              { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnHistory = new ToolStripButton("Histórico", null, async (_, _) => await OnHistoryClickedAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnRefresh = new ToolStripButton("Atualizar", null, async (_, _) => await LoadAllAsync()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnCategories = new ToolStripButton("Categorias", null, (_, _) => OnCategoriesClicked()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnDashboard = new ToolStripButton("Dashboard", null, (_, _) => OnDashboardClicked()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnExport = new ToolStripDropDownButton("Exportar") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnExport.DropDownItems.Add("Exportar CSV", null, (_, _) => OnExportCsvClicked());
+        _btnExport.DropDownItems.Add("Exportar Access (.accdb)", null, async (_, _) => await OnExportAccessClickedAsync());
+        _btnExport.DropDownItems.Add("Exportar SQL Server (.mdf)", null, async (_, _) => await OnExportSqlServerClickedAsync());
+        _btnExport.DropDownItems.Add("Exportar SQL Server (Servidor)", null, async (_, _) => await OnExportRemoteSqlServerClickedAsync());
+        _btnImport = new ToolStripDropDownButton("Importar") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnImport.DropDownItems.Add("Importar Access (.accdb)", null, async (_, _) => await OnImportAccessClickedAsync());
+        _btnImport.DropDownItems.Add("Importar SQL Server (.mdf)", null, async (_, _) => await OnImportSqlServerClickedAsync());
+        _btnImport.DropDownItems.Add("Importar SQL Server (Servidor)", null, async (_, _) => await OnImportRemoteSqlServerClickedAsync());
 
         _toolStrip.Items.AddRange(new ToolStripItem[]
         {
@@ -177,6 +220,7 @@ public sealed class InventoryForm : Form
             _btnCategories,
             _btnDashboard,
             _btnExport,
+            _btnImport,
             new ToolStripSeparator(),
             _btnRefresh,
         });
@@ -193,8 +237,40 @@ public sealed class InventoryForm : Form
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.RowHeadersVisible = false;
         _grid.BackgroundColor = SystemColors.Window;
+        _grid.BorderStyle = BorderStyle.None;
+        _grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _grid.GridColor = Color.FromArgb(230, 230, 230);
         _grid.SelectionChanged += (_, _) => UpdateButtonStates();
         _grid.CellDoubleClick += async (_, e) => { if (e.RowIndex >= 0) await OnEditClickedAsync(); };
+
+        // Header styling
+        _grid.EnableHeadersVisualStyles = false;
+        _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(240, 240, 240),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            Font = new Font("Segoe UI Semibold", 9f),
+            Padding = new Padding(4, 4, 4, 4),
+            SelectionBackColor = Color.FromArgb(240, 240, 240),
+            SelectionForeColor = Color.FromArgb(60, 60, 60),
+        };
+        _grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        _grid.ColumnHeadersHeight = 32;
+
+        // Row styling
+        _grid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            Font = new Font("Segoe UI", 9f),
+            Padding = new Padding(4, 2, 4, 2),
+            SelectionBackColor = Color.FromArgb(0, 120, 215),
+            SelectionForeColor = Color.White,
+        };
+        _grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(245, 248, 255),
+        };
+        _grid.RowTemplate.Height = 28;
 
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.Columns.AddRange(new DataGridViewColumn[]
@@ -207,6 +283,7 @@ public sealed class InventoryForm : Form
             new DataGridViewTextBoxColumn { Name = "colAssignedTo",   HeaderText = "Responsável",  FillWeight = 14, MinimumWidth = 80  },
             new DataGridViewTextBoxColumn { Name = "colWarranty",     HeaderText = "Garantia",     FillWeight = 10, MinimumWidth = 70  },
         });
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_grid);
     }
 
     // ── Data Loading ──────────────────────────────────────────────────────────
@@ -293,20 +370,28 @@ public sealed class InventoryForm : Form
 
     private void PopulateGrid(List<InventoryItemEntity> items)
     {
-        _grid.Rows.Clear();
-
-        foreach (var item in items)
+        _grid.SuspendLayout();
+        try
         {
-            var rowIndex = _grid.Rows.Add();
-            var row = _grid.Rows[rowIndex];
-            row.Cells["colName"].Value = item.Name;
-            row.Cells["colCategory"].Value = item.Category;
-            row.Cells["colStatus"].Value = item.Status;
-            row.Cells["colSerialNumber"].Value = item.SerialNumber;
-            row.Cells["colLocation"].Value = item.Location;
-            row.Cells["colAssignedTo"].Value = item.AssignedTo;
-            row.Cells["colWarranty"].Value = item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? string.Empty;
-            row.Tag = item;
+            _grid.Rows.Clear();
+
+            foreach (var item in items)
+            {
+                var rowIndex = _grid.Rows.Add();
+                var row = _grid.Rows[rowIndex];
+                row.Cells["colName"].Value = item.Name;
+                row.Cells["colCategory"].Value = item.Category;
+                row.Cells["colStatus"].Value = item.Status;
+                row.Cells["colSerialNumber"].Value = item.SerialNumber;
+                row.Cells["colLocation"].Value = item.Location;
+                row.Cells["colAssignedTo"].Value = item.AssignedTo;
+                row.Cells["colWarranty"].Value = item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? string.Empty;
+                row.Tag = item;
+            }
+        }
+        finally
+        {
+            _grid.ResumeLayout(true);
         }
     }
 
@@ -491,8 +576,9 @@ public sealed class InventoryForm : Form
                 await _inventoryService.UpdateAsync(item).ConfigureAwait(true);
                 await transaction.CommitAsync().ConfigureAwait(true);
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Error(ex, "Falha na transação de movimentação; executando rollback.");
                 await transaction.RollbackAsync().ConfigureAwait(true);
                 throw;
             }
@@ -609,6 +695,289 @@ public sealed class InventoryForm : Form
             return $"\"{value.Replace("\"", "\"\"")}\"";
         return value;
     }
+
+    private async Task OnExportAccessClickedAsync()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Exportar Inventário para Access",
+            Filter = "Access Database (*.accdb)|*.accdb",
+            DefaultExt = "accdb",
+            FileName = $"inventario_{DateTime.Now:yyyyMMdd_HHmmss}.accdb",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var exportService = new InventoryExportService(_db);
+            await exportService.ExportToAccessAsync(dlg.FileName);
+            MessageBox.Show($"Exportados {_allItems.Count} item(ns) para:\n{dlg.FileName}",
+                "Exportação Access", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao exportar inventário para Access.");
+            MessageBox.Show(
+                $"Erro ao exportar para Access: {ex.Message}\n\n" +
+                "Verifique se o Microsoft Access Database Engine está instalado:\n" +
+                "https://www.microsoft.com/pt-br/download/details.aspx?id=54920",
+                "Exportação Access", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private async Task OnExportSqlServerClickedAsync()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Exportar Inventário para SQL Server",
+            Filter = "SQL Server Database (*.mdf)|*.mdf",
+            DefaultExt = "mdf",
+            FileName = $"inventario_{DateTime.Now:yyyyMMdd_HHmmss}.mdf",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var exportService = new InventoryExportService(_db);
+            await exportService.ExportToSqlServerAsync(dlg.FileName);
+            MessageBox.Show($"Exportados {_allItems.Count} item(ns) para:\n{dlg.FileName}",
+                "Exportação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao exportar inventário para SQL Server MDF.");
+            MessageBox.Show(
+                $"Erro ao exportar para SQL Server: {ex.Message}\n\n" +
+                "Verifique se o SQL Server LocalDB está instalado:\n" +
+                "https://learn.microsoft.com/pt-br/sql/database-engine/configure-windows/sql-server-express-localdb",
+                "Exportação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    // ── Importação ────────────────────────────────────────────────────────────
+
+    private async Task OnImportAccessClickedAsync()
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Title = "Importar Inventário de Access",
+            Filter = "Access Database (*.accdb)|*.accdb",
+            DefaultExt = "accdb",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        var replaceAll = AskImportMode();
+        if (replaceAll is null)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var importService = new InventoryImportService(_db);
+            var result = await importService.ImportFromAccessAsync(dlg.FileName, replaceAll.Value);
+            await LoadAllAsync().ConfigureAwait(true);
+            MessageBox.Show(
+                $"Importação concluída:\n" +
+                $"  {result.Categories} categorias\n" +
+                $"  {result.Items} itens\n" +
+                $"  {result.Movements} movimentações\n" +
+                $"  {result.Maintenance} manutenções",
+                "Importação Access", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao importar inventário de Access.");
+            MessageBox.Show(
+                $"Erro ao importar de Access: {ex.Message}\n\n" +
+                "Verifique se o Microsoft Access Database Engine está instalado:\n" +
+                "https://www.microsoft.com/pt-br/download/details.aspx?id=54920",
+                "Importação Access", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private async Task OnImportSqlServerClickedAsync()
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Title = "Importar Inventário de SQL Server",
+            Filter = "SQL Server Database (*.mdf)|*.mdf",
+            DefaultExt = "mdf",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        var replaceAll = AskImportMode();
+        if (replaceAll is null)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var importService = new InventoryImportService(_db);
+            var result = await importService.ImportFromSqlServerAsync(dlg.FileName, replaceAll.Value);
+            await LoadAllAsync().ConfigureAwait(true);
+            MessageBox.Show(
+                $"Importação concluída:\n" +
+                $"  {result.Categories} categorias\n" +
+                $"  {result.Items} itens\n" +
+                $"  {result.Movements} movimentações\n" +
+                $"  {result.Maintenance} manutenções",
+                "Importação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao importar inventário de SQL Server MDF.");
+            MessageBox.Show(
+                $"Erro ao importar de SQL Server: {ex.Message}\n\n" +
+                "Verifique se o SQL Server LocalDB está instalado:\n" +
+                "https://learn.microsoft.com/pt-br/sql/database-engine/configure-windows/sql-server-express-localdb",
+                "Importação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    /// <summary>
+    /// Pergunta ao usuário se deseja adicionar ou substituir dados.
+    /// Retorna true para substituir, false para adicionar, null se cancelou.
+    /// </summary>
+    private bool? AskImportMode()
+    {
+        var result = MessageBox.Show(
+            this,
+            "Como deseja importar os dados?\n\n" +
+            "SIM = Substituir todo o inventário atual pelos dados do arquivo.\n" +
+            "NÃO = Adicionar os dados do arquivo ao inventário existente.\n" +
+            "CANCELAR = Não importar.",
+            "Modo de Importação",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Question);
+
+        return result switch
+        {
+            DialogResult.Yes => true,
+            DialogResult.No => false,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Pergunta ao usuário se deseja substituir ou adicionar dados na exportação para servidor.
+    /// Retorna true para substituir, false para adicionar, null se cancelou.
+    /// </summary>
+    private bool? AskExportMode()
+    {
+        var result = MessageBox.Show(
+            this,
+            "Como deseja exportar os dados para o servidor?\n\n" +
+            "SIM = Substituir todos os dados no servidor pelos dados locais.\n" +
+            "NÃO = Adicionar os dados locais ao servidor (manter existentes).\n" +
+            "CANCELAR = Não exportar.",
+            "Modo de Exportação",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Question);
+
+        return result switch
+        {
+            DialogResult.Yes => true,
+            DialogResult.No => false,
+            _ => null,
+        };
+    }
+
+    // ── Importação/Exportação SQL Server Remoto ──────────────────────────────
+
+    private async Task OnImportRemoteSqlServerClickedAsync()
+    {
+        using var dlg = new SqlServerConnectionDialog();
+        if (dlg.ShowDialog(this) != DialogResult.OK || dlg.ConnectionString is null)
+            return;
+
+        var replaceAll = AskImportMode();
+        if (replaceAll is null)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var importService = new InventoryImportService(_db);
+            var result = await importService.ImportFromRemoteSqlServerAsync(dlg.ConnectionString, replaceAll.Value);
+            await LoadAllAsync().ConfigureAwait(true);
+            MessageBox.Show(
+                $"Importação concluída:\n" +
+                $"  {result.Categories} categorias\n" +
+                $"  {result.Items} itens\n" +
+                $"  {result.Movements} movimentações\n" +
+                $"  {result.Maintenance} manutenções",
+                "Importação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao importar inventário de SQL Server remoto.");
+            MessageBox.Show(
+                $"Erro ao importar de SQL Server: {ex.Message}",
+                "Importação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private async Task OnExportRemoteSqlServerClickedAsync()
+    {
+        using var dlg = new SqlServerConnectionDialog();
+        if (dlg.ShowDialog(this) != DialogResult.OK || dlg.ConnectionString is null)
+            return;
+
+        var replaceAll = AskExportMode();
+        if (replaceAll is null)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var exportService = new InventoryExportService(_db);
+            await exportService.ExportToRemoteSqlServerAsync(dlg.ConnectionString, replaceAll.Value);
+            MessageBox.Show(
+                $"Exportação para SQL Server concluída com sucesso.",
+                "Exportação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao exportar inventário para SQL Server remoto.");
+            MessageBox.Show(
+                $"Erro ao exportar para SQL Server: {ex.Message}",
+                "Exportação SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
 }
 
 // ── Simple inline dialogs ─────────────────────────────────────────────────────
@@ -645,6 +1014,7 @@ internal sealed class MovementDialogForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
+        Font = new Font("Segoe UI", 9f);
 
         var layout = new TableLayoutPanel
         {
@@ -704,14 +1074,19 @@ internal sealed class MovementDialogForm : Form
         };
 
         _btnCancel.Text = "Cancelar";
-        _btnCancel.AutoSize = true;
+        _btnCancel.AutoSize = false;
+        _btnCancel.Size = new Size(90, 30);
+        _btnCancel.FlatStyle = FlatStyle.Flat;
+        _btnCancel.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
 
         _btnOk.BackColor = Color.FromArgb(0, 120, 215);
         _btnOk.FlatStyle = FlatStyle.Flat;
+        _btnOk.FlatAppearance.BorderSize = 0;
         _btnOk.ForeColor = Color.White;
         _btnOk.Text = "Confirmar";
-        _btnOk.AutoSize = true;
+        _btnOk.AutoSize = false;
+        _btnOk.Size = new Size(100, 30);
         _btnOk.UseVisualStyleBackColor = false;
         _btnOk.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
 
@@ -784,9 +1159,11 @@ internal sealed class MaintenanceDialogForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimumSize = new Size(600, 360);
         StartPosition = FormStartPosition.CenterParent;
+        DoubleBuffered = true;
+        Font = new Font("Segoe UI", 9f);
 
         BuildLayout();
-        Shown += async (_, _) => await LoadAsync();
+        Shown += async (_, _) => await LoadAsync().ConfigureAwait(true);
     }
 
     private void BuildLayout()
@@ -798,7 +1175,41 @@ internal sealed class MaintenanceDialogForm : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.BackgroundColor = SystemColors.Window;
+        _grid.BorderStyle = BorderStyle.None;
+        _grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _grid.GridColor = Color.FromArgb(230, 230, 230);
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+
+        // Header styling
+        _grid.EnableHeadersVisualStyles = false;
+        _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(240, 240, 240),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            Font = new Font("Segoe UI Semibold", 9f),
+            Padding = new Padding(4, 4, 4, 4),
+            SelectionBackColor = Color.FromArgb(240, 240, 240),
+            SelectionForeColor = Color.FromArgb(60, 60, 60),
+        };
+        _grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        _grid.ColumnHeadersHeight = 30;
+
+        // Row styling
+        _grid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            Font = new Font("Segoe UI", 9f),
+            Padding = new Padding(4, 2, 4, 2),
+            SelectionBackColor = Color.FromArgb(0, 120, 215),
+            SelectionForeColor = Color.White,
+        };
+        _grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(245, 248, 255),
+        };
+        _grid.RowTemplate.Height = 26;
+
         _grid.Columns.AddRange(new DataGridViewColumn[]
         {
             new DataGridViewTextBoxColumn { HeaderText = "Data",        Name = "colDate",   FillWeight = 15, MinimumWidth = 90  },
@@ -808,6 +1219,7 @@ internal sealed class MaintenanceDialogForm : Form
             new DataGridViewTextBoxColumn { HeaderText = "Responsável", Name = "colBy",     FillWeight = 17, MinimumWidth = 90  },
             new DataGridViewTextBoxColumn { HeaderText = "Custo (R$)",  Name = "colCost",   FillWeight = 12, MinimumWidth = 70  },
         });
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_grid);
 
         var panelBottom = new FlowLayoutPanel
         {
@@ -818,14 +1230,17 @@ internal sealed class MaintenanceDialogForm : Form
         };
 
         _btnClose.Text = "Fechar";
-        _btnClose.Size = new Size(90, 28);
+        _btnClose.Size = new Size(90, 30);
+        _btnClose.FlatStyle = FlatStyle.Flat;
+        _btnClose.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnClose.Click += (_, _) => Close();
 
         _btnNew.BackColor = Color.FromArgb(0, 120, 215);
         _btnNew.FlatStyle = FlatStyle.Flat;
+        _btnNew.FlatAppearance.BorderSize = 0;
         _btnNew.ForeColor = Color.White;
         _btnNew.Text = "Novo registro";
-        _btnNew.Size = new Size(110, 28);
+        _btnNew.Size = new Size(110, 30);
         _btnNew.UseVisualStyleBackColor = false;
         _btnNew.Click += async (_, _) => await OnNewMaintenanceAsync();
 
@@ -918,6 +1333,7 @@ internal sealed class MaintenanceRecordEditorForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
+        Font = new Font("Segoe UI", 9f);
         BuildLayout();
     }
 
@@ -1017,14 +1433,19 @@ internal sealed class MaintenanceRecordEditorForm : Form
         };
 
         _btnCancel.Text = "Cancelar";
-        _btnCancel.AutoSize = true;
+        _btnCancel.AutoSize = false;
+        _btnCancel.Size = new Size(90, 30);
+        _btnCancel.FlatStyle = FlatStyle.Flat;
+        _btnCancel.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnCancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
 
         _btnOk.BackColor = Color.FromArgb(0, 120, 215);
         _btnOk.FlatStyle = FlatStyle.Flat;
+        _btnOk.FlatAppearance.BorderSize = 0;
         _btnOk.ForeColor = Color.White;
         _btnOk.Text = "Salvar";
-        _btnOk.AutoSize = true;
+        _btnOk.AutoSize = false;
+        _btnOk.Size = new Size(90, 30);
         _btnOk.UseVisualStyleBackColor = false;
         _btnOk.Click += OnSaveClicked;
 

@@ -68,9 +68,11 @@ internal static class Program
                 loginForm.AuthenticatedUser?.Username,
                 loginForm.AuthenticatedUser?.Role);
 
+            var authenticatedUser = loginForm.AuthenticatedUser!;
+
             while (true)
             {
-                using var launcher = new LauncherForm();
+                using var launcher = new LauncherForm(authenticatedUser);
                 var result = launcher.ShowDialog();
                 if (result != WinForms.DialogResult.OK)
                     break;

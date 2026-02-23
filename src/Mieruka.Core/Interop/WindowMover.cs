@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using Mieruka.Core.Models;
+using Serilog;
 
 namespace Mieruka.Core.Interop;
 
@@ -14,6 +15,8 @@ public enum WindowMoveMode
 
 public static class WindowMover
 {
+    private static readonly ILogger Logger = Log.ForContext(typeof(WindowMover));
+
     public static void MoveTo(
         IntPtr hwnd,
         MonitorInfo monitor,
@@ -43,8 +46,13 @@ public static class WindowMover
             throw new ArgumentException("The supplied handle does not reference a valid window.", nameof(hwnd));
         }
 
-        if (restoreIfMinimized && IsIconic(hwnd))
+        if (restoreIfMinimized && (IsIconic(hwnd) || IsZoomed(hwnd)))
         {
+            var wasMinimized = IsIconic(hwnd);
+            var wasMaximized = IsZoomed(hwnd);
+            Logger.Debug(
+                "WindowMover: restoring window hwnd=0x{Handle:X} minimized={WasMinimized} maximized={WasMaximized}",
+                hwnd.ToInt64(), wasMinimized, wasMaximized);
             ShowWindow(hwnd, ShowWindowCommand.Restore);
         }
 
@@ -53,6 +61,10 @@ public static class WindowMover
         var targetY = boundsPx.Top + frameAdjustment.Top;
         var targetWidth = boundsPx.Width + frameAdjustment.Right - frameAdjustment.Left;
         var targetHeight = boundsPx.Height + frameAdjustment.Bottom - frameAdjustment.Top;
+
+        Logger.Debug(
+            "WindowMover: SetWindowPos hwnd=0x{Handle:X} bounds={Bounds} target=({TargetX},{TargetY},{TargetWidth},{TargetHeight}) topMost={TopMost}",
+            hwnd.ToInt64(), boundsPx, targetX, targetY, targetWidth, targetHeight, topMost);
 
         IntPtr insertAfter = topMost ? HWND_TOPMOST : HWND_NOTOPMOST;
         const uint flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER;
@@ -134,6 +146,9 @@ public static class WindowMover
 
     [DllImport("user32.dll")]
     private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsZoomed(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern bool IsWindow(IntPtr hWnd);

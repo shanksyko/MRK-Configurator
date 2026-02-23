@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Data.Entities;
 using Mieruka.Core.Data.Services;
+using Mieruka.App.Services.Ui;
+using Serilog;
 
 namespace Mieruka.App.Forms.Inventory;
 
@@ -17,6 +19,8 @@ namespace Mieruka.App.Forms.Inventory;
 /// </summary>
 public sealed class CategoryEditorForm : Form
 {
+    private static readonly ILogger Logger = Log.ForContext<CategoryEditorForm>();
+
     private readonly InventoryCategoryService _categoryService;
     private List<InventoryCategoryEntity> _categories = new();
 
@@ -54,19 +58,24 @@ public sealed class CategoryEditorForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
         DoubleBuffered = true;
+        Font = new Font("Segoe UI", 9f);
 
         // ── Left panel: list + action buttons ──
         var leftPanel = new Panel { Dock = DockStyle.Left, Width = 220, Padding = new Padding(8) };
 
         var lblList = new Label
         {
-            Text = "Categorias:",
+            Text = "Categorias",
             Dock = DockStyle.Top,
-            AutoSize = true,
-            Margin = new Padding(0, 0, 0, 4),
+            AutoSize = false,
+            Height = 28,
+            Font = new Font("Segoe UI Semibold", 9.5f),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            TextAlign = ContentAlignment.MiddleLeft,
         };
 
         _lstCategories.Dock = DockStyle.Fill;
+        _lstCategories.BorderStyle = BorderStyle.FixedSingle;
         _lstCategories.SelectedIndexChanged += OnCategorySelected;
 
         var leftButtons = new FlowLayoutPanel
@@ -79,17 +88,25 @@ public sealed class CategoryEditorForm : Form
         };
 
         _btnMoveUp.Text = "▲";
-        _btnMoveUp.AutoSize = true;
+        _btnMoveUp.Size = new Size(36, 30);
+        _btnMoveUp.FlatStyle = FlatStyle.Flat;
+        _btnMoveUp.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnMoveUp.Click += async (_, _) => await OnMoveUpAsync();
         _btnMoveDown.Text = "▼";
-        _btnMoveDown.AutoSize = true;
+        _btnMoveDown.Size = new Size(36, 30);
+        _btnMoveDown.FlatStyle = FlatStyle.Flat;
+        _btnMoveDown.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnMoveDown.Click += async (_, _) => await OnMoveDownAsync();
         _btnAdd.Text = "+ Nova";
         _btnAdd.AutoSize = true;
+        _btnAdd.FlatStyle = FlatStyle.Flat;
+        _btnAdd.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnAdd.Click += OnAddClicked;
         _btnDelete.Text = "Excluir";
         _btnDelete.AutoSize = true;
+        _btnDelete.FlatStyle = FlatStyle.Flat;
         _btnDelete.ForeColor = Color.DarkRed;
+        _btnDelete.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnDelete.Click += async (_, _) => await OnDeleteAsync();
 
         leftButtons.Controls.AddRange(new Control[] { _btnMoveUp, _btnMoveDown, _btnAdd, _btnDelete });
@@ -156,7 +173,26 @@ public sealed class CategoryEditorForm : Form
         _gridCustomFields.AutoGenerateColumns = false;
         _gridCustomFields.RowHeadersVisible = true;
         _gridCustomFields.BackgroundColor = SystemColors.Window;
+        _gridCustomFields.BorderStyle = BorderStyle.FixedSingle;
+        _gridCustomFields.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _gridCustomFields.GridColor = Color.FromArgb(230, 230, 230);
         _gridCustomFields.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+
+        // Header styling
+        _gridCustomFields.EnableHeadersVisualStyles = false;
+        _gridCustomFields.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(240, 240, 240),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            Font = new Font("Segoe UI Semibold", 9f),
+            Padding = new Padding(4, 4, 4, 4),
+            SelectionBackColor = Color.FromArgb(240, 240, 240),
+            SelectionForeColor = Color.FromArgb(60, 60, 60),
+        };
+        _gridCustomFields.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        _gridCustomFields.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        _gridCustomFields.ColumnHeadersHeight = 28;
+        _gridCustomFields.RowTemplate.Height = 26;
         _gridCustomFields.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "colFieldName",
@@ -185,6 +221,7 @@ public sealed class CategoryEditorForm : Form
         detailLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         detailLayout.Controls.Add(_gridCustomFields, 0, rowGrid);
         detailLayout.SetColumnSpan(_gridCustomFields, 2);
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(_gridCustomFields);
 
         rightPanel.Controls.Add(detailLayout);
 
@@ -198,13 +235,18 @@ public sealed class CategoryEditorForm : Form
         };
 
         _btnClose.Text = "Fechar";
-        _btnClose.AutoSize = true;
+        _btnClose.AutoSize = false;
+        _btnClose.Size = new Size(90, 30);
+        _btnClose.FlatStyle = FlatStyle.Flat;
+        _btnClose.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
         _btnClose.Click += (_, _) => Close();
         _btnSave.BackColor = Color.FromArgb(0, 120, 215);
         _btnSave.FlatStyle = FlatStyle.Flat;
+        _btnSave.FlatAppearance.BorderSize = 0;
         _btnSave.ForeColor = Color.White;
         _btnSave.Text = "Salvar Categoria";
-        _btnSave.AutoSize = true;
+        _btnSave.AutoSize = false;
+        _btnSave.Size = new Size(130, 30);
         _btnSave.UseVisualStyleBackColor = false;
         _btnSave.Click += async (_, _) => await OnSaveAsync();
 
@@ -306,9 +348,9 @@ public sealed class CategoryEditorForm : Form
                     }
                 }
             }
-            catch
+            catch (JsonException ex)
             {
-                // Ignore malformed JSON
+                Logger.Warning(ex, "JSON de campos customizados malformado para a categoria.");
             }
         }
     }
@@ -345,8 +387,9 @@ public sealed class CategoryEditorForm : Form
                 _pnlColorPreview.BackColor = SystemColors.Control;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Debug(ex, "Valor de cor inválido: {ColorText}", _txtColor.Text);
             _pnlColorPreview.BackColor = SystemColors.Control;
         }
     }

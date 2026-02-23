@@ -206,6 +206,11 @@ public sealed class ProfileExecutor : IDisposable
         AppConfig app,
         CancellationToken cancellationToken)
     {
+        if (!app.AutoStart)
+        {
+            return false;
+        }
+
         if (app.RequiresNetwork)
         {
             var isAvailable = true;
@@ -298,18 +303,77 @@ public sealed class ProfileExecutor : IDisposable
                 throw new FileNotFoundException("Executable not found.", app.ExecutablePath);
             }
 
+            var monitor = ResolveMonitor(profile, app.Window, app.TargetMonitorStableId, monitors);
+            var bounds = ResolveBounds(app.Window, monitor);
+
+            // Check if the application is already running (common for browsers that
+            // delegate to an existing instance and exit immediately).
+            // When arguments are provided (e.g. a URL), always launch the process so
+            // that the existing instance receives the new arguments (e.g. opens a new tab).
+            var hasArguments = !string.IsNullOrWhiteSpace(app.Arguments);
+            var existing = hasArguments ? null : FindRunningProcess(app.ExecutablePath);
+            if (existing is not null)
+            {
+                try
+                {
+                    AppStarted?.Invoke(this, new AppExecutionEventArgs(profile, app, existing.Id, null));
+
+                    existing.Refresh();
+                    var handle = existing.MainWindowHandle;
+                    if (handle == IntPtr.Zero)
+                    {
+                        handle = await WaitForMainWindowAsync(existing, _windowTimeout, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    WindowMover.MoveTo(handle, bounds, app.Window.AlwaysOnTop, restoreIfMinimized: true);
+                    AppPositioned?.Invoke(this, new AppExecutionEventArgs(profile, app, existing.Id, monitor));
+                }
+                finally
+                {
+                    existing.Dispose();
+                }
+
+                return;
+            }
+
             var startInfo = BuildStartInfo(app);
             process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to launch process.");
 
             AppStarted?.Invoke(this, new AppExecutionEventArgs(profile, app, process.Id, null));
 
-            var handle = await WaitForMainWindowAsync(process, _windowTimeout, cancellationToken).ConfigureAwait(false);
+            IntPtr windowHandle;
+            try
+            {
+                windowHandle = await WaitForMainWindowAsync(process, _windowTimeout, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException) when (process.HasExited)
+            {
+                // The process exited immediately — likely a browser that delegated to
+                // an existing instance. Find the running instance and position it.
+                var fallback = FindRunningProcess(app.ExecutablePath);
+                if (fallback is null)
+                {
+                    throw;
+                }
+
+                try
+                {
+                    fallback.Refresh();
+                    windowHandle = fallback.MainWindowHandle;
+                    if (windowHandle == IntPtr.Zero)
+                    {
+                        windowHandle = await WaitForMainWindowAsync(fallback, _windowTimeout, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    fallback.Dispose();
+                }
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
 
-            var monitor = ResolveMonitor(profile, app.Window, app.TargetMonitorStableId, monitors);
-            var bounds = ResolveBounds(app.Window, monitor);
-            WindowMover.MoveTo(handle, bounds, app.Window.AlwaysOnTop, restoreIfMinimized: true);
-
+            WindowMover.MoveTo(windowHandle, bounds, app.Window.AlwaysOnTop, restoreIfMinimized: true);
             AppPositioned?.Invoke(this, new AppExecutionEventArgs(profile, app, process.Id, monitor));
         }
         catch (OperationCanceledException)
@@ -417,6 +481,64 @@ public sealed class ProfileExecutor : IDisposable
         throw new TimeoutException("The main window was not detected within the timeout interval.");
     }
 
+    private static Process? FindRunningProcess(string executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var normalized = Path.GetFullPath(executablePath);
+            var processName = Path.GetFileNameWithoutExtension(normalized);
+            if (string.IsNullOrWhiteSpace(processName))
+            {
+                return null;
+            }
+
+            var candidates = Process.GetProcessesByName(processName);
+            Process? match = null;
+
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    var module = candidate.MainModule;
+                    var candidatePath = module?.FileName;
+                    if (!string.IsNullOrWhiteSpace(candidatePath) &&
+                        string.Equals(Path.GetFullPath(candidatePath), normalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        match = candidate;
+                        break;
+                    }
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // Ignore processes without access rights.
+                }
+                catch (InvalidOperationException)
+                {
+                    // Ignore processes that exited while enumerating.
+                }
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (!ReferenceEquals(candidate, match))
+                {
+                    candidate.Dispose();
+                }
+            }
+
+            return match;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private MonitorInfo ResolveMonitor(
         ProfileConfig profile,
         WindowConfig window,
@@ -437,6 +559,28 @@ public sealed class ProfileExecutor : IDisposable
             if (MonitorKeysEqual(monitor.Key, window.Monitor))
             {
                 return monitor;
+            }
+        }
+
+        // Use MonitorIdentifier-based matching (same approach as AppTestRunner)
+        // to handle topology changes and format variations in stored IDs.
+        var normalizedExplicit = NormalizeMonitorId(explicitStableId);
+        if (normalizedExplicit is not null)
+        {
+            var byId = FindMonitorByNormalizedId(monitors, normalizedExplicit);
+            if (byId is not null)
+            {
+                return byId;
+            }
+        }
+
+        var normalizedDefault = NormalizeMonitorId(profile.DefaultMonitorId);
+        if (normalizedDefault is not null && normalizedDefault != normalizedExplicit)
+        {
+            var byId = FindMonitorByNormalizedId(monitors, normalizedDefault);
+            if (byId is not null)
+            {
+                return byId;
             }
         }
 
@@ -471,6 +615,38 @@ public sealed class ProfileExecutor : IDisposable
         }
 
         return null;
+    }
+
+    private static MonitorInfo? FindMonitorByNormalizedId(IReadOnlyList<MonitorInfo> monitors, string normalizedId)
+    {
+        foreach (var monitor in monitors)
+        {
+            var monitorId = MonitorIdentifier.Normalize(MonitorIdentifier.Create(monitor));
+            if (string.Equals(monitorId, normalizedId, StringComparison.OrdinalIgnoreCase))
+            {
+                return monitor;
+            }
+
+            var stableNormalized = MonitorIdentifier.Normalize(monitor.StableId);
+            if (!string.IsNullOrEmpty(stableNormalized) &&
+                string.Equals(stableNormalized, normalizedId, StringComparison.OrdinalIgnoreCase))
+            {
+                return monitor;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeMonitorId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = MonitorIdentifier.Normalize(value);
+        return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 
     private static string? NormalizeStableId(string? value)

@@ -42,7 +42,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     private readonly Orchestrator _orchestrator;
     private readonly IAppRunner _appRunner;
     private readonly AppTestRunner _appTestRunner;
-    private bool _busy;
     private readonly List<MonitorInfo> _monitorSnapshot = new();
     private readonly List<MonitorCardContext> _monitorCardOrder = new();
     private readonly IMonitorService _monitorService = new MonitorService();
@@ -398,18 +397,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
     private void LoadInitialData()
     {
-        if (_programas.Count > 0)
-        {
-            return;
-        }
-
-        _programas.Add(new ProgramaConfig
-        {
-            Id = "app_principal",
-            ExecutablePath = @"C:\Program Files\Mieruka\MierukaPlayer.exe",
-            AutoStart = true,
-            TargetMonitorStableId = string.Empty,
-        });
+        // No default apps — user adds apps via the Adicionar button.
     }
 
     private Orchestrator CreateOrchestrator()
@@ -1332,6 +1320,19 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         }
     }
 
+    private void dgvProgramas_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0) return;
+
+        var column = dgvProgramas.Columns[e.ColumnIndex];
+        if (column.DataPropertyName != nameof(AppConfig.AutoStart)) return;
+
+        var item = _programas[e.RowIndex];
+        var updated = item with { AutoStart = !item.AutoStart };
+        _programas[e.RowIndex] = updated;
+        bsProgramas.ResetBindings(false);
+    }
+
     private void dgvProgramas_KeyDown(object? sender, WinForms.KeyEventArgs e)
     {
         if (e.KeyCode == WinForms.Keys.Delete)
@@ -1409,82 +1410,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         _programas.Remove(selecionado);
     }
 
-    private async void btnExecutar_Click(object? sender, EventArgs e)
-    {
-        try
-        {
-            await ExecutarOrchestratorAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error("Falha não tratada ao executar orchestrator.", ex);
-        }
-    }
-
-    private async void btnParar_Click(object? sender, EventArgs e)
-    {
-        try
-        {
-            await PararOrchestratorAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error("Falha não tratada ao parar orchestrator.", ex);
-        }
-    }
-
-    private async Task ExecutarOrchestratorAsync()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        _busy = true;
-        UpdateButtonStates();
-
-        try
-        {
-            await _orchestrator.StartAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error("Falha ao iniciar o orchestrator.", ex);
-            WinForms.MessageBox.Show(this, $"Erro ao iniciar: {ex.Message}", "Orchestrator", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _busy = false;
-            UpdateButtonStates();
-        }
-    }
-
-    private async Task PararOrchestratorAsync()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        _busy = true;
-        UpdateButtonStates();
-
-        try
-        {
-            await _orchestrator.StopAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Warn("Falha ao parar o orchestrator.", ex);
-            WinForms.MessageBox.Show(this, $"Erro ao parar: {ex.Message}", "Orchestrator", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _busy = false;
-            UpdateButtonStates();
-        }
-    }
-
     private void btnSalvarPerfil_Click(object? sender, EventArgs e)
     {
         SalvarPerfil();
@@ -1511,76 +1436,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         catch (Exception ex)
         {
             _telemetry.Error("Falha ao parar perfil.", ex);
-        }
-    }
-
-    private void btnTestarItem_Click(object? sender, EventArgs e)
-    {
-        var selecionado = ObterProgramaSelecionado();
-        if (selecionado is null)
-        {
-            WinForms.MessageBox.Show(this, "Selecione um item para testar.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
-            return;
-        }
-
-        AbrirEditorParaTesteAsync(selecionado);
-    }
-
-    private async void AbrirEditorParaTesteAsync(ProgramaConfig selecionado)
-    {
-        try
-        {
-            var monitors = _monitorSnapshot.Count > 0
-                ? _monitorSnapshot.ToList()
-                : CaptureMonitorSnapshot().ToList();
-
-            var hadPreviews = _previewsRequested;
-
-            try
-            {
-                await PausePreviewsAsync().ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                _telemetry.Warn("Falha ao pausar previews antes de abrir editor para teste.", ex);
-            }
-
-            try
-            {
-                using var editor = new AppEditorForm(selecionado, monitors, SelectedMonitorId, _appRunner, _programas);
-                editor.FocusWindowTab();
-                var resultado = editor.ShowDialog(this);
-                var editorSelectedMonitor = editor.SelectedMonitorId;
-                var programa = editor.Resultado;
-
-                if (resultado == WinForms.DialogResult.OK && programa is not null)
-                {
-                    if (!string.IsNullOrEmpty(editorSelectedMonitor))
-                    {
-                        UpdateSelectedMonitor(editorSelectedMonitor, notify: false);
-                    }
-
-                    var indice = _programas.IndexOf(selecionado);
-                    if (indice >= 0)
-                    {
-                        _programas[indice] = programa;
-                        bsProgramas.ResetBindings(false);
-                        SelecionarPrograma(programa);
-                    }
-                }
-            }
-            finally
-            {
-                if (hadPreviews && !IsDisposed)
-                {
-                    _previewsRequested = true;
-                    await StartAutomaticPreviewsAsync().ConfigureAwait(true);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error("Falha ao abrir editor para teste.", ex);
         }
     }
 
@@ -1611,11 +1466,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         {
             _telemetry.Error("Falha ao parar perfil via menu.", ex);
         }
-    }
-
-    private void menuPerfisTestar_Click(object? sender, EventArgs e)
-    {
-        btnTestarItem_Click(sender, EventArgs.Empty);
     }
 
     private void menuPerfisCarregar_Click(object? sender, EventArgs e)
@@ -1657,30 +1507,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         {
             _telemetry.Warn("Falha ao carregar perfis.", ex);
             WinForms.MessageBox.Show(this, $"Erro ao carregar perfis: {ex.Message}", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
-        }
-    }
-
-    private void menuSegurancaUsuarios_Click(object? sender, EventArgs e)
-    {
-        try
-        {
-            using var securityDb = new Mieruka.Core.Security.Data.SecurityDbContext();
-            var auditLog = new Mieruka.Core.Security.Services.AuditLogService(securityDb);
-            var userService = new Mieruka.Core.Security.Services.UserManagementService(securityDb, auditLog);
-            var systemUser = new Mieruka.Core.Security.Models.User
-            {
-                Id = 0,
-                Username = "system",
-                Role = Mieruka.Core.Security.Models.UserRole.Admin,
-            };
-
-            using var form = new UserManagementForm(userService, systemUser);
-            form.ShowDialog(this);
-        }
-        catch (Exception ex)
-        {
-            _telemetry.Error("Falha ao abrir gerenciamento de usuários.", ex);
-            WinForms.MessageBox.Show(this, $"Erro ao abrir gerenciamento de usuários: {ex.Message}", "Segurança", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
         }
     }
 
@@ -1999,15 +1825,10 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
 
         var selecionado = ObterProgramaSelecionado();
         var temSelecao = selecionado is not null;
-        var estado = _orchestrator.State;
-        var podeExecutar = !_busy && estado is not OrchestratorState.Running and not OrchestratorState.Recovering;
-        var podeParar = !_busy && estado is OrchestratorState.Running or OrchestratorState.Recovering;
 
         btnEditar.Enabled = temSelecao;
         btnDuplicar.Enabled = temSelecao;
         btnExcluir.Enabled = temSelecao;
-        btnExecutar.Enabled = podeExecutar;
-        btnParar.Enabled = podeParar;
 
         UpdateProfileUiState();
     }
@@ -2065,11 +1886,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             btnPararPerfil.Enabled = _profileRunning;
         }
 
-        if (btnTestarItem is not null)
-        {
-            btnTestarItem.Enabled = !_profileRunning && selected;
-        }
-
         if (menuPerfisSalvar is not null)
         {
             menuPerfisSalvar.Enabled = !_profileRunning;
@@ -2083,11 +1899,6 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
         if (menuPerfisParar is not null)
         {
             menuPerfisParar.Enabled = _profileRunning;
-        }
-
-        if (menuPerfisTestar is not null)
-        {
-            menuPerfisTestar.Enabled = !_profileRunning && selected;
         }
     }
 
@@ -2202,18 +2013,10 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             return false;
         }
 
-        var defaultId = NormalizeProfileId(name);
-        var id = PromptText(this, "Salvar Perfil", "Informe um identificador para o perfil:", defaultId);
+        var id = NormalizeProfileId(name);
         if (string.IsNullOrWhiteSpace(id))
         {
-            return false;
-        }
-
-        id = NormalizeProfileId(id);
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            WinForms.MessageBox.Show(this, "Informe um identificador válido.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
-            return false;
+            id = DefaultProfileId;
         }
 
         var windows = _currentProfile?.Windows?.Select(CloneWindowConfig).ToList() ?? new List<WindowConfig>();
@@ -2454,6 +2257,7 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
             _profileStore.Save(profile);
             _currentProfile = profile;
             UpdateStatusText($"Perfil '{profile.Name}' salvo.");
+            WinForms.MessageBox.Show(this, $"Perfil '{profile.Name}' salvo com sucesso.", "Perfis", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {

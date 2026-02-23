@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Mieruka.Core.Security.Models;
 using Mieruka.Core.Security.Services;
+using Mieruka.App.Services.Ui;
 using Serilog;
 
 namespace Mieruka.App.Forms.Security;
@@ -24,13 +25,23 @@ public partial class UserManagementForm : Form
         _userService = userService ?? throw new ArgumentNullException(nameof(userService));
         _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
         InitializeComponent();
+        DoubleBuffered = true;
     }
 
     private async void UserManagementForm_Load(object? sender, EventArgs e)
     {
-        SetupGrid();
-        SetupRoleFilter();
-        await RefreshUsersAsync();
+        try
+        {
+            SetupGrid();
+            SetupRoleFilter();
+            await RefreshUsersAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao inicializar o formulário de gerenciamento de usuários.");
+            MessageBox.Show($"Erro ao carregar dados: {ex.Message}", "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void SetupGrid()
@@ -43,6 +54,7 @@ public partial class UserManagementForm : Form
         dgvUsers.Columns.Add(new DataGridViewTextBoxColumn { Name = "colRole", HeaderText = "Perfil", FillWeight = 15 });
         dgvUsers.Columns.Add(new DataGridViewTextBoxColumn { Name = "colActive", HeaderText = "Ativo", FillWeight = 10 });
         dgvUsers.Columns.Add(new DataGridViewTextBoxColumn { Name = "colLastLogin", HeaderText = "Último Login", FillWeight = 20 });
+        DoubleBufferingHelper.EnableOptimizedDoubleBuffering(dgvUsers);
     }
 
     private void SetupRoleFilter()
