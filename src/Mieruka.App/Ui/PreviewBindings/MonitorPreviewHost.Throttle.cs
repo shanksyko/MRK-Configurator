@@ -225,7 +225,7 @@ public sealed partial class MonitorPreviewHost
             }
             else
             {
-                stopTask.GetAwaiter().GetResult();
+                await stopTask.ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
