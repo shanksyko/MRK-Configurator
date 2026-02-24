@@ -9,7 +9,7 @@ namespace Mieruka.Core.Infra;
 /// </summary>
 public static class Logger
 {
-    private const string DirectoryName = "MierukaConfiguratorPro";
+    private const string DirectoryName = "Mieruka";
     private const string LogsFolderName = "logs";
 
     private static readonly object SyncRoot = new();

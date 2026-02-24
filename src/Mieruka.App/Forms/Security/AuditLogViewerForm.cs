@@ -317,10 +317,10 @@ public sealed class AuditLogViewerForm : Form
         try
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Timestamp,Usuário,Ação,Tipo,ID,Detalhes");
+            sb.AppendLine("Timestamp;Usuário;Ação;Tipo;ID;Detalhes");
             foreach (var entry in _entries)
             {
-                sb.AppendLine(string.Join(",",
+                sb.AppendLine(string.Join(";",
                     CsvEscape(entry.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")),
                     CsvEscape(entry.Username),
                     CsvEscape(entry.Action),
@@ -329,7 +329,8 @@ public sealed class AuditLogViewerForm : Form
                     CsvEscape(entry.Details ?? string.Empty)));
             }
 
-            File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8);
+            // UTF-8 with BOM so Excel recognises encoding and accented characters.
+            File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             SetStatus($"Exportado: {dlg.FileName}");
             Logger.Information("Audit log exported to {Path}", dlg.FileName);
         }
@@ -343,7 +344,7 @@ public sealed class AuditLogViewerForm : Form
 
     private static string CsvEscape(string value)
     {
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        if (value.Contains(';') || value.Contains(',') || value.Contains('"') || value.Contains('\n'))
         {
             return $"\"{value.Replace("\"", "\"\"")}\"";
         }

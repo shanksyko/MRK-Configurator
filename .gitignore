@@ -56,4 +56,9 @@ logs/
 
 # Build artifacts
 publish/
+publish-host/
 release/
+
+# Temp files from tools
+nul
+tmpclaude-*

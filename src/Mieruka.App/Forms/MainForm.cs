@@ -201,7 +201,10 @@ public partial class MainForm : WinForms.Form, IMonitorSelectionProvider
     {
         try
         {
-            var logsDirectory = Path.Combine(AppContext.BaseDirectory ?? string.Empty, "logs");
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var logsDirectory = Path.Combine(
+                string.IsNullOrWhiteSpace(localAppData) ? AppContext.BaseDirectory : localAppData,
+                "Mieruka", "Logs");
             Directory.CreateDirectory(logsDirectory);
 
             var psi = new ProcessStartInfo

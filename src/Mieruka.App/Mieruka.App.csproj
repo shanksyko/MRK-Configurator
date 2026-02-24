@@ -6,11 +6,27 @@
     <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
-    <Version>1.5.3</Version>
-    <AssemblyVersion>1.5.2.0</AssemblyVersion>
-    <FileVersion>1.5.2.0</FileVersion>
+    <Version>1.6.0</Version>
+    <AssemblyVersion>1.6.0.0</AssemblyVersion>
+    <FileVersion>1.6.0.0</FileVersion>
     <ApplicationIcon>Properties\app.ico</ApplicationIcon>
-  </PropertyGroup>  <ItemGroup>
+  </PropertyGroup>  <!-- Embedded Preview Host binary (built by publish-host target) -->
+  <PropertyGroup>
+    <PreviewHostPublishDir>$(MSBuildThisFileDirectory)..\..\publish-host\</PreviewHostPublishDir>
+  </PropertyGroup>
+
+  <Target Name="PublishPreviewHost" BeforeTargets="PrepareForBuild"
+          Condition="'$(PublishSingleFile)' == 'true' AND !Exists('$(PreviewHostPublishDir)Mieruka.Preview.Host.exe')">
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\Mieruka.Preview.Host\Mieruka.Preview.Host.csproj&quot; -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o &quot;$(PreviewHostPublishDir)&quot;" />
+  </Target>
+
+  <ItemGroup Condition="Exists('$(PreviewHostPublishDir)Mieruka.Preview.Host.exe')">
+    <EmbeddedResource Include="$(PreviewHostPublishDir)Mieruka.Preview.Host.exe">
+      <LogicalName>Mieruka.Preview.Host.exe</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Properties\\app.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

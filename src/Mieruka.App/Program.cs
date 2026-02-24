@@ -47,7 +47,8 @@ internal static class Program
 
         try
         {
-            Log.Information("Iniciando Mieruka Configurator v1.5.0.");
+            var appVersion = typeof(Program).Assembly.GetName().Version;
+            Log.Information("Iniciando Mieruka Configurator v{Version}.", appVersion);
 
             // Initialize security database
             using var securityDb = new SecurityDbContext();
@@ -115,7 +116,10 @@ internal static class Program
 
     private static void RunInventory()
     {
-        var dbPath = Path.Combine(AppContext.BaseDirectory, "mieruka.db");
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var dbFolder = Path.Combine(appData, "Mieruka");
+        Directory.CreateDirectory(dbFolder);
+        var dbPath = Path.Combine(dbFolder, "mieruka.db");
         var optionsBuilder = new DbContextOptionsBuilder<MierukaDbContext>();
         optionsBuilder.UseSqlite($"Data Source={dbPath}");
         using var db = new MierukaDbContext(optionsBuilder.Options);
@@ -187,7 +191,10 @@ internal static class Program
             minimumLevel = LogEventLevel.Verbose;
         }
 
-        var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var logDirectory = Path.Combine(
+            string.IsNullOrWhiteSpace(localAppData) ? AppContext.BaseDirectory : localAppData,
+            "Mieruka", "Logs");
         Directory.CreateDirectory(logDirectory);
 
         var configuration = new LoggerConfiguration()

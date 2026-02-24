@@ -657,27 +657,29 @@ public sealed class InventoryForm : Form
 
         try
         {
+            const char sep = ';';
             var sb = new StringBuilder();
-            sb.AppendLine("Nome,Categoria,Status,Nº Série,Patrimônio,Fabricante,Modelo,Localização,Responsável,Quantidade,Custo Unitário,Garantia,Notas");
+            sb.AppendLine("Nome;Categoria;Status;Nº Série;Patrimônio;Fabricante;Modelo;Localização;Responsável;Quantidade;Custo Unitário;Garantia;Notas");
 
             foreach (var item in _allItems)
             {
-                sb.Append(CsvEscape(item.Name)).Append(',');
-                sb.Append(CsvEscape(item.Category)).Append(',');
-                sb.Append(CsvEscape(item.Status)).Append(',');
-                sb.Append(CsvEscape(item.SerialNumber)).Append(',');
-                sb.Append(CsvEscape(item.AssetTag)).Append(',');
-                sb.Append(CsvEscape(item.Manufacturer)).Append(',');
-                sb.Append(CsvEscape(item.Model)).Append(',');
-                sb.Append(CsvEscape(item.Location)).Append(',');
-                sb.Append(CsvEscape(item.AssignedTo)).Append(',');
-                sb.Append(item.Quantity).Append(',');
-                sb.Append(item.UnitCostCents.HasValue ? (item.UnitCostCents.Value / 100.0).ToString("F2") : "").Append(',');
-                sb.Append(item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "").Append(',');
+                sb.Append(CsvEscape(item.Name)).Append(sep);
+                sb.Append(CsvEscape(item.Category)).Append(sep);
+                sb.Append(CsvEscape(item.Status)).Append(sep);
+                sb.Append(CsvEscape(item.SerialNumber)).Append(sep);
+                sb.Append(CsvEscape(item.AssetTag)).Append(sep);
+                sb.Append(CsvEscape(item.Manufacturer)).Append(sep);
+                sb.Append(CsvEscape(item.Model)).Append(sep);
+                sb.Append(CsvEscape(item.Location)).Append(sep);
+                sb.Append(CsvEscape(item.AssignedTo)).Append(sep);
+                sb.Append(item.Quantity).Append(sep);
+                sb.Append(item.UnitCostCents.HasValue ? (item.UnitCostCents.Value / 100.0).ToString("F2") : "").Append(sep);
+                sb.Append(item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "").Append(sep);
                 sb.AppendLine(CsvEscape(item.Notes));
             }
 
-            System.IO.File.WriteAllText(dlg.FileName, sb.ToString(), System.Text.Encoding.UTF8);
+            // UTF-8 with BOM so Excel recognises the encoding and accented characters.
+            System.IO.File.WriteAllText(dlg.FileName, sb.ToString(), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             MessageBox.Show($"Exportados {_allItems.Count} item(ns) para:\n{dlg.FileName}",
                 "Exportação", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -691,7 +693,7 @@ public sealed class InventoryForm : Form
     private static string CsvEscape(string? value)
     {
         if (string.IsNullOrEmpty(value)) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        if (value.Contains(';') || value.Contains(',') || value.Contains('"') || value.Contains('\n'))
             return $"\"{value.Replace("\"", "\"\"")}\"";
         return value;
     }

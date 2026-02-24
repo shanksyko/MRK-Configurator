@@ -86,13 +86,66 @@ public sealed partial class MonitorPreviewHost
                 return null;
             }
 
+            // 1. Check next to the main executable (classic side-by-side layout).
             var candidate = Path.Combine(directory, "Mieruka.Preview.Host.exe");
-            return File.Exists(candidate) ? candidate : null;
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            // 2. Extract from embedded resource to %LOCALAPPDATA%\Mieruka\bin.
+            return ExtractEmbeddedHostBinary();
         }
         catch
         {
             return null;
         }
+    }
+
+    private static readonly object _extractLock = new();
+
+    private static string? ExtractEmbeddedHostBinary()
+    {
+        const string resourceName = "Mieruka.Preview.Host.exe";
+
+        var assembly = Assembly.GetExecutingAssembly();
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        var targetDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Mieruka", "bin");
+
+        var targetPath = Path.Combine(targetDir, resourceName);
+
+        lock (_extractLock)
+        {
+            // Skip extraction if the file already exists and matches the current version.
+            var appVersion = assembly.GetName().Version?.ToString() ?? "0";
+            var versionMarker = targetPath + ".version";
+
+            if (File.Exists(targetPath) && File.Exists(versionMarker))
+            {
+                var existing = File.ReadAllText(versionMarker).Trim();
+                if (existing == appVersion)
+                {
+                    return targetPath;
+                }
+            }
+
+            Directory.CreateDirectory(targetDir);
+            using (var fs = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.CopyTo(fs);
+            }
+
+            File.WriteAllText(versionMarker, appVersion);
+        }
+
+        return targetPath;
     }
 }
 
