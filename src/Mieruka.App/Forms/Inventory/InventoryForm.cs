@@ -28,6 +28,7 @@ public sealed class InventoryForm : Form
     private readonly IReadOnlyList<MonitorInfo> _monitors;
 
     private List<InventoryItemEntity> _allItems = new();
+    private List<InventoryItemEntity> _filteredItems = new();
     private List<InventoryCategoryEntity> _categories = new();
     private string? _selectedCategory;
 
@@ -199,10 +200,12 @@ public sealed class InventoryForm : Form
         _btnDashboard = new ToolStripButton("Dashboard", null, (_, _) => OnDashboardClicked()) { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnExport = new ToolStripDropDownButton("Exportar") { DisplayStyle = ToolStripItemDisplayStyle.Text };
         _btnExport.DropDownItems.Add("Exportar CSV", null, (_, _) => OnExportCsvClicked());
+        _btnExport.DropDownItems.Add("Exportar CSV (Completo)", null, (_, _) => OnExportCsvFullClicked());
         _btnExport.DropDownItems.Add("Exportar Access (.accdb)", null, async (_, _) => await OnExportAccessClickedAsync());
         _btnExport.DropDownItems.Add("Exportar SQL Server (.mdf)", null, async (_, _) => await OnExportSqlServerClickedAsync());
         _btnExport.DropDownItems.Add("Exportar SQL Server (Servidor)", null, async (_, _) => await OnExportRemoteSqlServerClickedAsync());
         _btnImport = new ToolStripDropDownButton("Importar") { DisplayStyle = ToolStripItemDisplayStyle.Text };
+        _btnImport.DropDownItems.Add("Importar CSV", null, async (_, _) => await OnImportCsvClickedAsync());
         _btnImport.DropDownItems.Add("Importar Access (.accdb)", null, async (_, _) => await OnImportAccessClickedAsync());
         _btnImport.DropDownItems.Add("Importar SQL Server (.mdf)", null, async (_, _) => await OnImportSqlServerClickedAsync());
         _btnImport.DropDownItems.Add("Importar SQL Server (Servidor)", null, async (_, _) => await OnImportRemoteSqlServerClickedAsync());
@@ -360,6 +363,7 @@ public sealed class InventoryForm : Form
         }
 
         var list = filtered.ToList();
+        _filteredItems = list;
         PopulateGrid(list);
         _lblCount.Text = $"{list.Count} item(ns)";
         UpdateButtonStates();
@@ -644,9 +648,13 @@ public sealed class InventoryForm : Form
 
     private void OnExportCsvClicked()
     {
+        var isFiltered = _filteredItems.Count != _allItems.Count;
+        var items = _filteredItems;
+        var suffix = isFiltered ? " (filtrado)" : "";
+
         using var dlg = new SaveFileDialog
         {
-            Title = "Exportar Inventário",
+            Title = $"Exportar Inventário{suffix}",
             Filter = "CSV (*.csv)|*.csv",
             DefaultExt = "csv",
             FileName = $"inventario_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
@@ -657,37 +665,262 @@ public sealed class InventoryForm : Form
 
         try
         {
-            const char sep = ';';
-            var sb = new StringBuilder();
-            sb.AppendLine("Nome;Categoria;Status;Nº Série;Patrimônio;Fabricante;Modelo;Localização;Responsável;Quantidade;Custo Unitário;Garantia;Notas");
-
-            foreach (var item in _allItems)
-            {
-                sb.Append(CsvEscape(item.Name)).Append(sep);
-                sb.Append(CsvEscape(item.Category)).Append(sep);
-                sb.Append(CsvEscape(item.Status)).Append(sep);
-                sb.Append(CsvEscape(item.SerialNumber)).Append(sep);
-                sb.Append(CsvEscape(item.AssetTag)).Append(sep);
-                sb.Append(CsvEscape(item.Manufacturer)).Append(sep);
-                sb.Append(CsvEscape(item.Model)).Append(sep);
-                sb.Append(CsvEscape(item.Location)).Append(sep);
-                sb.Append(CsvEscape(item.AssignedTo)).Append(sep);
-                sb.Append(item.Quantity).Append(sep);
-                sb.Append(item.UnitCostCents.HasValue ? (item.UnitCostCents.Value / 100.0).ToString("F2") : "").Append(sep);
-                sb.Append(item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "").Append(sep);
-                sb.AppendLine(CsvEscape(item.Notes));
-            }
-
-            // UTF-8 with BOM so Excel recognises the encoding and accented characters.
-            System.IO.File.WriteAllText(dlg.FileName, sb.ToString(), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            MessageBox.Show($"Exportados {_allItems.Count} item(ns) para:\n{dlg.FileName}",
-                "Exportação", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Cursor = Cursors.WaitCursor;
+            WriteCsvItems(dlg.FileName, items);
+            Logger.Information("Exportação CSV concluída: {Count} item(ns) para {Path}", items.Count, dlg.FileName);
+            MessageBox.Show(
+                $"Exportados {items.Count} item(ns){suffix} para:\n{dlg.FileName}",
+                "Exportação CSV", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
+            Logger.Error(ex, "Falha ao exportar inventário para CSV.");
             MessageBox.Show($"Erro ao exportar: {ex.Message}", "Exportação",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private void OnExportCsvFullClicked()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Exportar Inventário Completo (todos os itens)",
+            Filter = "CSV (*.csv)|*.csv",
+            DefaultExt = "csv",
+            FileName = $"inventario_completo_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            WriteCsvItems(dlg.FileName, _allItems);
+            Logger.Information("Exportação CSV completa concluída: {Count} item(ns) para {Path}", _allItems.Count, dlg.FileName);
+            MessageBox.Show(
+                $"Exportados {_allItems.Count} item(ns) para:\n{dlg.FileName}",
+                "Exportação CSV", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao exportar inventário completo para CSV.");
+            MessageBox.Show($"Erro ao exportar: {ex.Message}", "Exportação",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private static void WriteCsvItems(string filePath, IReadOnlyList<InventoryItemEntity> items)
+    {
+        const char sep = ';';
+        var sb = new StringBuilder();
+        sb.AppendLine("Nome;Categoria;Status;Descrição;Nº Série;Patrimônio;Fabricante;Modelo;Localização;Responsável;Quantidade;Custo Unitário;Data Aquisição;Garantia;Monitor Vinculado;Notas");
+
+        foreach (var item in items)
+        {
+            sb.Append(CsvEscape(item.Name)).Append(sep);
+            sb.Append(CsvEscape(item.Category)).Append(sep);
+            sb.Append(CsvEscape(item.Status)).Append(sep);
+            sb.Append(CsvEscape(item.Description)).Append(sep);
+            sb.Append(CsvEscape(item.SerialNumber)).Append(sep);
+            sb.Append(CsvEscape(item.AssetTag)).Append(sep);
+            sb.Append(CsvEscape(item.Manufacturer)).Append(sep);
+            sb.Append(CsvEscape(item.Model)).Append(sep);
+            sb.Append(CsvEscape(item.Location)).Append(sep);
+            sb.Append(CsvEscape(item.AssignedTo)).Append(sep);
+            sb.Append(item.Quantity).Append(sep);
+            sb.Append(item.UnitCostCents.HasValue ? (item.UnitCostCents.Value / 100.0).ToString("F2") : "").Append(sep);
+            sb.Append(item.AcquiredAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "").Append(sep);
+            sb.Append(item.WarrantyExpiresAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "").Append(sep);
+            sb.Append(CsvEscape(item.LinkedMonitorStableId)).Append(sep);
+            sb.AppendLine(CsvEscape(item.Notes));
+        }
+
+        // UTF-8 with BOM so Excel recognises the encoding and accented characters.
+        System.IO.File.WriteAllText(filePath, sb.ToString(), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private async Task OnImportCsvClickedAsync()
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Title = "Importar Inventário de CSV",
+            Filter = "CSV (*.csv)|*.csv|Todos os arquivos (*.*)|*.*",
+            DefaultExt = "csv",
+        };
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        var replaceAll = AskImportMode();
+        if (replaceAll is null)
+            return;
+
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var imported = await ImportCsvAsync(dlg.FileName, replaceAll.Value).ConfigureAwait(true);
+            await LoadAllAsync().ConfigureAwait(true);
+            Logger.Information("Importação CSV concluída: {Count} item(ns) de {Path}", imported, dlg.FileName);
+            MessageBox.Show(
+                $"Importados {imported} item(ns) de:\n{dlg.FileName}",
+                "Importação CSV", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Falha ao importar inventário de CSV.");
+            MessageBox.Show(
+                $"Erro ao importar CSV: {ex.Message}",
+                "Importação CSV", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private async Task<int> ImportCsvAsync(string filePath, bool replaceAll)
+    {
+        var lines = await System.IO.File.ReadAllLinesAsync(filePath).ConfigureAwait(false);
+        if (lines.Length < 2)
+            throw new InvalidOperationException("O arquivo CSV está vazio ou não possui dados após o cabeçalho.");
+
+        // Parse header to detect column positions (supports both old and new format).
+        var header = ParseCsvLine(lines[0]);
+        var colMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < header.Count; i++)
+        {
+            colMap[header[i].Trim()] = i;
+        }
+
+        // Require at minimum the "Nome" column.
+        if (!colMap.ContainsKey("Nome"))
+            throw new InvalidOperationException("O CSV não possui a coluna obrigatória 'Nome'.");
+
+        if (replaceAll)
+        {
+            // Remove all existing items.
+            var existing = await _inventoryService.GetAllAsync().ConfigureAwait(false);
+            foreach (var item in existing)
+                await _inventoryService.DeleteAsync(item.Id).ConfigureAwait(false);
+        }
+
+        var count = 0;
+        for (var lineIdx = 1; lineIdx < lines.Length; lineIdx++)
+        {
+            var line = lines[lineIdx];
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var cols = ParseCsvLine(line);
+            var entity = new InventoryItemEntity
+            {
+                Name = GetCol(cols, colMap, "Nome") ?? $"Item {lineIdx}",
+                Category = GetCol(cols, colMap, "Categoria") ?? "",
+                Status = GetCol(cols, colMap, "Status") ?? "Active",
+                Description = GetCol(cols, colMap, "Descrição") ?? GetCol(cols, colMap, "Descricao"),
+                SerialNumber = GetCol(cols, colMap, "Nº Série") ?? GetCol(cols, colMap, "N Série") ?? GetCol(cols, colMap, "Nº Serie"),
+                AssetTag = GetCol(cols, colMap, "Patrimônio") ?? GetCol(cols, colMap, "Patrimonio"),
+                Manufacturer = GetCol(cols, colMap, "Fabricante"),
+                Model = GetCol(cols, colMap, "Modelo"),
+                Location = GetCol(cols, colMap, "Localização") ?? GetCol(cols, colMap, "Localizacao"),
+                AssignedTo = GetCol(cols, colMap, "Responsável") ?? GetCol(cols, colMap, "Responsavel"),
+                LinkedMonitorStableId = GetCol(cols, colMap, "Monitor Vinculado"),
+                Notes = GetCol(cols, colMap, "Notas"),
+            };
+
+            var qtyStr = GetCol(cols, colMap, "Quantidade");
+            if (int.TryParse(qtyStr, out var qty))
+                entity.Quantity = qty;
+
+            var costStr = GetCol(cols, colMap, "Custo Unitário") ?? GetCol(cols, colMap, "Custo Unitario");
+            if (decimal.TryParse(costStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var cost))
+                entity.UnitCostCents = (long)(cost * 100);
+            else if (decimal.TryParse(costStr?.Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var costBr))
+                entity.UnitCostCents = (long)(costBr * 100);
+
+            var acqStr = GetCol(cols, colMap, "Data Aquisição") ?? GetCol(cols, colMap, "Data Aquisicao");
+            if (DateTime.TryParseExact(acqStr, new[] { "dd/MM/yyyy", "yyyy-MM-dd" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var acqDate))
+                entity.AcquiredAt = DateTime.SpecifyKind(acqDate, DateTimeKind.Utc);
+
+            var warStr = GetCol(cols, colMap, "Garantia");
+            if (DateTime.TryParseExact(warStr, new[] { "dd/MM/yyyy", "yyyy-MM-dd" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var warDate))
+                entity.WarrantyExpiresAt = DateTime.SpecifyKind(warDate, DateTimeKind.Utc);
+
+            await _inventoryService.CreateAsync(entity).ConfigureAwait(false);
+            count++;
+        }
+
+        return count;
+    }
+
+    private static string? GetCol(IReadOnlyList<string> cols, Dictionary<string, int> map, string name)
+    {
+        if (!map.TryGetValue(name, out var idx) || idx >= cols.Count)
+            return null;
+        var val = cols[idx].Trim();
+        return string.IsNullOrEmpty(val) ? null : val;
+    }
+
+    /// <summary>
+    /// Parses a CSV line respecting quoted fields with embedded semicolons, commas, and newlines.
+    /// </summary>
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        var current = new StringBuilder();
+        var inQuotes = false;
+
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        current.Append('"');
+                        i++; // skip escaped quote
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == ';')
+                {
+                    fields.Add(current.ToString());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+        }
+
+        fields.Add(current.ToString());
+        return fields;
     }
 
     private static string CsvEscape(string? value)
