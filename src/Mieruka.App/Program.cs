@@ -94,7 +94,11 @@ internal static class Program
         catch (Exception ex)
         {
             Log.Fatal(ex, "UnhandledException: fluxo principal encerrou abruptamente.");
-            throw;
+            WinForms.MessageBox.Show(
+                $"Erro fatal ao iniciar o Mieruka Configurator:\n\n{ex.Message}\n\nConsulte os logs em:\n%LOCALAPPDATA%\\Mieruka\\Logs",
+                "Mieruka — Erro Fatal",
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error);
         }
         finally
         {

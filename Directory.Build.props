@@ -25,5 +25,7 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishReadyToRun>true</PublishReadyToRun>
     <PublishTrimmed>false</PublishTrimmed>
+    <!-- Bundle native DLLs (e_sqlite3.dll, SNI.dll etc.) inside single-file exe -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 </Project>
