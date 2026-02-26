@@ -1,0 +1,184 @@
+name: Populate GitHub Project from TASKS.md
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - TASKS.md
+      - .github/workflows/populate-project.yml
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Nome do GitHub Project a criar'
+        required: true
+        default: 'MRK-Configurator Backlog'
+
+jobs:
+  populate:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+      repository-projects: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Criar labels, issues e projeto
+        uses: actions/github-script@v7
+        env:
+          PROJECT_NAME: ${{ inputs.project_name }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            // ─── Definição de labels por seção ──────────────────────────────
+            const sectionLabels = [
+              { name: 'infra',       color: '0075ca', description: 'Planejamento e Infraestrutura' },
+              { name: 'auth',        color: 'e4e669', description: 'Autenticação e ACL' },
+              { name: 'core',        color: 'd93f0b', description: 'Funcionalidades Core' },
+              { name: 'automation',  color: 'f9d0c4', description: 'Automação de Browsers e Apps' },
+              { name: 'watchdog',    color: 'bfd4f2', description: 'Watchdog e Orquestração' },
+              { name: 'preview',     color: 'c2e0c6', description: 'Preview de Monitores' },
+              { name: 'inventory',   color: 'fef2c0', description: 'Módulo de Inventário' },
+              { name: 'database',    color: 'e99695', description: 'Banco de Dados Principal' },
+              { name: 'hardware',    color: 'b60205', description: 'Monitoramento de Hardware' },
+              { name: 'security',    color: '0e8a16', description: 'Segurança Adicional' },
+              { name: 'updater',     color: '1d76db', description: 'Atualização Automática' },
+              { name: 'qa',          color: 'cc317c', description: 'QA e Testes Automatizados' },
+              { name: 'docs',        color: 'ededed', description: 'Documentação' },
+              { name: 'deploy',      color: '5319e7', description: 'Deploy e Release' },
+              { name: 'concluído',   color: '0e8a16', description: 'Tarefa concluída' },
+            ];
+
+            // ─── Criar labels (ignora se já existirem) ───────────────────────
+            for (const label of sectionLabels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  name:  label.name,
+                  color: label.color,
+                  description: label.description,
+                });
+                core.info(`Label criada: ${label.name}`);
+              } catch (e) {
+                if (e.status === 422) {
+                  core.info(`Label já existe: ${label.name}`);
+                } else {
+                  throw e;
+                }
+              }
+            }
+
+            // ─── Parsear TASKS.md ────────────────────────────────────────────
+            const content = fs.readFileSync('TASKS.md', 'utf8');
+            const lines   = content.split('\n');
+
+            const sections = [];
+            let current = null;
+
+            for (const line of lines) {
+              const h2 = line.match(/^## (\d+)\. (.+)/);
+              if (h2) {
+                if (current) sections.push(current);
+                current = { number: h2[1], title: h2[2].trim(), body: [] };
+                continue;
+              }
+              if (current) current.body.push(line);
+            }
+            if (current) sections.push(current);
+
+            // Mapa número → label
+            const labelMap = {
+              '1':  'infra',
+              '2':  'auth',
+              '3':  'core',
+              '4':  'automation',
+              '5':  'watchdog',
+              '6':  'preview',
+              '7':  'inventory',
+              '8':  'database',
+              '9':  'hardware',
+              '10': 'security',
+              '11': 'updater',
+              '12': 'qa',
+              '13': 'docs',
+              '14': 'deploy',
+            };
+
+            // ─── Criar issues (idempotente — ignora se já existe) ────────────
+            const issueNumbers = [];
+
+            // Buscar issues existentes (paginação simples — até 100)
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const existingTitles = new Set(existingIssues.data.map(i => i.title));
+
+            for (const section of sections) {
+              const sectionLabel = labelMap[section.number] || 'infra';
+              const body = section.body.join('\n').trim();
+              const issueTitle = `[${section.number}] ${section.title}`;
+
+              if (existingTitles.has(issueTitle)) {
+                const existing = existingIssues.data.find(i => i.title === issueTitle);
+                issueNumbers.push(existing.number);
+                core.info(`Issue já existe: #${existing.number} — ${issueTitle}`);
+                continue;
+              }
+
+              const issue = await github.rest.issues.create({
+                owner:  context.repo.owner,
+                repo:   context.repo.repo,
+                title:  issueTitle,
+                body:   body,
+                labels: [sectionLabel, 'concluído'],
+              });
+
+              issueNumbers.push(issue.data.number);
+              core.info(`Issue criada: #${issue.data.number} — ${issueTitle}`);
+            }
+
+            // ─── Criar projeto clássico ──────────────────────────────────────
+            const projectName = process.env.PROJECT_NAME || 'MRK-Configurator Backlog';
+            const project = await github.rest.projects.createForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              name:  projectName,
+              body:  'Backlog gerado automaticamente a partir do TASKS.md',
+            });
+            const projectId = project.data.id;
+            core.info(`Projeto criado: id=${projectId} — ${projectName}`);
+
+            // ─── Criar colunas ───────────────────────────────────────────────
+            await github.rest.projects.createColumn({
+              project_id: projectId,
+              name: '📋 A Fazer',
+            });
+            await github.rest.projects.createColumn({
+              project_id: projectId,
+              name: '🔄 Em Andamento',
+            });
+            const colDone = await github.rest.projects.createColumn({
+              project_id: projectId,
+              name: '✅ Concluído',
+            });
+
+            // ─── Adicionar issues ao projeto (todas concluídas → coluna Done) ─
+            for (const num of issueNumbers) {
+              const issueUrl = `https://api.github.com/repos/${context.repo.owner}/${context.repo.repo}/issues/${num}`;
+              await github.rest.projects.createCard({
+                column_id:    colDone.data.id,
+                content_url:  issueUrl,
+                content_type: 'Issue',
+              });
+              core.info(`Issue #${num} adicionada ao projeto.`);
+            }
+
+            core.info('✅ GitHub Project populado com sucesso!');
