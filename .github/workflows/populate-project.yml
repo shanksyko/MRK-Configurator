@@ -1,6 +1,12 @@
 name: Populate GitHub Project from TASKS.md
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - TASKS.md
+      - .github/workflows/populate-project.yml
   workflow_dispatch:
     inputs:
       project_name:
@@ -103,12 +109,29 @@ jobs:
               '14': 'deploy',
             };
 
-            // ─── Criar issues ────────────────────────────────────────────────
+            // ─── Criar issues (idempotente — ignora se já existe) ────────────
             const issueNumbers = [];
+
+            // Buscar issues existentes (paginação simples — até 100)
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const existingTitles = new Set(existingIssues.data.map(i => i.title));
+
             for (const section of sections) {
               const sectionLabel = labelMap[section.number] || 'infra';
               const body = section.body.join('\n').trim();
               const issueTitle = `[${section.number}] ${section.title}`;
+
+              if (existingTitles.has(issueTitle)) {
+                const existing = existingIssues.data.find(i => i.title === issueTitle);
+                issueNumbers.push(existing.number);
+                core.info(`Issue já existe: #${existing.number} — ${issueTitle}`);
+                continue;
+              }
 
               const issue = await github.rest.issues.create({
                 owner:  context.repo.owner,
@@ -123,7 +146,7 @@ jobs:
             }
 
             // ─── Criar projeto clássico ──────────────────────────────────────
-            const projectName = process.env.PROJECT_NAME;
+            const projectName = process.env.PROJECT_NAME || 'MRK-Configurator Backlog';
             const project = await github.rest.projects.createForRepo({
               owner: context.repo.owner,
               repo:  context.repo.repo,
